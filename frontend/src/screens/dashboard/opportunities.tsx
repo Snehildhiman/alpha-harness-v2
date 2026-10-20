@@ -9,7 +9,7 @@ import { fmt } from '@/lib/format'
 import { nearMisses, transplantPlan } from '@/screens/repair/api'
 import { typeSummary } from '@/screens/types/api'
 import { TYPE_TABS } from '@/shell/nav'
-import { ErrorNotice, Panel, Skeleton } from '@/ui/kit'
+import { Button, ErrorNotice, Panel, Skeleton } from '@/ui/kit'
 
 const KIND: Record<(typeof TYPE_TABS)[number]['tab'], string> = {
   regular: 'regular',
@@ -25,7 +25,30 @@ export function Opportunities() {
   const transplants = useQuery(transplantPlan(null))
   const counts = summary.data?.counts ?? {}
   return (
-    <Panel title="Today’s Openings">
+    <Panel
+      title="Today’s Openings"
+      description="Your daily routine, left to right: find, fix, re-check, submit."
+      actions={
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" render={<Link to="/labs" />}>
+            1 · Find
+          </Button>
+          <Button size="sm" render={<Link to="/repair" />}>
+            2 · Fix
+          </Button>
+          <Button size="sm" render={<Link to="/types/$tab" params={{ tab: 'regular' }} />}>
+            3 · Re-check
+          </Button>
+          <Button
+            size="sm"
+            variant="primary"
+            render={<Link to="/types/$tab" params={{ tab: 'regular' }} />}
+          >
+            4 · Submit
+          </Button>
+        </div>
+      }
+    >
       {summary.isError ? (
         <ErrorNotice error={summary.error} title="Could not judge the vault" />
       ) : summary.isPending ? (

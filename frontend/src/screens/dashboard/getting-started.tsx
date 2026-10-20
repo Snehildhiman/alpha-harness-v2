@@ -3,11 +3,14 @@
  * state (never a stored flag) and hidden once all is done. Every open step is one click away.
  */
 
+import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { CheckIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
 import type { Today } from '@/api/types'
 import { cn } from '@/lib/cn'
+import { modelStatus } from '@/screens/models/api'
+import { typeSummary } from '@/screens/types/api'
 import { Button, Panel, Progress } from '@/ui/kit'
 
 type Variant = 'primary' | 'secondary'
@@ -20,8 +23,10 @@ interface Step {
 }
 
 export function GettingStarted({ today }: { today: Today | undefined }) {
+  const summary = useQuery(typeSummary)
+  const models = useQuery(modelStatus)
   // Nothing while pending: returning users (setup done) would otherwise see a skeleton collapse.
-  if (!today) return null
+  if (!today || summary.isPending || models.isPending) return null
 
   const steps: Step[] = [
     {
@@ -35,9 +40,32 @@ export function GettingStarted({ today }: { today: Today | undefined }) {
       ),
     },
     {
+      key: 'alphas',
+      title: 'Import your Alphas from BRAIN (overnight is fine for 50k)',
+      done: (summary.data?.alphas ?? 0) > 0,
+      action: (variant) => (
+        <Button size="sm" variant={variant} render={<Link to="/pool" />}>
+          Import
+        </Button>
+      ),
+    },
+    {
+      key: 'models',
+      title: 'Train the models on your Alphas (a minute or two)',
+      done: Boolean(models.data?.trainedAt),
+      action: (variant) => (
+        <Button size="sm" variant={variant} render={<Link to="/models" />}>
+          Train
+        </Button>
+      ),
+    },
+    {
       key: 'ai',
-      title: 'Add a Free API Key',
-      done: today.assistant.enabledKeys > 0,
+      title: 'Optional: connect an LLM (free key, local model or your subscription)',
+      // Optional: it stops holding the list open once the required steps are done.
+      done:
+        today.assistant.enabledKeys > 0 ||
+        ((summary.data?.alphas ?? 0) > 0 && Boolean(models.data?.trainedAt)),
       action: (variant) => (
         <Button
           size="sm"

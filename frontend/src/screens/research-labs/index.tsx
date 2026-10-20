@@ -25,14 +25,17 @@ const ICONS: Record<(typeof LAB_TABS)[number]['tab'], LucideIcon> = {
 
 /** What each one searches, since a name alone does not say which to start with. */
 const ABOUT: Record<(typeof LAB_TABS)[number]['tab'], string> = {
-  search: 'Writes one- and two-operator Alphas from the datasets you pick, steering to Sharpe.',
+  search:
+    'No LLM. Writes one- and two-operator Alphas from the datasets you pick, screened by the models. Choose All regions for region-agnostic Alphas.',
   template:
-    'Searches a template you type with $variables for fields, values and operators, or one you build from blocks.',
-  evolution: 'Breeds new Alphas from seeds you pick, holding the last two years back as a test.',
-  'power-pool': 'An LLM writes Power Pool Alphas for the datasets you pick.',
+    'No LLM. Searches a template (11 built in, or your own) for fields, values and operators. Choose All regions for region-agnostic Alphas.',
+  evolution:
+    'No LLM. Breeds new Alphas from seeds you pick, holding the last two years back as a test.',
+  'power-pool': 'Needs an LLM. Writes Power Pool Alphas for the datasets you pick.',
   'region-agnostic':
-    'An LLM writes Alphas from region-agnostic fields, each run in every region that carries them.',
-  'super-alpha': "Combines your submitted Alphas into SuperAlphas that pass BRAIN's checks.",
+    'Needs an LLM. Writes Alphas from region-agnostic fields, each run in every region that carries them.',
+  'super-alpha':
+    "No LLM. Combines your submitted Alphas into SuperAlphas that pass BRAIN's checks.",
 }
 
 /** The card a hub screen links each of its entries with; the `Link` carries it. */
@@ -75,7 +78,10 @@ export function HubCardBody({
 export function ResearchLabsScreen() {
   return (
     <Page>
-      <PageHeader title="Research Labs" />
+      <PageHeader
+        title="Research Labs"
+        description="Each lab adds a task, which you start and watch on the Tasks screen. Not sure where to begin? Template Lab with a built-in template is the quickest start. For Alphas you already have, Repair → Transplants and Promote to region agnostic need no lab at all."
+      />
       <div className="grid gap-3 sm:grid-cols-2">
         {LAB_TABS.map((lab, index) => (
           <Link key={lab.tab} to={lab.to} className={HUB_CARD}>
