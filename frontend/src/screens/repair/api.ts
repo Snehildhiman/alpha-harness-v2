@@ -8,7 +8,7 @@ type Schemas = components['schemas']
 export type NearMiss = Schemas['NearMiss']
 export type RepairPlan = Schemas['RepairPlan']
 export type RepairVariant = Schemas['RepairVariant']
-export type RepairKind = 'regular' | 'power_pool' | 'theme' | 'super'
+export type RepairKind = 'regular' | 'ra' | 'power_pool' | 'theme' | 'super'
 
 export const nearMisses = (tab: RepairKind | null) =>
   queryOptions({

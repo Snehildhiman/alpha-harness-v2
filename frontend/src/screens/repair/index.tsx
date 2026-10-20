@@ -36,6 +36,7 @@ import {
 const TABS: { value: RepairKind | 'all'; label: string }[] = [
   { value: 'all', label: 'All' },
   { value: 'regular', label: 'Regular' },
+  { value: 'ra', label: 'Region Agnostic' },
   { value: 'power_pool', label: 'Power Pool' },
   { value: 'theme', label: 'Current Theme' },
   { value: 'super', label: 'SuperAlpha' },
@@ -43,6 +44,7 @@ const TABS: { value: RepairKind | 'all'; label: string }[] = [
 
 const KIND_LABEL: Record<string, string> = {
   regular: 'Regular',
+  ra: 'RA',
   power_pool: 'Power Pool',
   theme: 'Theme',
   super: 'SuperAlpha',
@@ -88,6 +90,21 @@ const NEAR_COLUMNS: Column<NearMiss>[] = [
 ]
 
 const pct = (v: number | null | undefined) => fmt.pct(v, 0)
+
+/** An RA variant's chance per region, best first: "USA 62 · EUR 48 · ASI 20". */
+const REGIONS_COLUMN: Column<RepairVariant> = {
+  key: 'regions',
+  header: 'Each region passes',
+  width: 'minmax(180px,1.2fr)',
+  cell: (r) => (
+    <span className="num truncate text-body-compact text-ink-muted">
+      {Object.entries(r.regions ?? {})
+        .sort((a, b) => b[1] - a[1])
+        .map(([region, p]) => `${region} ${Math.round(p * 100)}`)
+        .join(' · ')}
+    </span>
+  ),
+}
 
 const VARIANT_COLUMNS: Column<RepairVariant>[] = [
   {
@@ -143,6 +160,12 @@ const VARIANT_COLUMNS: Column<RepairVariant>[] = [
     align: 'right',
     cell: (r) => <span className="num">{fmt.ratio(r.sharpe)}</span>,
   },
+]
+
+/** RA plans rank by the chance two regions pass, and show each region's chance. */
+const RA_COLUMNS: Column<RepairVariant>[] = [
+  ...VARIANT_COLUMNS.map((c) => (c.key === 'p' ? { ...c, header: 'Chance 2+ regions pass' } : c)),
+  REGIONS_COLUMN,
 ]
 
 function PlanPanel({ alphaId }: { alphaId: string }) {
@@ -208,9 +231,15 @@ function PlanPanel({ alphaId }: { alphaId: string }) {
               {data.ranked ? ', best first by the models’ chance of passing every check' : ''}.
               Showing the top {fmt.int(data.variants.length)}.
             </p>
+            {data.kind === 'ra' && (
+              <p className="text-body-compact text-ink-subtle">
+                Region agnostic: each variant is predicted in every region the family runs in, and
+                ranked by the chance that at least two regions pass, which is what BRAIN needs.
+              </p>
+            )}
             <DataTable
               rows={data.variants}
-              columns={VARIANT_COLUMNS}
+              columns={data.kind === 'ra' ? RA_COLUMNS : VARIANT_COLUMNS}
               rowKey={(r) => r.id}
               label="Variants"
             />

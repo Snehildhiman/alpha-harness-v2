@@ -5,16 +5,21 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Query
 
-from ..brain.schemas import FULL_MODE, SimulationRequest, SimulationSettings
+from ..brain.schemas import (
+    FULL_MODE,
+    REGION_AGNOSTIC_REGION,
+    SimulationRequest,
+    SimulationSettings,
+)
 from ..db.models import utcnow
 from ..engine.packer import MAX_BATCH
 from ..engine.slots import DEFAULT_SLOTS
 from ..labs.launch import AddedTask, account_operators, add_study
 from ..labs.params import CORRELATION_BREAKER, BreakerParams
 from ..repair.generate import Reshape, Variant, variants
-from ..repair.rank import Score, near_miss, score
+from ..repair.rank import Score, at_least, near_miss, score
 from ..schemas import Out
-from ..separation import Kind
+from ..separation import RA_MIN_REGIONS, Kind
 from ..tools import correlation_breaker, settings_sampler
 from .deps import State, refuse
 from .separation import Issue, figure, judge_vault
@@ -22,7 +27,9 @@ from .separation import Issue, figure, judge_vault
 router = APIRouter(prefix="/api/repair", tags=["repair"])
 
 #: Tabs that hold repairable Alphas. RA families have their own pipeline.
-REPAIRABLE = (Kind.REGULAR, Kind.POWER_POOL, Kind.THEME, Kind.SUPER)
+REPAIRABLE = (Kind.REGULAR, Kind.RA, Kind.POWER_POOL, Kind.THEME, Kind.SUPER)
+#: Where an RA family's regions are unknown (its children not stored yet), these are scored.
+RA_REGIONS = ("USA", "EUR", "ASI")
 #: Variants returned to the screen; the task takes from the top of these.
 SHOWN = 60
 
@@ -87,6 +94,9 @@ class RepairVariant(Out):
     correlation: float | None
     sharpe: float | None
     fitness: float | None
+    #: RA only: each region's chance of passing everything. ``p_all`` is then the chance that
+    #: at least two do, which is what BRAIN needs to take the family.
+    regions: dict[str, float] | None = None
 
 
 class RepairPlan(Out):
@@ -110,7 +120,8 @@ async def _plan(
     expression = str(found.get("expression") or "")
     settings: dict[str, Any] = dict(found.get("rawSettings") or {})
     power_pool = bool(found.get("powerPool"))
-    kind = Kind.POWER_POOL if power_pool else Kind.REGULAR
+    region_agnostic = str(settings.get("region") or "") == REGION_AGNOSTIC_REGION
+    kind = Kind.RA if region_agnostic else Kind.POWER_POOL if power_pool else Kind.REGULAR
     problems = list(found.get("problems") or [])
     candidates: list[Variant] = []
     if expression and not problems:
@@ -130,27 +141,11 @@ async def _plan(
             expression, settings, reshapes=reshapes, operators=operators, power_pool=power_pool
         )
     scored: list[tuple[Variant, Score | None]] = [(v, None) for v in candidates]
+    per_region: dict[str, dict[str, float]] = {}
     ranked = await state.predictors.current() is not None
     if ranked and candidates:
-        now = datetime.now(UTC).replace(tzinfo=None)
-        rows = [
-            {
-                "expression": v.expression,
-                "region": v.settings.get("region"),
-                "delay": v.settings.get("delay"),
-                "universe": v.settings.get("universe"),
-                "neutralization": v.settings.get("neutralization"),
-                "decay": v.settings.get("decay"),
-                "truncation": v.settings.get("truncation"),
-                "power_pool": power_pool,
-                "sim_type": "REGULAR",
-                "date_created": now,
-            }
-            for v in candidates
-        ]
-        predicted = await state.predictors.predict(rows)
-        scored = [(v, score(p, kind)) for v, p in zip(candidates, predicted, strict=True)]
-        scored.sort(key=lambda vs: -(vs[1].p_all if vs[1] else 0.0))
+        markets = await _ra_markets(state, alpha_id, settings) if region_agnostic else {}
+        scored, per_region = await _score(state, candidates, kind, power_pool, markets)
     shown = [
         RepairVariant(
             id=v.id,
@@ -165,6 +160,7 @@ async def _plan(
             correlation=s.correlation if s else None,
             sharpe=s.sharpe if s else None,
             fitness=s.fitness if s else None,
+            regions=per_region.get(v.id),
         )
         for v, s in scored[:SHOWN]
     ]
@@ -180,6 +176,89 @@ async def _plan(
         problems=problems,
     )
     return plan, scored, settings
+
+
+def _row(
+    v: Variant,
+    *,
+    power_pool: bool,
+    now: datetime,
+    region: str | None = None,
+    universe: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "expression": v.expression,
+        "region": region or v.settings.get("region"),
+        "delay": v.settings.get("delay"),
+        "universe": universe or v.settings.get("universe"),
+        "neutralization": v.settings.get("neutralization"),
+        "decay": v.settings.get("decay"),
+        "truncation": v.settings.get("truncation"),
+        "power_pool": power_pool,
+        "sim_type": "REGULAR",
+        "date_created": now,
+    }
+
+
+async def _ra_markets(state: State, alpha_id: str, settings: dict[str, Any]) -> dict[str, str]:
+    """Each region an RA family runs in, with that region's universe, from its stored
+    children; the usual regions at the family's universe when none are stored yet."""
+    for item in await judge_vault(state):
+        if str(item.row.get("alpha_id")) == alpha_id and item.children:
+            return {
+                str(c.get("region")): str(c.get("universe") or settings.get("universe") or "")
+                for c in item.children
+                if c.get("region")
+            }
+    return {region: str(settings.get("universe") or "") for region in RA_REGIONS}
+
+
+async def _score(
+    state: State,
+    candidates: list[Variant],
+    kind: Kind,
+    power_pool: bool,
+    markets: dict[str, str],
+) -> tuple[list[tuple[Variant, Score | None]], dict[str, dict[str, float]]]:
+    """Each variant scored and sorted best first. An RA variant is predicted region by region,
+    and scored by the chance at least two regions pass."""
+    now = datetime.now(UTC).replace(tzinfo=None)
+    per_region: dict[str, dict[str, float]] = {}
+    if not markets:
+        rows = [_row(v, power_pool=power_pool, now=now) for v in candidates]
+        predicted = await state.predictors.predict(rows)
+        scored: list[tuple[Variant, Score | None]] = [
+            (v, score(p, kind)) for v, p in zip(candidates, predicted, strict=True)
+        ]
+    else:
+        regions = sorted(markets)
+        rows = [
+            _row(v, power_pool=power_pool, now=now, region=r, universe=markets[r])
+            for v in candidates
+            for r in regions
+        ]
+        predicted = await state.predictors.predict(rows)
+        scored = []
+        for i, v in enumerate(candidates):
+            each = [score(p, kind) for p in predicted[i * len(regions) : (i + 1) * len(regions)]]
+            per_region[v.id] = {r: s.p_all for r, s in zip(regions, each, strict=True)}
+            correlations = [s.correlation for s in each if s.correlation is not None]
+            sharpes = [s.sharpe for s in each if s.sharpe is not None]
+            fitnesses = [s.fitness for s in each if s.fitness is not None]
+            scored.append(
+                (
+                    v,
+                    Score(
+                        p_all=at_least([s.p_all for s in each], RA_MIN_REGIONS),
+                        p_correlation=None,
+                        correlation=sorted(correlations)[1] if len(correlations) > 1 else None,
+                        sharpe=sorted(sharpes)[-2] if len(sharpes) > 1 else None,
+                        fitness=sorted(fitnesses)[-2] if len(fitnesses) > 1 else None,
+                    ),
+                )
+            )
+    scored.sort(key=lambda vs: -(vs[1].p_all if vs[1] else 0.0))
+    return scored, per_region
 
 
 @router.post("/plan")

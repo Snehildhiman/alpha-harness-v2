@@ -13,7 +13,8 @@ A failure with no numbers (an error, a Quick run) is not narrow.
 from dataclasses import dataclass
 from typing import Any
 
-from ..separation import Judged, Kind, Verdict
+from ..separation import RA_MIN_REGIONS, Judged, Kind, Verdict, judge_checks
+from ..vault.yields import checks_of
 
 PROD = "check:PROD_CORRELATION"
 POWER_POOL = "check:POWER_POOL_CORRELATION"
@@ -72,16 +73,51 @@ def _gap(name: str, value: Any, limit: Any) -> float | None:
     return relative / RELATIVE_MARGIN if relative <= RELATIVE_MARGIN else None
 
 
-def near_miss(item: Judged) -> float | None:
-    """How near a refused Alpha is (0: right at the limits, 1: at the edge of narrow), or
-    ``None`` when it is not a near-miss. RA families are left to the RA pipeline."""
-    judgement = item.judgement
-    if judgement.verdict != Verdict.REFUSED or judgement.kind == Kind.RA or not judgement.failed:
-        return None
+def _narrow(issues: Any) -> float | None:
     gaps = []
-    for issue in judgement.failed:
+    for issue in issues:
         gap = _gap(issue.name, issue.value, issue.limit)
         if gap is None:
             return None
         gaps.append(gap)
-    return max(gaps)
+    return max(gaps) if gaps else None
+
+
+def near_miss(item: Judged) -> float | None:
+    """How near a refused Alpha is (0: right at the limits, 1: at the edge of narrow), or
+    ``None`` when it is not a near-miss.
+
+    An RA family is near when the regions that pass, plus the regions that fail only
+    narrowly, would make the two BRAIN needs.
+    """
+    judgement = item.judgement
+    if judgement.verdict != Verdict.REFUSED:
+        return None
+    if judgement.kind == Kind.RA:
+        return _ra_near(item)
+    return _narrow(judgement.failed) if judgement.failed else None
+
+
+def _ra_near(item: Judged) -> float | None:
+    passing, narrow = 0, []
+    for child in item.children:
+        own = judge_checks(Kind.RA, checks_of(child.get("checks")))
+        if own.verdict == Verdict.SUBMITTABLE:
+            passing += 1
+        elif own.verdict == Verdict.REFUSED and (gap := _narrow(own.failed)) is not None:
+            narrow.append(gap)
+    if not narrow or passing + len(narrow) < RA_MIN_REGIONS:
+        return None
+    # The fixes needed are the narrowest ones that reach two regions.
+    needed = max(0, RA_MIN_REGIONS - passing)
+    return sorted(narrow)[needed - 1] if needed else min(narrow)
+
+
+def at_least(chances: list[float], k: int) -> float:
+    """Chance that at least ``k`` of independent events happen (Poisson binomial)."""
+    exactly = [1.0] + [0.0] * len(chances)
+    for p in chances:
+        for n in range(len(chances), 0, -1):
+            exactly[n] = exactly[n] * (1 - p) + exactly[n - 1] * p
+        exactly[0] *= 1 - p
+    return float(sum(exactly[k:]))

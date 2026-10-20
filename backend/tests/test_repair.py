@@ -122,3 +122,58 @@ def test_ranked_variants_of_a_crowded_alpha_predict_lower_correlation() -> None:
     base = models.predict([{"expression": source, **SETTINGS}], fields)[0]["prod_corr"]
     assert ranked[0][0].edit.startswith(f"Read {quiet} instead")
     assert ranked[0][1]["prod_corr"] < base - 0.2
+
+
+def test_at_least_two_of_independent_regions() -> None:
+    from alpha_harness.repair.rank import at_least
+
+    assert abs(at_least([0.5, 0.5], 2) - 0.25) < 1e-9
+    assert abs(at_least([0.5, 0.5, 0.5], 2) - 0.5) < 1e-9
+    assert abs(at_least([0.9, 0.8, 0.1], 2) - (0.72 + 0.9 * 0.2 * 0.1 + 0.1 * 0.8 * 0.1)) < 1e-9
+    assert at_least([0.7], 2) == 0.0
+
+
+def _ra(regions: dict[str, list[dict[str, Any]]]) -> list[dict[str, Any]]:
+    same = {
+        "expression": "rank(x)",
+        "date_created": "2026-10-20 10:00:00",
+        "delay": 1,
+        "neutralization": "INDUSTRY",
+        "decay": 4,
+        "truncation": 0.08,
+    }
+    parent = {
+        "alpha_id": "p",
+        "sim_type": "RA_PARENT",
+        "region": "ALL",
+        "checks": None,
+        "status": "UNSUBMITTED",
+        **same,
+    }
+    kids = [
+        {
+            "alpha_id": f"c-{r}",
+            "sim_type": "RA_CHILD",
+            "region": r,
+            "checks": json.dumps(c),
+            "status": "UNSUBMITTED",
+            **same,
+        }
+        for r, c in regions.items()
+    ]
+    return [parent, *kids]
+
+
+PASS = [*BASE, {"name": "PROD_CORRELATION", "result": "PASS", "value": 0.6, "limit": 0.7}]
+NEAR = [*BASE, {"name": "PROD_CORRELATION", "result": "FAIL", "value": 0.73, "limit": 0.7}]
+FAR = [*BASE, {"name": "PROD_CORRELATION", "result": "FAIL", "value": 0.9, "limit": 0.7}]
+
+
+def test_ra_family_is_near_when_narrow_fixes_reach_two_regions() -> None:
+    one_pass_one_near = judge_all(_ra({"USA": PASS, "EUR": NEAR, "ASI": FAR}))[0]
+    gap = near_miss(one_pass_one_near)
+    assert gap is not None and abs(gap - 0.6) < 1e-9
+    two_near = judge_all(_ra({"USA": NEAR, "EUR": NEAR, "ASI": FAR}))[0]
+    assert near_miss(two_near) is not None
+    one_pass_only = judge_all(_ra({"USA": PASS, "EUR": FAR, "ASI": FAR}))[0]
+    assert near_miss(one_pass_only) is None

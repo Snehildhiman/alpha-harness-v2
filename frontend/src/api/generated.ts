@@ -5526,6 +5526,10 @@ export interface components {
             pAll: number | null;
             /** Pcorrelation */
             pCorrelation: number | null;
+            /** Regions */
+            regions?: {
+                [key: string]: number;
+            } | null;
             /** Sharpe */
             sharpe: number | null;
             /** Truncation */
