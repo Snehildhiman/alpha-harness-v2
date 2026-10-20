@@ -43,6 +43,7 @@ from .api import (
     quarter,
     region_agnostic_lab,
     repair,
+    scorecards,
     search_lab,
     separation,
     sims,
@@ -177,6 +178,7 @@ def create_app() -> FastAPI:
     app.include_router(auth.router)
     app.include_router(catalog.router)
     app.include_router(crowding.router)
+    app.include_router(scorecards.router)
     app.include_router(separation.router)
     app.include_router(predictors.router)
     app.include_router(repair.router)

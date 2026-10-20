@@ -1767,6 +1767,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/scorecards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Scorecards
+         * @description One kind of part, highest and lowest on one metric, by shrunk mean.
+         */
+        get: operations["scorecards_api_scorecards_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/scorecards/parts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Parts */
+        get: operations["parts_api_scorecards_parts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/search-lab/options": {
         parameters: {
             query?: never;
@@ -3423,6 +3460,34 @@ export interface components {
              * @default TOP3000
              */
             universe: string;
+        };
+        /** CardPage */
+        CardPage: {
+            /** Alphas */
+            alphas: number;
+            /** Highest */
+            highest: components["schemas"]["CardRow"][];
+            /** Lowest */
+            lowest: components["schemas"]["CardRow"][];
+            /** Overall */
+            overall: number | null;
+            /** Overallalphas */
+            overallAlphas: number;
+        };
+        /** CardRow */
+        CardRow: {
+            /** Alphas */
+            alphas: number;
+            /** Lift */
+            lift: number;
+            /** Mean */
+            mean: number;
+            /** Measured */
+            measured: number;
+            /** Name */
+            name: string;
+            /** Shrunk */
+            shrunk: number;
         };
         /** CatalogCounts */
         CatalogCounts: {
@@ -9695,6 +9760,60 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    scorecards_api_scorecards_get: {
+        parameters: {
+            query?: {
+                part?: "operator" | "pair" | "field" | "dataset" | "category" | "lookback" | "neutralization" | "region";
+                metric?: "prod_corr" | "power_pool_corr" | "self_corr" | "check:PROD_CORRELATION" | "check:POWER_POOL_CORRELATION" | "check:SELF_CORRELATION" | "sharpe" | "fitness";
+                minAlphas?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    parts_api_scorecards_parts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
                 };
             };
         };

@@ -3,6 +3,7 @@ import {
   ChartPieIcon,
   DatabaseIcon,
   FlaskConicalIcon,
+  GaugeIcon,
   Grid3x3Icon,
   HammerIcon,
   LayersIcon,
@@ -106,6 +107,12 @@ export const NAV = [
     group: 'Research',
     label: 'Repair',
     icon: HammerIcon,
+  },
+  {
+    to: '/scorecards',
+    group: 'Research',
+    label: 'Scorecards',
+    icon: GaugeIcon,
   },
   {
     to: '/prompts',

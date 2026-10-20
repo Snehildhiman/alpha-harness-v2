@@ -211,6 +211,12 @@ const repair = createRoute({
   component: lazyRouteComponent(() => import('@/screens/repair'), 'RepairScreen'),
 })
 
+const scorecardsRoute = createRoute({
+  getParentRoute: () => root,
+  path: '/scorecards',
+  component: lazyRouteComponent(() => import('@/screens/scorecards'), 'ScorecardsScreen'),
+})
+
 const portfolio = createRoute({
   getParentRoute: () => root,
   path: '/portfolio',
@@ -289,6 +295,7 @@ const routeTree = root.addChildren([
   types.addChildren([typesIndex, typesTab]),
   models,
   repair,
+  scorecardsRoute,
   portfolio,
   alpha,
   ai.addChildren([aiIndex, aiTab, aiThread]),
