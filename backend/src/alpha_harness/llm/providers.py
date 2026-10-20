@@ -124,6 +124,17 @@ PROVIDERS: dict[str, Provider] = {
         limits_url="https://huggingface.co/docs/inference-providers/pricing",
         key_hint="hf_…",
     ),
+    # A model running on this computer through Ollama: free, unlimited and private, at the
+    # laptop's own speed. Ollama serves the same chat-completions protocol; it asks for no
+    # key, so any text stands in for one.
+    "ollama": Provider(
+        id="ollama",
+        label="Ollama (on this computer)",
+        base_url="http://localhost:11434/v1",
+        onboarding_url="https://ollama.com/download",
+        limits_url="https://ollama.com/library",
+        key_hint="no key needed: type ollama",
+    ),
     # --- bring your own, and your own bill ---------------------------------------------
     #
     # Everything above is free because the assistant is optional and a card turns an
