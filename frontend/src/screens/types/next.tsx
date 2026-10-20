@@ -106,12 +106,12 @@ export function NextToSubmit({ kind, filters }: { kind: Kind; filters: AlphaFilt
     >
       <div className="flex flex-col gap-3">
         <p className="text-body-compact text-ink-subtle">
-          Ranks this tab’s submittable and re-check Alphas (with the filters above) by how much each
-          would change the combined IR of everything you have submitted, after trading costs. That
-          combination is what quarterly performance is judged on. BRAIN does not publish its payment
-          formula, so this is a guide, not a money figure. “Highest with one” is the strongest
-          daily-PnL correlation with a single submitted Alpha; 0.7 or more usually fails
-          self-correlation.
+          Ranks this tab’s submittable and re-check Alphas (narrowed by the filters on the list
+          below) by how much each would change the combined IR of everything you have submitted,
+          after trading costs. That combination is what quarterly performance is judged on. BRAIN
+          does not publish its payment formula, so this is a guide, not a money figure. “Highest
+          with one” is the strongest daily-PnL correlation with a single submitted Alpha; 0.7 or
+          more usually fails self-correlation.
         </p>
         {plan.isError && <ErrorNotice error={plan.error} title="Could not rank" />}
         {asked && plan.isPending && <Skeleton label="Combining daily PnL" />}

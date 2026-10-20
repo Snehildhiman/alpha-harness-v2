@@ -3,6 +3,24 @@
 What v2 adds on top of [alpha-harness-improved](https://github.com/residual-lab/alpha-harness)
 (MIT, © MiracleInvoker). How to use each part: [GUIDE.md](GUIDE.md).
 
+## 2026-10-21 (morning)
+
+- **What to submit next** (Alpha Types, Submittable and Needs re-check): each candidate's change
+  to the combined IR of everything submitted, before and after cost, its correlation with the
+  book and its highest with one submitted alpha. A guide: BRAIN's payment formula is not public.
+- **Post-simulation models**: prod, Power Pool and self-correlation re-learned with Sharpe,
+  fitness, turnover, returns, drawdown, margin and long/short counts. Alpha Types shows
+  *Expected corr*; *Re-check top N* goes to the likeliest passes first.
+- **Models steer the labs**: candidates the screen leaves out teach the search the models'
+  estimate, so the next round is asked where passing alphas are expected (Settings).
+- **Operators re-read daily** with the catalog sync.
+- **Transplant filters** by dataset and category.
+- **Free LLMs**: Cohere, Vercel AI Gateway, LM Studio added.
+- **Cleaner app**: sidebar in workflow order (Set Up, Find Alphas, Fix and Improve, Submit,
+  Track); Getting Started covers importing alphas and training models; Today's Openings has
+  Find, Fix, Re-check, Submit buttons; Research Labs says which labs need an LLM. Repair,
+  transplant and promotion tasks start at once and carry readable names on Tasks.
+
 ## 2026-10-21 (from your notes)
 
 - **Your LLM subscriptions** through their makers' official CLIs: ChatGPT (Codex CLI,
