@@ -21,7 +21,7 @@ What v2 adds on top of [alpha-harness-improved](https://github.com/residual-lab/
   variants ranked by predicted Sharpe or fitness among those likely to keep passing).
 - **RA without an LLM**: choose *All regions* in the Template or Search Lab, or use Repair's
   transplants and promotions. The Region Agnostic Lab says so.
-- **Ten more block templates** in Basic Template Research, shaped for less crowded signals
+- **Ten more built-in template families** in the Template Lab (from one) and **ten more block templates** in Basic Template Research, shaped for less crowded signals
   (volatility-scaled change, steady field, two-field spread, field-price divergence, quiet days,
   ratio momentum, rank change, peer-relative trend, …).
 - **Models**: crowd growth from the daily snapshots is a new input (used by model sets trained

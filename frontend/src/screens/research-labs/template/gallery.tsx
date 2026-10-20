@@ -33,6 +33,86 @@ export const GALLERY: Family[] = [
       'rank(if_else(abs(ts_arg_min(low, $lookback) - ts_arg_max(high, $lookback)) > $lookback / 2, $field, -$field))',
     ],
   },
+  {
+    shown: 'group_rank($ts_op(..., d), group)',
+    text: 'group_rank($ts_op(..., $lookback), $group)',
+    variations: [
+      'group_rank($ts_op($field, $lookback), $group)',
+      'group_rank($ts_op(ts_backfill($field, 63), $lookback), $group)',
+      'ts_decay_linear(group_rank($ts_op($field, $lookback), $group), $fast_lookback)',
+    ],
+  },
+  {
+    shown: 'ts_delta(..., fast) / ts_std_dev(..., slow)',
+    text: 'group_rank(ts_delta(..., $fast_lookback) / ts_std_dev(..., $slow_lookback), $group)',
+    variations: [
+      'group_rank(ts_delta($field, $fast_lookback) / ts_std_dev($field, $slow_lookback), $group)',
+      'x = ts_backfill($field, 63);\ngroup_rank(ts_delta(x, $fast_lookback) / ts_std_dev(x, $slow_lookback), $group)',
+    ],
+  },
+  {
+    shown: 'ts_mean(..., d) / ts_std_dev(..., d)',
+    text: 'group_rank(ts_mean(..., $lookback) / ts_std_dev(..., $lookback), $group)',
+    variations: [
+      'group_rank(ts_mean($field, $lookback) / ts_std_dev($field, $lookback), $group)',
+      'rank(ts_mean($field, $lookback) / ts_std_dev($field, $lookback))',
+    ],
+  },
+  {
+    shown: 'ts_zscore(a, d) - ts_zscore(b, d)',
+    text: 'group_rank(ts_zscore(..., $lookback) - ts_zscore(..., $lookback), $group)',
+    variations: [
+      'group_rank(ts_zscore($field, $lookback) - ts_zscore($other, $lookback), $group)',
+      'group_neutralize(ts_rank($field, $lookback) - ts_rank(close, $lookback), $group)',
+    ],
+  },
+  {
+    shown: 'ts_mean(x, fast) - ts_mean(x, slow), x = group_neutralize(...)',
+    text: 'x = group_neutralize(..., $group);\nrank(ts_mean(x, $fast_lookback) - ts_mean(x, $slow_lookback))',
+    variations: [
+      'x = group_neutralize($field, $group);\nrank(ts_mean(x, $fast_lookback) - ts_mean(x, $slow_lookback))',
+      'x = group_neutralize(ts_backfill($field, 63), $group);\nrank(ts_decay_linear(x, $fast_lookback) - ts_mean(x, $slow_lookback))',
+    ],
+  },
+  {
+    shown: 'trade_when(volume < adv20, ..., -1)',
+    text: 'trade_when(volume < adv20, ..., -1)',
+    variations: [
+      'trade_when(volume < adv20, group_rank($ts_op($field, $lookback), $group), -1)',
+      'trade_when(volume > adv20, -ts_delta($field, $fast_lookback), -1)',
+    ],
+  },
+  {
+    shown: 'ts_delta(group_rank(..., group), fast)',
+    text: 'ts_delta(group_rank(..., $group), $fast_lookback)',
+    variations: [
+      'ts_delta(group_rank($field, $group), $fast_lookback)',
+      'ts_av_diff(group_rank(ts_backfill($field, 63), $group), $fast_lookback)',
+    ],
+  },
+  {
+    shown: '-ts_corr(..., close, d)',
+    text: 'group_rank(-ts_corr(..., close, $slow_lookback), $group)',
+    variations: [
+      'group_rank(-ts_corr($field, close, $slow_lookback), $group)',
+      'group_rank(-ts_corr(ts_delta($field, $fast_lookback), returns, $slow_lookback), $group)',
+    ],
+  },
+  {
+    shown: 'winsorize(group_zscore(ts_zscore(..., d), group), std=4)',
+    text: 'winsorize(group_zscore(ts_zscore(..., $lookback), $group), std=4)',
+    variations: [
+      'winsorize(group_zscore(ts_zscore($field, $lookback), $group), std=4)',
+      'winsorize(group_zscore(ts_zscore($field / $other, $lookback), $group), std=4)',
+    ],
+  },
+  {
+    shown: '(group_rank(..., group) - 0.5) * ts_rank(volume, fast)',
+    text: '(group_rank(..., $group) - 0.5) * ts_rank(volume, $fast_lookback)',
+    variations: [
+      '(group_rank($ts_op($field, $lookback), $group) - 0.5) * ts_rank(volume, $fast_lookback)',
+    ],
+  },
 ]
 
 /** Where each card's stats sit in one batch: built-ins by family and variation, then saved. */
