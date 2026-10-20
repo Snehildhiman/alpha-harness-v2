@@ -13,11 +13,14 @@ v2 adds (see **[GUIDE.md](GUIDE.md)** for how to use each):
 - **Learned models** that predict every check and correlation before you simulate, retrain
   themselves as results arrive, and screen the labs' candidates.
 - **Repair**: model-ranked variants of near-miss alphas, RA families included.
+- **Transplants**: passing alphas tried in the regions they have not run in, ranked by the models.
 - **Scorecards**: which operators, fields, datasets and lookbacks run hot or cold.
 - **Dedup** of equivalent expressions and of alphas already in your vault.
 - **Crowding history**: daily snapshots of alpha and user counts per dataset and field.
 - **Research**: free arXiv / RSS papers the LLM labs draw on.
 - **Governor**: cores dealt toward the tasks whose alphas pass.
+- **Competitions**: your rank kept over time, with a trend line.
+- **Today's openings** on the dashboard: submittable and re-check counts per type.
 
 ## Requirements (Windows 11)
 
