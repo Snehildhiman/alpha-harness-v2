@@ -10,6 +10,7 @@ changes, so paging and switching tabs cost nothing.
 
 import asyncio
 import json
+import time
 from dataclasses import asdict
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Any, Literal
@@ -34,12 +35,15 @@ from ..separation import (
     summary,
 )
 from ..themes import ThemeRule, check, current, fields_of
+from ..vault.store import SERIES_VERSION
 from ..vault.yields import checks_of
 from .deps import State, refuse
 
 router = APIRouter(prefix="/api/separation", tags=["separation"])
 log = structlog.get_logger(__name__)
 
+#: Seconds a judgement of the whole vault is served before a change re-judges it.
+REJUDGE_SECONDS = 20.0
 #: BRAIN's prod-correlation limit.
 PROD_LIMIT = 0.7
 
@@ -54,7 +58,7 @@ COLUMNS = (
 SortKey = Literal["sharpe", "fitness", "turnover", "returns", "margin", "date_created"]
 
 _cache: dict[str, Any] = {"key": None, "judged": []}
-_floors: dict[str, Any] = {"key": None, "floors": {}}
+_floors: dict[str, Any] = {}
 _floor_lock = asyncio.Lock()
 _lock = asyncio.Lock()
 
@@ -107,7 +111,7 @@ async def _categories(state: State, rows: list[dict[str, Any]], rule: ThemeRule)
     return theme
 
 
-async def judge_vault(state: State) -> list[Judged]:
+async def judge_vault(state: State, *, force: bool = False) -> list[Judged]:
     """The whole vault, judged; recomputed only when the vault, the running theme or the
     synced catalog changed."""
     marker = await state.catalog.query(
@@ -126,11 +130,15 @@ async def judge_vault(state: State) -> list[Judged]:
         now.strftime("%Y-%m-%d %H"),
     )
     async with _lock:
-        if _cache["key"] != key:
+        # While tasks run the vault changes every few seconds; judging 50k Alphas takes a few.
+        # A judgement younger than REJUDGE_SECONDS is served as it stands.
+        recent = time.monotonic() - _cache.get("at", float("-inf")) < REJUDGE_SECONDS
+        if _cache["key"] != key and not (recent and _cache["key"] is not None and not force):
             rows = await state.catalog.query(f"SELECT {COLUMNS} FROM alpha")  # noqa: S608 - constant
             theme = await _categories(state, rows, rule) if rule else None
             _cache["judged"] = await asyncio.to_thread(judge_all, rows, theme, fresh)
             _cache["key"] = key
+            _cache["at"] = time.monotonic()
         return _cache["judged"]
 
 
@@ -153,42 +161,90 @@ def _family_floor(children: list[dict[str, Any]], found: dict[str, Floor]) -> Fl
 
 async def crowd_floors(state: State, judged: list[Judged]) -> dict[str, Floor]:
     """Each hopeful prod-correlation Alpha's local floor (:mod:`.crowding.crowdmap`), by the
-    id its tab row carries. Recomputed when the vault, its checks or its PnL change."""
-    marker = await state.catalog.query(
-        "SELECT (SELECT count(DISTINCT alpha_id) FROM alpha_pnl) AS p, "
-        "(SELECT max(checks_at) FROM alpha) AS k"
+    id its tab row carries.
+
+    Incremental, because results land every few seconds while tasks run: an Alpha's floor is
+    worked out once and kept until its region's landmarks change (a re-check reported a new
+    prod correlation, or something was submitted). Alphas whose PnL had not arrived are tried
+    again once it has.
+    """
+    stored = await state.catalog.query(
+        "SELECT count(*) AS n FROM alpha WHERE coalesce(pnl_version, series_version) = ?",
+        [SERIES_VERSION],
     )
-    key = (_cache["key"], tuple(str(v) for v in marker[0].values()) if marker else None)
+    with_series = int(stored[0]["n"]) if stored else 0
     async with _floor_lock:
-        if _floors["key"] == key:
-            return _floors["floors"]
-        every = [r for item in judged for r in (item.row, *item.children)]
-        landmarks = crowdmap.landmarks_of(every)
-        wanted: dict[str, list[str]] = {}
-        for item in judged:
-            j = item.judgement
-            if j.kind not in _PROD_KINDS or j.verdict not in _HOPEFUL:
-                continue
-            for row in item.children or [item.row]:
-                region = row.get("region")
-                if region and region in landmarks:
-                    wanted.setdefault(str(region), []).append(str(row.get("alpha_id")))
-        found: dict[str, Floor] = {}
+        if _floors.get("judged") is judged and _floors.get("series") == with_series:
+            return _floors["out"]
+        if _floors.get("judged") is not judged:
+            every = [r for item in judged for r in (item.row, *item.children)]
+            landmarks = crowdmap.landmarks_of(every)
+            wanted: dict[str, list[str]] = {}
+            for item in judged:
+                j = item.judgement
+                if j.kind not in _PROD_KINDS or j.verdict not in _HOPEFUL:
+                    continue
+                for row in item.children or [item.row]:
+                    region = row.get("region")
+                    if region and region in landmarks:
+                        wanted.setdefault(str(region), []).append(str(row.get("alpha_id")))
+            _floors.update(landmarks=landmarks, wanted=wanted)
+        landmarks = _floors["landmarks"]
+        wanted = _floors["wanted"]
+        known: dict[str, Floor] = _floors.setdefault("per_alpha", {})
+        signatures: dict[str, int] = _floors.setdefault("signatures", {})
+        waiting: set[str] = _floors.setdefault("no_pnl", set())
+        for region, marks in landmarks.items():
+            signature = hash(tuple(sorted(marks.items())))
+            if signatures.get(region) != signature:
+                signatures[region] = signature
+                for alpha_id in wanted.get(region, []):
+                    known.pop(alpha_id, None)
+        # PnL that has arrived since: those Alphas are measured again.
+        retry = (
+            [a for ids in wanted.values() for a in ids if a in waiting]
+            if _floors.get("series") != with_series
+            else []
+        )
+        if retry:
+            arrived = {
+                str(r["alpha_id"])
+                for r in await state.catalog.query(
+                    "SELECT alpha_id FROM alpha WHERE alpha_id IN (SELECT unnest(?)) "
+                    "AND coalesce(pnl_version, series_version) = ?",
+                    [retry, SERIES_VERSION],
+                )
+            }
+            for alpha_id in arrived:
+                waiting.discard(alpha_id)
+                known.pop(alpha_id, None)
+        measured = 0
         for region, ids in wanted.items():
+            todo = [a for a in dict.fromkeys(ids) if a not in known]
+            if not todo:
+                continue
             marks = landmarks[region]
-            grid = await state.alphas.pnl_grid([*dict.fromkeys(ids), *marks])
-            found.update(await asyncio.to_thread(crowdmap.floors, grid, ids, marks))
+            grid = await state.alphas.pnl_grid([*todo, *marks])
+            with_pnl = set(grid[0])
+            found = await asyncio.to_thread(crowdmap.floors, grid, todo, marks)
+            for alpha_id in todo:
+                known[alpha_id] = found.get(alpha_id, Floor(None))
+                if alpha_id not in with_pnl:
+                    waiting.add(alpha_id)
+            measured += len(todo)
         out: dict[str, Floor] = {}
         for item in judged:
             alpha_id = str(item.row.get("alpha_id"))
-            if item.children:
-                floor = _family_floor(item.children, found)
-            else:
-                floor = found.get(alpha_id, Floor(None))
+            floor = (
+                _family_floor(item.children, known)
+                if item.children
+                else known.get(alpha_id, Floor(None))
+            )
             if floor.value is not None:
                 out[alpha_id] = floor
-        _floors.update(key=key, floors=out)
-        log.info("separation.crowd_floors", measured=len(found), rows=len(out))
+        if measured:
+            log.info("separation.crowd_floors", measured=measured, rows=len(out))
+        _floors.update(judged=judged, series=with_series, out=out)
         return out
 
 
@@ -324,6 +380,7 @@ async def put_themes(body: list[ThemeRule], state: State) -> list[ThemeRule]:
     updated = current_prefs.model_copy(update={"power_pool_themes": body})
     await preferences.save(state.db, updated)
     preferences.apply(state, updated)
+    _cache["at"] = float("-inf")  # the tabs re-judge on the next read, not after the throttle
     return body
 
 
