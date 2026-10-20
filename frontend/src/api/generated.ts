@@ -2180,6 +2180,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/separation/next": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Next To Submit
+         * @description Submittable (and re-check) Alphas of one tab, ranked by how much each lifts the
+         *     combined book's after-cost IR. Spends nothing.
+         */
+        get: operations["next_to_submit_api_separation_next_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/separation/recheck": {
         parameters: {
             query?: never;
@@ -5128,6 +5149,54 @@ export interface components {
             kind: string;
             /** Name */
             name: string;
+        };
+        /** NextPlan */
+        NextPlan: {
+            /** Costbps */
+            costBps: number;
+            /** Pool */
+            pool: number;
+            /** Poolir */
+            poolIr: number | null;
+            /** Pooliraftercost */
+            poolIrAfterCost: number | null;
+            /** Rows */
+            rows: components["schemas"]["NextRow"][];
+            /** Withoutseries */
+            withoutSeries: number;
+        };
+        /** NextRow */
+        NextRow: {
+            /** Alphaid */
+            alphaId: string;
+            /** Combinedir */
+            combinedIr: number | null;
+            /** Combinediraftercost */
+            combinedIrAfterCost: number | null;
+            /** Deltair */
+            deltaIr: number | null;
+            /** Deltairaftercost */
+            deltaIrAfterCost: number | null;
+            /** Expression */
+            expression: string | null;
+            /** Fitness */
+            fitness: number | null;
+            /** Kind */
+            kind: string;
+            /** Maxcorrelation */
+            maxCorrelation: number | null;
+            /** Maxcorrelationwith */
+            maxCorrelationWith: string | null;
+            /** Poolcorrelation */
+            poolCorrelation: number | null;
+            /** Region */
+            region: string | null;
+            /** Sharpe */
+            sharpe: number | null;
+            /** Turnover */
+            turnover: number | null;
+            /** Verdict */
+            verdict: string;
         };
         /** OfferedModels */
         OfferedModels: {
@@ -11024,6 +11093,51 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TabFacets"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    next_to_submit_api_separation_next_get: {
+        parameters: {
+            query?: {
+                tab?: components["schemas"]["Kind"];
+                costBps?: number;
+                limit?: number;
+                delay?: number | null;
+                universe?: string | null;
+                neutralization?: string | null;
+                dataset?: string | null;
+                category?: string | null;
+                minSharpe?: number | null;
+                minFitness?: number | null;
+                minTurnover?: number | null;
+                maxTurnover?: number | null;
+                search?: string | null;
+                theme?: boolean;
+                region?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NextPlan"];
                 };
             };
             /** @description Validation Error */

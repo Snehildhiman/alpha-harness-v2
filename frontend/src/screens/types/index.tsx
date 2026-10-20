@@ -41,6 +41,7 @@ import {
   typeTab,
   type Verdict,
 } from './api'
+import { NextToSubmit } from './next'
 import { ThemeCalendar } from './themes'
 
 const LIMIT = 100
@@ -317,6 +318,9 @@ export function TypesScreen() {
                 <ThemeCalendar />
               </div>
             </Panel>
+          )}
+          {(verdict === 'submittable' || verdict === 'recheck') && (
+            <NextToSubmit kind={kind} filters={filters} />
           )}
           <Panel
             title={RULES[kind]}

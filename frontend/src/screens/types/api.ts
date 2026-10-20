@@ -58,3 +58,14 @@ export const recheck = (body: {
   limit: number
   filters?: AlphaFilters
 }) => http.post<Schemas['RecheckStarted']>('/api/separation/recheck', body)
+
+export type NextPlan = Schemas['NextPlan']
+export type NextRow = Schemas['NextRow']
+
+export const nextToSubmit = (tab: Kind, costBps: number, filters: AlphaFilters, enabled: boolean) =>
+  queryOptions({
+    queryKey: ['separation', 'next', tab, costBps, filters],
+    queryFn: () => http.get<NextPlan>(`/api/separation/next${qs({ ...filters, tab, costBps })}`),
+    enabled,
+    staleTime: 60_000,
+  })

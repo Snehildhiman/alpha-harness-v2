@@ -37,6 +37,7 @@ from ..separation import (
     summary,
 )
 from ..themes import ThemeRule, check, current, fields_of
+from ..tools import submit_rank
 from ..vault.store import SERIES_VERSION
 from ..vault.yields import checks_of
 from .deps import State, refuse
@@ -662,3 +663,131 @@ async def recheck(
     except RuntimeError as exc:
         raise refuse(409, "busy", str(exc)) from exc
     return RecheckStarted(task_id=task_id, alphas=len(ids))
+
+
+# -- what to submit next ---------------------------------------------------------------------
+
+#: Candidates ranked per request, strongest Sharpe first; each costs one pass over the days.
+NEXT_MAX = 300
+
+
+class NextRow(Out):
+    alpha_id: str
+    expression: str | None
+    region: str | None
+    kind: str
+    verdict: str
+    sharpe: float | None
+    fitness: float | None
+    turnover: float | None
+    #: The combined book's IR with this Alpha added, and the change from today's.
+    combined_ir: float | None
+    combined_ir_after_cost: float | None
+    delta_ir: float | None
+    delta_ir_after_cost: float | None
+    #: Daily PnL correlation with the combined book, and its highest with one submitted Alpha.
+    pool_correlation: float | None
+    max_correlation: float | None
+    max_correlation_with: str | None
+
+
+class NextPlan(Out):
+    #: Submitted Alphas with a stored series, and their combined IR today.
+    pool: int
+    pool_ir: float | None
+    pool_ir_after_cost: float | None
+    cost_bps: float
+    rows: list[NextRow]
+    #: Candidates left out because their daily PnL is not downloaded yet.
+    without_series: int
+
+
+@router.get("/next")
+async def next_to_submit(
+    state: State,
+    tab: Annotated[Kind, Query()] = Kind.REGULAR,
+    cost_bps: Annotated[float, Query(alias="costBps", ge=0, le=100)] = 5.0,
+    limit: Annotated[int, Query(ge=1, le=NEXT_MAX)] = 100,
+    filters: Annotated[TabFilter, Depends()] = NO_FILTER,
+) -> NextPlan:
+    """Submittable (and re-check) Alphas of one tab, ranked by how much each lifts the
+    combined book's after-cost IR. Spends nothing."""
+    judged = await judge_vault(state)
+    wanted = filters.dataset or filters.category or filters.theme
+    data = await data_of(state, judged) if wanted else {}
+    submitted = [
+        str(i.row.get("alpha_id")) for i in judged if i.judgement.verdict == Verdict.SUBMITTED
+    ]
+    for item in judged:
+        if item.judgement.verdict == Verdict.SUBMITTED:
+            submitted.extend(str(c.get("alpha_id")) for c in item.children)
+    candidates = [
+        i
+        for i in judged
+        if in_tab(i, tab)
+        and i.judgement.verdict in (Verdict.SUBMITTABLE, Verdict.RECHECK)
+        and filters.keeps(i, data)
+        and (not filters.region or filters.region == i.row.get("region"))
+    ]
+    candidates.sort(key=lambda i: -(figure(i, "sharpe") or float("-inf")))
+    candidates = candidates[:NEXT_MAX]
+    # An RA family has no series of its own: its passing children stand for it.
+    stand_in = {
+        str(i.row.get("alpha_id")): (
+            next(
+                (
+                    str(c.get("alpha_id"))
+                    for c in i.children
+                    if str(c.get("region")) in i.judgement.regions_passing
+                ),
+                str(i.row.get("alpha_id")),
+            )
+        )
+        for i in candidates
+    }
+    ids = list(dict.fromkeys([*submitted, *stand_in.values()]))
+    series = await state.alphas.series(ids)
+    meta = await state.alphas.by_ids(ids)
+    pool, ranked = await asyncio.to_thread(
+        submit_rank.rank, series, meta, submitted, list(stand_in.values()), cost_bps
+    )
+    by_id = {r.alpha_id: r for r in ranked}
+    rows: list[NextRow] = []
+    missing = 0
+    for item in candidates:
+        r = by_id.get(stand_in[str(item.row.get("alpha_id"))])
+        if r is None:
+            missing += 1
+            continue
+        rows.append(
+            NextRow(
+                alpha_id=str(item.row.get("alpha_id")),
+                expression=item.row.get("expression"),
+                region=item.row.get("region"),
+                kind=item.judgement.kind.value,
+                verdict=item.judgement.verdict.value,
+                sharpe=figure(item, "sharpe"),
+                fitness=figure(item, "fitness"),
+                turnover=figure(item, "turnover"),
+                combined_ir=r.ir,
+                combined_ir_after_cost=r.ir_after_cost,
+                delta_ir=r.delta_ir,
+                delta_ir_after_cost=r.delta_ir_after_cost,
+                pool_correlation=r.pool_correlation,
+                max_correlation=r.max_correlation,
+                max_correlation_with=r.max_correlation_with,
+            )
+        )
+    rows.sort(
+        key=lambda x: (
+            -(x.delta_ir_after_cost if x.delta_ir_after_cost is not None else float("-inf"))
+        )
+    )
+    return NextPlan(
+        pool=int(pool["alphas"] or 0),
+        pool_ir=pool["ir"],
+        pool_ir_after_cost=pool["ir_after_cost"],
+        cost_bps=cost_bps,
+        rows=rows[:limit],
+        without_series=missing,
+    )
