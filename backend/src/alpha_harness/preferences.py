@@ -41,8 +41,16 @@ class Preferences(Out):
     default_cores: int = Field(default=4, ge=1, le=8)
     #: Hours between looks at GitHub for a new release; 0 looks only when asked.
     update_check_hours: Literal[0, 1, 6, 24] = 1
-    #: Install a new release by itself, once nothing is simulating.
-    auto_update: bool = True
+    #: Install a new release by itself, once nothing is simulating. Off in v2: releases come
+    #: from this fork's own repository, and an update should be a deliberate choice.
+    auto_update: bool = False
+    #: Download the data catalog once a day, so the crowding history (alpha and user counts
+    #: per dataset and field over time) keeps growing.
+    daily_sync: bool = True
+    #: The local hour from which the day's download may start.
+    daily_sync_hour: int = Field(default=6, ge=0, le=23)
+    #: Days between downloads of the slow region-agnostic market; 0 never runs it by itself.
+    ra_sync_days: Literal[0, 1, 2, 3, 7] = 3
 
 
 async def load(db: Database) -> Preferences:
@@ -69,3 +77,8 @@ def apply(state: AppState, preferences: Preferences) -> None:
     )
     updates.check_hours = preferences.update_check_hours
     updates.auto_install = preferences.auto_update
+    state.daily_sync.configure(
+        enabled=preferences.daily_sync,
+        hour=preferences.daily_sync_hour,
+        ra_every_days=preferences.ra_sync_days,
+    )

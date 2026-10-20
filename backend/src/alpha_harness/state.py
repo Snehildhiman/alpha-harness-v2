@@ -19,9 +19,11 @@ from .brain.client import BrainClient
 from .brain.endpoints import BrainEndpoints
 from .brain.errors import BrainTransportError
 from .catalog import search
+from .catalog.markets import markets as list_markets
 from .catalog.queries import CatalogQueries
 from .catalog.sync import CatalogSync, serialise_run
 from .config import BRAIN_API_BASE, Settings
+from .crowding.daily import DailySync
 from .db.duck import Catalog
 from .db.models import SimStatus, SimulationRecord, utcnow
 from .db.sqlite import Database, snapshot
@@ -101,6 +103,12 @@ class AppState:
             on_progress=lambda payload: self.hub.broadcast(TOPIC_SYNC, payload),
         )
         self.queries = CatalogQueries(self.catalog)
+        self.daily_sync = DailySync(
+            self.sync,
+            self.catalog,
+            markets=lambda: list_markets(self.metadata),
+            signed_in=lambda: self.auth.session.authenticated,
+        )
 
         self.models = ModelRegistry(self.db)
         self.llm = LLMService(self.db, self.sealer, self.models)
@@ -170,6 +178,7 @@ class AppState:
         await self.engine.start()
         await self.optimizer.start()
         self._session_watch = asyncio.create_task(self._watch_session(), name="session-watch")
+        await self.daily_sync.start()
         log.info("startup.complete", data_dir=str(self.settings.data_dir))
 
     async def _replay_last_sync(self) -> None:
@@ -272,6 +281,7 @@ class AppState:
             watch.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await watch
+        await self.daily_sync.stop()
         await self.optimizer.stop()
         await self.engine.stop()
         await self.tracker.stop()

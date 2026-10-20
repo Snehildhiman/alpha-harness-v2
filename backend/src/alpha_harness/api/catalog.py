@@ -7,7 +7,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, model_validator
 
 from ..brain.schemas import REGION_AGNOSTIC_REGION
-from ..brain.settings_schema import valid_values
+from ..catalog.markets import markets as list_markets
 from ..catalog.pyramids import pyramid_grid
 from ..catalog.queries import FieldFilter, Tuple4
 from ..catalog.sync import SyncTarget
@@ -238,24 +238,13 @@ class DatasetRow(BaseModel):
 
 
 async def _markets(state: State) -> list[SyncTarget]:
-    """Every EQUITY market the account can simulate, from BRAIN's own settings schema.
+    """Every EQUITY market the account can simulate (see :func:`catalog.markets.markets`).
 
-    A new region or universe is picked up without a code change. Region ``ALL`` is in here
-    like any other: it is drawn in the sync matrix so an account that can run region-agnostic
-    alphas can see whether it holds them. What it is *not* is part of a sync by default —
-    see :func:`start_sync_all`.
+    Region ``ALL`` is in here like any other: it is drawn in the sync matrix so an account
+    that can run region-agnostic alphas can see whether it holds them. What it is *not* is
+    part of a sync by default — see :func:`start_sync_all`.
     """
-    schema = (
-        await state.metadata.cached_settings_schema() or await state.metadata.refresh_metadata()
-    )
-    # EQUITY only, the one instrument type the Data Explorer offers.
-    base: dict[str, Any] = {"instrumentType": "EQUITY"}
-    return [
-        SyncTarget(instrument_type="EQUITY", region=region, delay=int(delay), universe=universe)
-        for region in valid_values(schema, "region", base)
-        for delay in valid_values(schema, "delay", {**base, "region": region})
-        for universe in valid_values(schema, "universe", {**base, "region": region, "delay": delay})
-    ]
+    return await list_markets(state.metadata)
 
 
 @router.get("/markets")

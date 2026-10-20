@@ -31,6 +31,7 @@ from .api import (
     catalog,
     chat,
     competitions,
+    crowding,
     ga,
     lab_tasks,
     llm,
@@ -172,6 +173,7 @@ def create_app() -> FastAPI:
 
     app.include_router(auth.router)
     app.include_router(catalog.router)
+    app.include_router(crowding.router)
     app.include_router(sims.router)
     app.include_router(alphas.router)
     app.include_router(template_lab.router)

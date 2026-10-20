@@ -38,7 +38,8 @@ if TYPE_CHECKING:
 log = structlog.get_logger(__name__)
 
 PACKAGE = "alpha-harness"
-REPOSITORY = "residual-lab/alpha-harness"
+#: This fork's own releases; the upstream project's builds would replace the v2 changes.
+REPOSITORY = "Snehildhiman/alpha-harness-v2"
 RELEASES_URL = f"https://api.github.com/repos/{REPOSITORY}/releases/latest"
 #: Where a person goes to fetch a release by hand, when the app cannot do it for them.
 RELEASES_PAGE = f"https://github.com/{REPOSITORY}/releases/latest"
@@ -88,7 +89,7 @@ ERROR_FILE = "update-error.json"
 #: the allowance retrying; "Check now" is there for the impatient.
 check_hours = 1
 #: Install a newer release by itself once nothing is simulating, from Settings.
-auto_install = True
+auto_install = False
 #: However often "Check now" is pressed, GitHub is asked at most this often.
 FORCE_GAP_SECONDS = 60.0
 #: How often the watcher wakes to see whether a look or an install is due.

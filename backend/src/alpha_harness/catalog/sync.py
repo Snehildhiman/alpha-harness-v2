@@ -22,6 +22,7 @@ from sqlalchemy import select, update
 
 from ..brain.errors import BrainError
 from ..brain.schemas import REGION_AGNOSTIC_REGION, BulkField, FieldRef
+from ..crowding import history
 from ..db.duck import CATEGORY_COLUMNS, DATASET_COLUMNS, CatalogUnusableError
 from ..db.models import SyncRun, SyncStatus, utcnow
 from . import search
@@ -176,6 +177,10 @@ class CatalogSync:
 
         task.add_done_callback(_done)
         return self._payload(run)
+
+    def running(self) -> bool:
+        """Whether a download is in progress in this process."""
+        return bool(self._tasks)
 
     async def reset_interrupted(self) -> int:
         """Mark runs left RUNNING by a crash as FAILED, so they stop reading as in progress.
@@ -517,6 +522,16 @@ class CatalogSync:
             await search.rebuild(self.catalog)
         except Exception:
             log.warning("sync_all.search_index_failed", run_id=run_id, exc_info=True)
+
+        # Crowding history: a dated snapshot of the counts this run refreshed. Like the steps
+        # above, a failure costs a day of history, not the sync.
+        if synced:
+            try:
+                run = await self.get_run(run_id)
+                if run is not None:
+                    await history.snapshot(self.catalog, synced_since=run.started_at)
+            except Exception:
+                log.warning("sync_all.crowding_snapshot_failed", run_id=run_id, exc_info=True)
 
         status = SyncStatus.COMPLETE if synced else SyncStatus.FAILED
         await self._finish(run_id, status, error=_failures(progress))

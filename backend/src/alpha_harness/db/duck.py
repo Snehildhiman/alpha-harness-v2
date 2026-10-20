@@ -185,6 +185,39 @@ CREATE TABLE IF NOT EXISTS alpha_pnl (
 -- is re-fetched: the old daily-pnl recordset is rounded separately from the platform's stats.
 ALTER TABLE alpha_pnl ADD COLUMN IF NOT EXISTS turnover DOUBLE;
 
+-- Crowding history (v2): how busy each dataset and field was on each day a sync ran. The
+-- catalog tables above hold only today's counts; these keep the trend, which is what says a
+-- dataset is filling up before prod correlation does. Datasets are small, so every sync
+-- stores a full row per dataset. Fields number ~85k per market, so a field row is stored only
+-- when its counts differ from the field's previous snapshot.
+CREATE TABLE IF NOT EXISTS dataset_snapshot (
+    snapshot_date     DATE NOT NULL,
+    dataset_id        VARCHAR NOT NULL,
+    instrument_type   VARCHAR NOT NULL,
+    region            VARCHAR NOT NULL,
+    delay             INTEGER NOT NULL,
+    universe          VARCHAR NOT NULL,
+    user_count        INTEGER,
+    alpha_count       INTEGER,
+    field_count       INTEGER,
+    pyramid_multiplier DOUBLE,
+    themes            VARCHAR,
+    PRIMARY KEY (snapshot_date, dataset_id, instrument_type, region, delay, universe)
+);
+
+CREATE TABLE IF NOT EXISTS field_snapshot (
+    snapshot_date     DATE NOT NULL,
+    field_id          VARCHAR NOT NULL,
+    instrument_type   VARCHAR NOT NULL,
+    region            VARCHAR NOT NULL,
+    delay             INTEGER NOT NULL,
+    universe          VARCHAR NOT NULL,
+    dataset_id        VARCHAR,
+    user_count        INTEGER,
+    alpha_count       INTEGER,
+    PRIMARY KEY (snapshot_date, field_id, instrument_type, region, delay, universe)
+);
+
 CREATE INDEX IF NOT EXISTS ix_alpha_scope
     ON alpha (instrument_type, region, delay, universe);
 CREATE INDEX IF NOT EXISTS ix_alpha_sharpe ON alpha (sharpe);
