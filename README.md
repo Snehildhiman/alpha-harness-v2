@@ -4,14 +4,20 @@ A local, self-improving alpha factory for [WorldQuant BRAIN](https://platform.wo
 built on [Alpha Harness](https://github.com/residual-lab/alpha-harness) (MIT, © MiracleInvoker).
 It runs entirely on your machine.
 
-v2 adds, stage by stage (see the project plan):
+v2 adds (see **[GUIDE.md](GUIDE.md)** for how to use each):
 
-- **Crowding history** — daily snapshots of alpha and user counts per dataset and field, so the
-  search can avoid datasets that are filling up (prod correlation). *(done)*
-- Alpha-type separation (regular, RA, Power Pool, current theme, SuperAlpha), submittable views
-- Models trained on your alphas that predict every check and correlation before simulating
-- A repair engine for near-misses and every failing check
-- Live learning from every simulation, check and submission
+- **Alpha Types**: regular, region-agnostic, Power Pool, current-theme and SuperAlpha tabs, each
+  judged only by the checks its type answers to (prod correlation for regular and RA, Power Pool
+  correlation for Power Pool), with stale correlation passes flagged for a re-check.
+- **Prod floor**: a local lower bound on prod correlation from alphas BRAIN already scored.
+- **Learned models** that predict every check and correlation before you simulate, retrain
+  themselves as results arrive, and screen the labs' candidates.
+- **Repair**: model-ranked variants of near-miss alphas, RA families included.
+- **Scorecards**: which operators, fields, datasets and lookbacks run hot or cold.
+- **Dedup** of equivalent expressions and of alphas already in your vault.
+- **Crowding history**: daily snapshots of alpha and user counts per dataset and field.
+- **Research**: free arXiv / RSS papers the LLM labs draw on.
+- **Governor**: cores dealt toward the tasks whose alphas pass.
 
 ## Requirements (Windows 11)
 

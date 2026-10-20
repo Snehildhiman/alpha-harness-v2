@@ -307,6 +307,17 @@ function TaskRows({ current, change }: Rows) {
         stacked
       />
       <SettingRow
+        title="Retrain the models by themselves"
+        description="Every 10 minutes, the app looks for new or re-checked Alphas; once 100 have arrived it retrains. A new set replaces the one in use only if it predicts the Alphas the old set never saw at least as well."
+        control={(labels) => (
+          <Switch
+            checked={current.autoRetrain}
+            onChange={(on) => change({ autoRetrain: on })}
+            {...labels}
+          />
+        )}
+      />
+      <SettingRow
         title="Re-deal cores by yield"
         description="Every 30 minutes, moves the cores the running tasks hold toward the tasks whose recent Alphas pass every check most often. The total stays the same and every task keeps at least one core. Off, every task keeps the cores you gave it."
         control={(labels) => (
