@@ -53,3 +53,10 @@ def test_universe_keeps_its_size() -> None:
     assert target_universe("USA", "TOP1000", "EUR", eur) is None
     # An unknown region falls back to its widest download.
     assert target_universe("USA", "TOP3000", "CHN", MARKETS[("CHN", 1)]) == "TOP2000U"
+
+
+def test_a_power_pool_alpha_stays_power_pool() -> None:
+    (first, *_) = transplants(
+        [source("rank(close)", power_pool=True)], MARKETS, {}, known_fields=KNOWN
+    )
+    assert first.power_pool

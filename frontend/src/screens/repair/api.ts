@@ -30,12 +30,17 @@ export const queueRepair = (body: { alphaId: string; take: number }) =>
 export type TransplantPlan = Schemas['TransplantPlan']
 export type TransplantRow = Schemas['TransplantRow']
 
-export const transplantPlan = (region: string | null) =>
+export type TransplantKind = 'regular' | 'power_pool'
+
+export const transplantPlan = (region: string | null, kind: TransplantKind | null = null) =>
   queryOptions({
-    queryKey: ['repair', 'transplants', region],
-    queryFn: () => http.get<TransplantPlan>(`/api/repair/transplants${qs({ region })}`),
+    queryKey: ['repair', 'transplants', region, kind],
+    queryFn: () => http.get<TransplantPlan>(`/api/repair/transplants${qs({ region, kind })}`),
     staleTime: 60_000,
   })
 
-export const queueTransplants = (body: { take: number; region: string | null }) =>
-  http.post<Schemas['AddedTask']>('/api/repair/transplants/tasks', body)
+export const queueTransplants = (body: {
+  take: number
+  region: string | null
+  kind: TransplantKind | null
+}) => http.post<Schemas['AddedTask']>('/api/repair/transplants/tasks', body)

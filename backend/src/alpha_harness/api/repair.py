@@ -1,7 +1,7 @@
 """Repair: find near-misses, generate variants, let the models pick, simulate the best few."""
 
 from datetime import UTC, datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Body, Query
 
@@ -323,6 +323,9 @@ async def queue(
 
 #: Transplants scored per request; the models score these in one batch.
 TRANSPLANT_POOL = 4000
+#: Types a transplant keeps: a regular Alpha stays regular, a Power Pool (or theme) one stays
+#: Power Pool, each judged by its own correlation in the new region.
+_TRANSPLANT_KINDS = frozenset({Kind.REGULAR, Kind.POWER_POOL, Kind.THEME})
 _TRANSPLANT_PASSING = frozenset({Verdict.SUBMITTABLE, Verdict.RECHECK, Verdict.SUBMITTED})
 _transplant_cache: dict[str, Any] = {}
 
@@ -337,6 +340,8 @@ class TransplantRow(Out):
     delay: int
     #: The source's own state: submitted, submittable or re-check.
     source_verdict: str
+    #: ``regular`` or ``power_pool``: the type it is judged as, here and where it came from.
+    kind: str
     source_sharpe: float | None
     p_all: float | None
     correlation: float | None
@@ -378,16 +383,20 @@ async def _markets_and_runs(state: State) -> tuple[Markets, frozenset[str], dict
     return markets, known, ran
 
 
+TransplantKind = Literal["regular", "power_pool"]
+
+
 async def _transplant_plan(
-    state: State, limit: int, region: str | None
+    state: State, limit: int, region: str | None, kind: TransplantKind | None = None
 ) -> tuple[TransplantPlan, list[tuple[Transplant, TransplantRow]]]:
     markets, known, ran = await _markets_and_runs(state)
     sources: list[dict[str, Any]] = []
     verdicts: dict[str, tuple[str, float | None]] = {}
     for item in await judge_vault(state):
-        if item.judgement.kind != Kind.REGULAR or item.judgement.verdict not in _TRANSPLANT_PASSING:
+        judged_as = item.judgement.kind
+        if judged_as not in _TRANSPLANT_KINDS or item.judgement.verdict not in _TRANSPLANT_PASSING:
             continue
-        sources.append(item.row)
+        sources.append(item.row | {"power_pool": judged_as != Kind.REGULAR})
         verdicts[str(item.row.get("alpha_id"))] = (
             item.judgement.verdict.value,
             figure(item, "sharpe"),
@@ -397,6 +406,8 @@ async def _transplant_plan(
     found = transplants(sources, markets, ran, known_fields=known)
     if region:
         found = [t for t in found if t.region == region]
+    if kind is not None:
+        found = [t for t in found if t.power_pool == (kind == "power_pool")]
     pool = found[:TRANSPLANT_POOL]
     ranked = await state.predictors.current() is not None
     scores: list[Score | None] = [None] * len(pool)
@@ -412,14 +423,17 @@ async def _transplant_plan(
                     "neutralization": t.settings.get("neutralization"),
                     "decay": t.settings.get("decay"),
                     "truncation": t.settings.get("truncation"),
-                    "power_pool": False,
+                    "power_pool": t.power_pool,
                     "sim_type": "REGULAR",
                     "date_created": now,
                 }
                 for t in pool
             ]
         )
-        scores = [score(p, Kind.REGULAR) for p in predicted]
+        scores = [
+            score(p, Kind.POWER_POOL if t.power_pool else Kind.REGULAR)
+            for t, p in zip(pool, predicted, strict=True)
+        ]
     rows = [
         (
             t,
@@ -432,6 +446,7 @@ async def _transplant_plan(
                 universe=t.universe,
                 delay=t.delay,
                 source_verdict=verdicts[t.source_id][0],
+                kind="power_pool" if t.power_pool else "regular",
                 source_sharpe=verdicts[t.source_id][1],
                 p_all=s.p_all if s else None,
                 correlation=s.correlation if s else None,
@@ -456,10 +471,11 @@ async def transplant_plan(
     state: State,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     region: Annotated[str | None, Query()] = None,
+    kind: Annotated[TransplantKind | None, Query()] = None,
 ) -> TransplantPlan:
-    """Passing regular Alphas, each in the downloaded regions it has not run in, best first.
-    Simulates nothing."""
-    return (await _transplant_plan(state, limit, region or None))[0]
+    """Passing regular and Power Pool Alphas, each in the downloaded regions it has not run
+    in, best first. Simulates nothing."""
+    return (await _transplant_plan(state, limit, region or None, kind))[0]
 
 
 @router.post("/transplants/tasks")
@@ -467,13 +483,14 @@ async def queue_transplants(
     state: State,
     take: Annotated[int, Body(ge=1, le=200)] = 40,
     region: Annotated[str | None, Body()] = None,
+    kind: Annotated[TransplantKind | None, Body()] = None,
     cores: Annotated[int, Body(ge=1)] = DEFAULT_SLOTS,
 ) -> AddedTask:
     """Simulate the best ``take`` transplants as one task, in Full mode so the correlation
     checks run."""
     if cores > state.engine.slots:
         raise refuse(422, "too_many_cores", f"The engine has {state.engine.slots} slots.")
-    _, rows = await _transplant_plan(state, take, region or None)
+    _, rows = await _transplant_plan(state, take, region or None, kind)
     chosen = [t for t, _ in rows[:take]]
     if not chosen:
         raise refuse(

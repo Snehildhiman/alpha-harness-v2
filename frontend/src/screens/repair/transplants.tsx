@@ -11,7 +11,7 @@ import { useState } from 'react'
 import { fmt } from '@/lib/format'
 import { Button, Empty, ErrorNotice, LINK, Notice, Panel, Segmented } from '@/ui/kit'
 import { type Column, DataTable } from '@/ui/table'
-import { queueTransplants, type TransplantRow, transplantPlan } from './api'
+import { queueTransplants, type TransplantKind, type TransplantRow, transplantPlan } from './api'
 
 const COLUMNS: Column<TransplantRow>[] = [
   {
@@ -33,6 +33,12 @@ const COLUMNS: Column<TransplantRow>[] = [
         {r.origin} · {r.sourceVerdict === 'recheck' ? 're-check' : r.sourceVerdict}
       </span>
     ),
+  },
+  {
+    key: 'kind',
+    header: 'Type',
+    width: '96px',
+    cell: (r) => (r.kind === 'power_pool' ? 'Power Pool' : 'Regular'),
   },
   {
     key: 'to',
@@ -75,8 +81,11 @@ const COLUMNS: Column<TransplantRow>[] = [
 
 export function TransplantsPanel() {
   const [region, setRegion] = useState<string>('all')
+  const [kind, setKind] = useState<TransplantKind | 'all'>('all')
   const [take, setTake] = useState(20)
-  const plan = useQuery(transplantPlan(region === 'all' ? null : region))
+  const plan = useQuery(
+    transplantPlan(region === 'all' ? null : region, kind === 'all' ? null : kind),
+  )
   const queue = useMutation({ mutationFn: queueTransplants })
   const data = plan.data
   const regions = [...new Set((data?.markets ?? []).map((m) => m.split(' ')[0] ?? m))]
@@ -85,6 +94,16 @@ export function TransplantsPanel() {
       title="Transplants into other regions"
       actions={
         <div className="flex flex-wrap items-center gap-2">
+          <Segmented
+            label="Type"
+            items={[
+              { value: 'all', label: 'Both' },
+              { value: 'regular', label: 'Regular' },
+              { value: 'power_pool', label: 'Power Pool' },
+            ]}
+            value={kind}
+            onChange={setKind}
+          />
           {regions.length > 1 && (
             <Segmented
               label="Into"
@@ -107,7 +126,13 @@ export function TransplantsPanel() {
               <Button
                 variant="primary"
                 loading={queue.isPending}
-                onClick={() => queue.mutate({ take, region: region === 'all' ? null : region })}
+                onClick={() =>
+                  queue.mutate({
+                    take,
+                    region: region === 'all' ? null : region,
+                    kind: kind === 'all' ? null : kind,
+                  })
+                }
               >
                 <PlayIcon aria-hidden />
                 Simulate top {take}

@@ -35,6 +35,8 @@ class Transplant:
     universe: str
     delay: int
     settings: dict[str, Any]
+    #: Judged as a Power Pool Alpha (Power Pool correlation, not prod) in its new region too.
+    power_pool: bool = False
 
 
 def size_of(region: str, universe: str) -> str | None:
@@ -83,7 +85,8 @@ def transplants(
     known_fields: frozenset[str],
 ) -> list[Transplant]:
     """Every region each source could run in and has not. ``known_fields`` holds every field
-    of any download: a name outside it (a keyword, an operator option) is not a field."""
+    of any download: a name outside it (a keyword, an operator option) is not a field. A
+    source row with ``power_pool`` set stays a Power Pool Alpha."""
     out: list[Transplant] = []
     seen: set[tuple[str, str, int]] = set()
     for row in sources:
@@ -121,6 +124,7 @@ def transplants(
                         "decay": row.get("decay"),
                         "truncation": row.get("truncation"),
                     },
+                    power_pool=bool(row.get("power_pool")),
                 )
             )
     return out

@@ -1837,8 +1837,8 @@ export interface paths {
         };
         /**
          * Transplant Plan
-         * @description Passing regular Alphas, each in the downloaded regions it has not run in, best first.
-         *     Simulates nothing.
+         * @description Passing regular and Power Pool Alphas, each in the downloaded regions it has not run
+         *     in, best first. Simulates nothing.
          */
         get: operations["transplant_plan_api_repair_transplants_get"];
         put?: never;
@@ -3502,6 +3502,8 @@ export interface components {
              * @default 8
              */
             cores: number;
+            /** Kind */
+            kind?: ("regular" | "power_pool") | null;
             /** Region */
             region?: string | null;
             /**
@@ -7143,6 +7145,8 @@ export interface components {
             fitness: number | null;
             /** Id */
             id: string;
+            /** Kind */
+            kind: string;
             /** Origin */
             origin: string;
             /** Pall */
@@ -10175,6 +10179,7 @@ export interface operations {
             query?: {
                 limit?: number;
                 region?: string | null;
+                kind?: ("regular" | "power_pool") | null;
             };
             header?: never;
             path?: never;
