@@ -169,6 +169,30 @@ const COLUMNS: Column<TabRow>[] = [
 ]
 
 /** Power Pool tabs add how today's theme reads each Alpha. */
+/** Prod-correlation tabs add the local floor: the least prod correlation the Alpha can have,
+ *  from its correlation with Alphas whose prod correlation BRAIN already reported. */
+const FLOOR_COLUMN: Column<TabRow> = {
+  key: 'floor',
+  header: 'Prod floor',
+  width: '112px',
+  align: 'right',
+  cell: (r) => {
+    // Below zero the landmarks imply nothing about it.
+    if (r.crowdFloor === null || r.crowdFloor === undefined || r.crowdFloor < 0) {
+      return <span className="text-ink-subtle">—</span>
+    }
+    const tone = r.crowdFloor >= 0.7 ? 'loss' : r.crowdFloor >= 0.6 ? 'warn' : 'muted'
+    return (
+      <span
+        className={`num ${TEXT_TONE[tone]}`}
+        title={`At least ${fmt.ratio(r.crowdFloor)}: correlates ${fmt.ratio(r.crowdR)} with ${r.crowdVia ?? '?'}, whose prod correlation is ${fmt.ratio(r.crowdP)}.${r.crowdFloor >= 0.7 ? ' Re-check skips it.' : ''}`}
+      >
+        ≥ {fmt.ratio(r.crowdFloor)}
+      </span>
+    )
+  },
+}
+
 const THEME_COLUMN: Column<TabRow> = {
   key: 'theme',
   header: 'Today’s theme',
@@ -207,7 +231,10 @@ export function TypesScreen() {
     placeholderData: keepPreviousData,
   })
   const counts = kind ? summary.data?.counts[kind] : undefined
-  const columns = kind === 'power_pool' || kind === 'theme' ? [...COLUMNS, THEME_COLUMN] : COLUMNS
+  const columns =
+    kind === 'power_pool' || kind === 'theme'
+      ? [...COLUMNS, THEME_COLUMN]
+      : [...COLUMNS, FLOOR_COLUMN]
   const running = summary.data?.theme
 
   return (
@@ -317,7 +344,8 @@ export function TypesScreen() {
                 >
                   Prod and Power Pool correlation rise as others submit. Re-checking asks BRAIN to
                   run the submission checks again (no simulations, nothing submitted), and each
-                  Alpha moves to the right list as its answer lands.
+                  Alpha moves to the right list as its answer lands. Alphas whose prod floor is
+                  already 0.7 or more are skipped: they cannot pass.
                   {rechecking.isSuccess &&
                     ` Re-checking ${fmt.int(rechecking.data.alphas)} Alphas in the background.`}
                 </Notice>

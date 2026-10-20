@@ -14,11 +14,15 @@ from dataclasses import asdict
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Any, Literal
 
+import structlog
 from fastapi import APIRouter, Body, Query
 
 from .. import preferences
+from ..crowding import crowdmap
+from ..crowding.crowdmap import Floor
 from ..schemas import Out
 from ..separation import (
+    RA_MIN_REGIONS,
     Freshness,
     Judged,
     Kind,
@@ -34,6 +38,10 @@ from ..vault.yields import checks_of
 from .deps import State, refuse
 
 router = APIRouter(prefix="/api/separation", tags=["separation"])
+log = structlog.get_logger(__name__)
+
+#: BRAIN's prod-correlation limit.
+PROD_LIMIT = 0.7
 
 COLUMNS = (
     "alpha_id, expression, sim_type, instrument_type, region, delay, universe, neutralization, "
@@ -46,6 +54,8 @@ COLUMNS = (
 SortKey = Literal["sharpe", "fitness", "turnover", "returns", "margin", "date_created"]
 
 _cache: dict[str, Any] = {"key": None, "judged": []}
+_floors: dict[str, Any] = {"key": None, "floors": {}}
+_floor_lock = asyncio.Lock()
 _lock = asyncio.Lock()
 
 
@@ -124,6 +134,64 @@ async def judge_vault(state: State) -> list[Judged]:
         return _cache["judged"]
 
 
+#: Verdicts worth a crowd floor: the ones still hoping to pass prod correlation.
+_HOPEFUL = frozenset({Verdict.SUBMITTABLE, Verdict.RECHECK, Verdict.PENDING})
+#: Types judged on prod correlation.
+_PROD_KINDS = frozenset({Kind.REGULAR, Kind.RA, Kind.SUPER})
+
+
+def _family_floor(children: list[dict[str, Any]], found: dict[str, Floor]) -> Floor:
+    """An RA family needs two regions: its floor is the second-lowest of its children's."""
+    known = sorted(
+        (f for c in children if (f := found.get(str(c.get("alpha_id")))) and f.value is not None),
+        key=lambda f: f.value if f.value is not None else 0.0,
+    )
+    if len(known) < RA_MIN_REGIONS:
+        return Floor(None)
+    return known[RA_MIN_REGIONS - 1]
+
+
+async def crowd_floors(state: State, judged: list[Judged]) -> dict[str, Floor]:
+    """Each hopeful prod-correlation Alpha's local floor (:mod:`.crowding.crowdmap`), by the
+    id its tab row carries. Recomputed when the vault, its checks or its PnL change."""
+    marker = await state.catalog.query(
+        "SELECT (SELECT count(DISTINCT alpha_id) FROM alpha_pnl) AS p, "
+        "(SELECT max(checks_at) FROM alpha) AS k"
+    )
+    key = (_cache["key"], tuple(str(v) for v in marker[0].values()) if marker else None)
+    async with _floor_lock:
+        if _floors["key"] == key:
+            return _floors["floors"]
+        every = [r for item in judged for r in (item.row, *item.children)]
+        landmarks = crowdmap.landmarks_of(every)
+        wanted: dict[str, list[str]] = {}
+        for item in judged:
+            j = item.judgement
+            if j.kind not in _PROD_KINDS or j.verdict not in _HOPEFUL:
+                continue
+            for row in item.children or [item.row]:
+                region = row.get("region")
+                if region and region in landmarks:
+                    wanted.setdefault(str(region), []).append(str(row.get("alpha_id")))
+        found: dict[str, Floor] = {}
+        for region, ids in wanted.items():
+            marks = landmarks[region]
+            grid = await state.alphas.pnl_grid([*dict.fromkeys(ids), *marks])
+            found.update(await asyncio.to_thread(crowdmap.floors, grid, ids, marks))
+        out: dict[str, Floor] = {}
+        for item in judged:
+            alpha_id = str(item.row.get("alpha_id"))
+            if item.children:
+                floor = _family_floor(item.children, found)
+            else:
+                floor = found.get(alpha_id, Floor(None))
+            if floor.value is not None:
+                out[alpha_id] = floor
+        _floors.update(key=key, floors=out)
+        log.info("separation.crowd_floors", measured=len(found), rows=len(out))
+        return out
+
+
 def figure(item: Judged, key: str) -> Any:
     """A row's figure; an RA family shows its best passing (else best) child's."""
     if not item.children:
@@ -168,6 +236,13 @@ class TabRow(Out):
     theme_note: str | None
     #: When BRAIN last judged it: its last re-check, else its simulation (UTC).
     checked_at: datetime | None
+    #: The lowest prod correlation it can have, worked out locally from Alphas whose prod
+    #: correlation BRAIN reported (RA families: the second-best region's), and the Alpha
+    #: setting it, their correlation, and that Alpha's own prod correlation.
+    crowd_floor: float | None = None
+    crowd_via: str | None = None
+    crowd_r: float | None = None
+    crowd_p: float | None = None
 
 
 class TabPage(Out):
@@ -190,9 +265,14 @@ class Summary(Out):
     theme: RunningTheme | None
 
 
-def _row(item: Judged) -> TabRow:
+def _row(item: Judged, floors: dict[str, Floor] | None = None) -> TabRow:
     j, r = item.judgement, item.row
+    floor = (floors or {}).get(str(r.get("alpha_id")))
     return TabRow(
+        crowd_floor=floor.value if floor else None,
+        crowd_via=floor.via if floor else None,
+        crowd_r=floor.r if floor else None,
+        crowd_p=floor.p if floor else None,
         alpha_id=str(r.get("alpha_id")),
         expression=r.get("expression"),
         kind=j.kind.value,
@@ -284,7 +364,9 @@ async def tab(
         picked.sort(key=lambda i: str(i.row.get("date_created") or ""), reverse=True)
     else:
         picked.sort(key=order)
-    return TabPage(total=len(picked), rows=[_row(i) for i in picked[offset : offset + limit]])
+    page = picked[offset : offset + limit]
+    floors = await crowd_floors(state, judged) if tab in _PROD_KINDS else {}
+    return TabPage(total=len(picked), rows=[_row(i, floors) for i in page])
 
 
 class RecheckStarted(Out):
@@ -312,6 +394,17 @@ async def recheck(
     vault = await judge_vault(state)
     judged = [i for i in vault if in_tab(i, tab) and i.judgement.verdict == verdict]
     judged.sort(key=lambda i: -(figure(i, "sharpe") or float("-inf")))
+    if tab in _PROD_KINDS:
+        # An Alpha already crowded past the limit by the local floor cannot pass prod
+        # correlation (bar BRAIN's Sharpe exception): BRAIN's slow check goes elsewhere.
+        floors = await crowd_floors(state, vault)
+        judged = [
+            i
+            for i in judged
+            if (f := floors.get(str(i.row.get("alpha_id")))) is None
+            or f.value is None
+            or f.value < PROD_LIMIT
+        ]
     ids: list[str] = []
     for item in judged[:limit]:
         rows = item.children or [item.row]

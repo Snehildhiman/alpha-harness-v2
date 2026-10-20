@@ -6345,6 +6345,14 @@ export interface components {
             checkedAt: string | null;
             /** Children */
             children: string[];
+            /** Crowdfloor */
+            crowdFloor?: number | null;
+            /** Crowdp */
+            crowdP?: number | null;
+            /** Crowdr */
+            crowdR?: number | null;
+            /** Crowdvia */
+            crowdVia?: string | null;
             /** Datecreated */
             dateCreated: string | null;
             /** Decay */
