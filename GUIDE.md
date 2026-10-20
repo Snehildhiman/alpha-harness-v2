@@ -28,6 +28,7 @@ How to run it, what each part does, how it learns, and how to change it yourself
 | Turn all-region alphas into RA | **Repair → Promote to region agnostic** | Expressions that already pass as regular alphas in 2+ of USA/EUR/ASI/GLB and never ran as RA. Pick the RA universe (needs region ALL downloaded) and *Run top N as RA*. |
 | Find new alphas | **Research Labs** | Search / Template / Evolution / LLM labs. Search and Template rounds are **screened** by the models (Settings → Model screening). |
 | Use papers | **Research** | Tick papers, then add an LLM Power Pool or Region Agnostic Lab task: each LLM call carries one paper's idea over to your fields. |
+| See where the crowd is going | **Crowding** | Datasets and fields by how many new alphas and users they gained over 1/7/30 days, from the daily catalog snapshots. Fast growers will push prod correlation up; large, quiet datasets have room. |
 | Learn what to avoid | **Scorecards** | Which operators, pairs, fields, datasets, categories, lookbacks and settings run hot or cold on prod / Power Pool / self-correlation. |
 | Check the models | **Models** | Accuracy on your newest alphas, what drives each prediction, *Screening in the labs* (model picks vs random picks), and a box to predict any expression before simulating. |
 | Track competitions | **Competitions** | Your rank in each ongoing competition is read every 6 hours and kept, so each card shows how it moved. Only your own standing is read. |

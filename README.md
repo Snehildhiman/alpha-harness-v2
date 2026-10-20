@@ -18,7 +18,7 @@ v2 adds (see **[GUIDE.md](GUIDE.md)** for how to use each):
 - **RA promotion**: expressions passing in 2+ markets run once as region-agnostic families.
 - **Scorecards**: which operators, fields, datasets and lookbacks run hot or cold.
 - **Dedup** of equivalent expressions and of alphas already in your vault.
-- **Crowding history**: daily snapshots of alpha and user counts per dataset and field.
+- **Crowding**: daily snapshots of alpha and user counts per dataset and field, with a screen ranking the fastest growers.
 - **Research**: free arXiv / RSS papers the LLM labs draw on.
 - **Governor**: cores dealt toward the tasks whose alphas pass.
 - **Competitions**: your rank kept over time, with a trend line.

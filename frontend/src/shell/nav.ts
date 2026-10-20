@@ -16,6 +16,7 @@ import {
   SparklesIcon,
   TriangleIcon,
   TrophyIcon,
+  UsersIcon,
   WrenchIcon,
 } from 'lucide-react'
 
@@ -120,6 +121,12 @@ export const NAV = [
     group: 'Research',
     label: 'Scorecards',
     icon: GaugeIcon,
+  },
+  {
+    to: '/crowding',
+    group: 'Research',
+    label: 'Crowding',
+    icon: UsersIcon,
   },
   {
     to: '/prompts',
