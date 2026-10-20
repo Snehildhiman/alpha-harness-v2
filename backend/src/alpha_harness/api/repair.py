@@ -386,7 +386,7 @@ async def _markets_and_runs(state: State) -> tuple[Markets, frozenset[str], dict
 TransplantKind = Literal["regular", "power_pool"]
 
 
-async def _transplant_plan(
+async def transplant_rows(
     state: State, limit: int, region: str | None, kind: TransplantKind | None = None
 ) -> tuple[TransplantPlan, list[tuple[Transplant, TransplantRow]]]:
     markets, known, ran = await _markets_and_runs(state)
@@ -475,7 +475,7 @@ async def transplant_plan(
 ) -> TransplantPlan:
     """Passing regular and Power Pool Alphas, each in the downloaded regions it has not run
     in, best first. Simulates nothing."""
-    return (await _transplant_plan(state, limit, region or None, kind))[0]
+    return (await transplant_rows(state, limit, region or None, kind))[0]
 
 
 @router.post("/transplants/tasks")
@@ -490,7 +490,7 @@ async def queue_transplants(
     checks run."""
     if cores > state.engine.slots:
         raise refuse(422, "too_many_cores", f"The engine has {state.engine.slots} slots.")
-    _, rows = await _transplant_plan(state, take, region or None, kind)
+    _, rows = await transplant_rows(state, take, region or None, kind)
     chosen = [t for t, _ in rows[:take]]
     if not chosen:
         raise refuse(
@@ -498,6 +498,18 @@ async def queue_transplants(
             "no_transplants",
             "No passing Alpha has a downloaded region left to run in. Sync more markets.",
         )
+    return await add_transplants(
+        state,
+        chosen,
+        cores=cores,
+        name=f"Transplants · {len(chosen)} into {region or 'other regions'}",
+    )
+
+
+async def add_transplants(
+    state: State, chosen: list[Transplant], *, cores: int, name: str, run: bool = False
+) -> AddedTask:
+    """One Full-mode task simulating these transplants, each at its own settings."""
     requests = [
         SimulationRequest(
             settings=SimulationSettings.model_validate(
@@ -509,12 +521,13 @@ async def queue_transplants(
         for t in chosen
     ]
     first = chosen[0]
+    regions = sorted({t.region for t in chosen})
     return await add_study(
         state,
         now=utcnow(),
         sampler=CORRELATION_BREAKER,
         params=BreakerParams(
-            region=region or "several",
+            region=regions[0] if len(regions) == 1 else "several",
             delay=first.delay,
             alpha_id="transplants",
             universe=first.universe,
@@ -527,7 +540,8 @@ async def queue_transplants(
         simulations=len(requests),
         batch_size=(cores + 1) * MAX_BATCH,
         template_source=first.expression,
-        template_name=f"Transplants · {len(chosen)} into {region or 'other regions'}",
+        template_name=name,
+        run=run,
         seeds=settings_sampler.seed_trials(requests, has_source=False),
     )
 

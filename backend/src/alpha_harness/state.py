@@ -15,6 +15,7 @@ from sqlalchemy import select
 
 from . import preferences, updates
 from .account import AuthService, PlatformMetadata
+from .autopilot import Autopilot
 from .brain.client import BrainClient
 from .brain.endpoints import BrainEndpoints
 from .brain.errors import BrainTransportError
@@ -134,6 +135,7 @@ class AppState:
         self.optimizer.llm = self.llm
         self.optimizer.predictors = self.predictors
         self.governor = Governor(self.optimizer, self.catalog)
+        self.autopilot = Autopilot(self, signed_in=lambda: self.auth.session.authenticated)
         self.standings = Standings(
             self.db, self.endpoints, signed_in=lambda: self.auth.session.authenticated
         )
@@ -196,6 +198,7 @@ class AppState:
         await self.research.start()
         await self.governor.start()
         await self.standings.start()
+        await self.autopilot.start()
         await self.predictors.start()
         log.info("startup.complete", data_dir=str(self.settings.data_dir))
 
@@ -303,6 +306,7 @@ class AppState:
         await self.research.stop()
         await self.governor.stop()
         await self.standings.stop()
+        await self.autopilot.stop()
         await self.predictors.stop()
         await self.optimizer.stop()
         await self.engine.stop()

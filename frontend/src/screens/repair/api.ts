@@ -56,3 +56,13 @@ export const promotionPlan = queryOptions({
 
 export const queuePromotions = (body: { universe: string; delay: number; take: number }) =>
   http.post<Schemas['AddedTask']>('/api/repair/promotions/tasks', body)
+
+export type AutopilotStatus = Schemas['AutopilotStatus']
+
+export const autopilotStatus = queryOptions({
+  queryKey: ['autopilot'],
+  queryFn: () => http.get<AutopilotStatus>('/api/autopilot'),
+  refetchInterval: 60_000,
+})
+
+export const autopilotRound = () => http.post<AutopilotStatus>('/api/autopilot/run', {})

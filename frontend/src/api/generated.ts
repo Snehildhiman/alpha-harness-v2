@@ -262,6 +262,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/autopilot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Status */
+        get: operations["status_api_autopilot_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/autopilot/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Now
+         * @description One round now, whether or not Settings turn it on (pressing the button is the choice).
+         */
+        post: operations["run_now_api_autopilot_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/catalog/counts": {
         parameters: {
             query?: never;
@@ -3332,6 +3369,19 @@ export interface components {
             /** Jobid */
             jobId: string;
         };
+        /** AutopilotStatus */
+        AutopilotStatus: {
+            /** Busy */
+            busy: boolean;
+            /** Daily */
+            daily: number;
+            /** Enabled */
+            enabled: boolean;
+            /** Last */
+            last: string | null;
+            /** Used */
+            used: number;
+        };
         /**
          * AvailabilityCounts
          * @description Fields each availability toggle would show if pressed, under the other filters.
@@ -5448,6 +5498,26 @@ export interface components {
              * @default false
              */
             autoUpdate: boolean;
+            /**
+             * Autopilot
+             * @default false
+             */
+            autopilot: boolean;
+            /**
+             * Autopilotcores
+             * @default 2
+             */
+            autopilotCores: number;
+            /**
+             * Autopilotdaily
+             * @default 100
+             */
+            autopilotDaily: number;
+            /**
+             * Autopilotminchance
+             * @default 0.4
+             */
+            autopilotMinChance: number;
             /**
              * Correlationfreshhours
              * @default 24
@@ -7849,6 +7919,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    status_api_autopilot_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutopilotStatus"];
+                };
+            };
+        };
+    };
+    run_now_api_autopilot_run_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutopilotStatus"];
                 };
             };
         };

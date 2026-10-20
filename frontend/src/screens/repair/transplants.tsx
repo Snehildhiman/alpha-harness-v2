@@ -4,14 +4,21 @@
  * passes in two regions is an all-region Alpha.
  */
 
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { GlobeIcon, PlayIcon } from 'lucide-react'
 import { useState } from 'react'
 import { fmt } from '@/lib/format'
 import { Button, Empty, ErrorNotice, LINK, Notice, Panel, Segmented } from '@/ui/kit'
 import { type Column, DataTable } from '@/ui/table'
-import { queueTransplants, type TransplantKind, type TransplantRow, transplantPlan } from './api'
+import {
+  autopilotRound,
+  autopilotStatus,
+  queueTransplants,
+  type TransplantKind,
+  type TransplantRow,
+  transplantPlan,
+} from './api'
 
 const COLUMNS: Column<TransplantRow>[] = [
   {
@@ -87,6 +94,12 @@ export function TransplantsPanel() {
     transplantPlan(region === 'all' ? null : region, kind === 'all' ? null : kind),
   )
   const queue = useMutation({ mutationFn: queueTransplants })
+  const client = useQueryClient()
+  const pilot = useQuery(autopilotStatus)
+  const round = useMutation({
+    mutationFn: autopilotRound,
+    onSuccess: (status) => client.setQueryData(['autopilot'], status),
+  })
   const data = plan.data
   const regions = [...new Set((data?.markets ?? []).map((m) => m.split(' ')[0] ?? m))]
   return (
@@ -149,6 +162,25 @@ export function TransplantsPanel() {
           against that region’s crowd, and an expression that passes in two regions is an all-region
           Alpha. Each keeps its type and is judged by its own checks.
         </p>
+        {pilot.data && (
+          <div className="flex flex-wrap items-center gap-2 text-body-compact text-ink-subtle">
+            <span>
+              Autopilot {pilot.data.enabled ? 'on' : 'off (turn it on in Settings)'} ·{' '}
+              <span className="num">{fmt.int(pilot.data.used)}</span> of{' '}
+              <span className="num">{fmt.int(pilot.data.daily)}</span> simulations in the last 24
+              hours{pilot.data.last ? ` · ${pilot.data.last}` : ''}
+            </span>
+            <Button
+              size="sm"
+              variant="ghost"
+              loading={round.isPending}
+              onClick={() => round.mutate()}
+            >
+              Run one round now
+            </Button>
+          </div>
+        )}
+        {round.isError && <ErrorNotice error={round.error} title="The autopilot could not run" />}
         {plan.isError && <ErrorNotice error={plan.error} title="Could not find transplants" />}
         {data && !data.ranked && (
           <Notice tone="warn" title="Not ranked yet">

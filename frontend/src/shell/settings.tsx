@@ -335,6 +335,40 @@ function TaskRows({ current, change }: Rows) {
         )}
       />
       <SettingRow
+        title="Autopilot"
+        description="Every half hour, queues the transplants the models like best (Repair → Transplants) as a small task, once its last one has finished, up to a daily budget. Spends simulations while you are away; each task can be paused on the Tasks screen."
+        control={(labels) => (
+          <Switch
+            checked={current.autopilot}
+            onChange={(on) => change({ autopilot: on })}
+            {...labels}
+          />
+        )}
+      >
+        {current.autopilot && (
+          <div className="flex flex-wrap items-center gap-3">
+            <Segmented
+              label="Simulations a day"
+              items={[50, 100, 200, 500].map((n) => ({ value: n, label: `${n} a day` }))}
+              value={current.autopilotDaily}
+              onChange={(n) => change({ autopilotDaily: n })}
+            />
+            <Segmented
+              label="Lowest chance of passing"
+              items={[0.3, 0.4, 0.5, 0.6].map((p) => ({ value: p, label: `≥ ${p * 100}%` }))}
+              value={current.autopilotMinChance}
+              onChange={(p) => change({ autopilotMinChance: p })}
+            />
+            <Segmented
+              label="Cores"
+              items={[1, 2, 4].map((n) => ({ value: n, label: `${n} core${n > 1 ? 's' : ''}` }))}
+              value={current.autopilotCores}
+              onChange={(n) => change({ autopilotCores: n })}
+            />
+          </div>
+        )}
+      </SettingRow>
+      <SettingRow
         title="Read research feeds"
         description="Twice a day, reads arXiv's quantitative finance listing and the feeds below into the Research screen, for the LLM labs to draw on. Free feeds only."
         control={(labels) => (

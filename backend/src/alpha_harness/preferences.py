@@ -66,6 +66,13 @@ class Preferences(Out):
     #: Every 30 minutes, re-deal the cores the running tasks hold toward the tasks whose
     #: recent Alphas pass most often. Off: every task keeps the cores it was given.
     auto_balance_cores: bool = False
+    #: Every half hour, queue the transplants the models like best, up to a daily budget of
+    #: simulations. Off: transplants run only when you queue them.
+    autopilot: bool = False
+    autopilot_daily: int = Field(default=100, ge=10, le=2000)
+    #: Lowest chance of passing every check a transplant needs to be queued.
+    autopilot_min_chance: float = Field(default=0.4, ge=0.1, le=0.9)
+    autopilot_cores: int = Field(default=2, ge=1, le=8)
     #: Read research feeds (arXiv quantitative finance, and any added below) twice a day.
     research: bool = True
     #: Atom or RSS feeds read beside arXiv's.
@@ -105,6 +112,12 @@ def apply(state: AppState, preferences: Preferences) -> None:
     state.optimizer.screen_factor = preferences.screen_factor
     state.optimizer.screen_explore = preferences.screen_explore
     state.governor.enabled = preferences.auto_balance_cores
+    state.autopilot.configure(
+        enabled=preferences.autopilot,
+        daily=preferences.autopilot_daily,
+        min_chance=preferences.autopilot_min_chance,
+        cores=preferences.autopilot_cores,
+    )
     state.research.configure(enabled=preferences.research, feeds=preferences.research_feeds)
     state.daily_sync.configure(
         enabled=preferences.daily_sync,
