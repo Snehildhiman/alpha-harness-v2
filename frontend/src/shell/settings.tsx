@@ -42,6 +42,12 @@ export const SETTINGS_SHORTCUT = /Mac|iPhone|iPad/.test(navigator.userAgent) ? '
 
 type SectionId = 'simulations' | 'tasks' | 'alphas' | 'updates'
 
+/** Free research blogs with public RSS feeds, offered as one-click additions. */
+const SUGGESTED_FEEDS = [
+  { label: 'Quantpedia', url: 'https://quantpedia.com/feed/' },
+  { label: 'Alpha Architect', url: 'https://alphaarchitect.com/feed/' },
+]
+
 const SECTIONS: { id: SectionId; label: string; icon: LucideIcon }[] = [
   { id: 'simulations', label: 'Simulations', icon: CpuIcon },
   { id: 'tasks', label: 'Tasks', icon: ListChecksIcon },
@@ -340,6 +346,7 @@ function TaskRows({ current, change }: Rows) {
         )}
       >
         <Textarea
+          key={(current.researchFeeds ?? []).join('\n')}
           aria-label="More research feeds, one Atom or RSS address a line"
           placeholder="More Atom or RSS feeds, one address a line"
           defaultValue={(current.researchFeeds ?? []).join('\n')}
@@ -353,6 +360,23 @@ function TaskRows({ current, change }: Rows) {
             })
           }
         />
+        <div className="flex flex-wrap items-center gap-2 text-body-compact text-ink-subtle">
+          Free feeds worth adding:
+          {SUGGESTED_FEEDS.filter((f) => !(current.researchFeeds ?? []).includes(f.url)).map(
+            (f) => (
+              <Button
+                key={f.url}
+                size="sm"
+                variant="ghost"
+                onClick={() =>
+                  change({ researchFeeds: [...(current.researchFeeds ?? []), f.url].slice(0, 20) })
+                }
+              >
+                + {f.label}
+              </Button>
+            ),
+          )}
+        </div>
       </SettingRow>
       <SettingRow
         title="Default cores for new tasks"
