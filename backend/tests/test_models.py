@@ -160,3 +160,24 @@ def test_region_checks_only_for_their_region() -> None:
     assert _applies("check:ASI_JPN_SHARPE", "ASI")
     assert not _applies("check:GLB_AMER_SHARPE", "ASI")
     assert _applies("check:LOW_SHARPE", "ASI") and _applies("prod_corr", "USA")
+
+
+def test_post_models_use_what_the_simulation_reported(tmp_path: Any) -> None:
+    rows, fields = _vault(n=3000)
+    # Plant a result-only signal: margin tracks prod correlation beyond what the text says.
+    rng = random.Random(5)
+    for r in rows:
+        corr = json.loads(r["checks"])[0]["value"]
+        r["margin"] = corr * 10 + rng.gauss(0, 0.2)
+        r["long_count"], r["short_count"] = 1500, 1400
+    models = train_all(rows, fields, min_labels=200)
+    report = {r.target: r for r in models.reports}
+    post, pre = report["post:prod_corr"], report["prod_corr"]
+    assert post.trained and post.metrics["mae"] < pre.metrics["mae"]
+    assert any(name.startswith("result:") for name, _ in post.top_features)
+    models.save(tmp_path / "m")
+    loaded = ModelSet.load(tmp_path / "m")
+    assert loaded is not None
+    probe = [{**rows[-1]}]
+    assert "prod_corr" in loaded.predict_post(probe, fields)[0]
+    assert "post:prod_corr" not in loaded.predict(probe, fields)[0]

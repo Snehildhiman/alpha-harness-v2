@@ -24,8 +24,8 @@ log = structlog.get_logger(__name__)
 #: What training reads of each Alpha.
 COLUMNS = (
     "alpha_id, expression, sim_type, region, delay, universe, neutralization, decay, "
-    "truncation, sharpe, fitness, turnover, checks, classifications, simulation_mode, "
-    "date_created"
+    "truncation, sharpe, fitness, turnover, returns, drawdown, margin, long_count, "
+    "short_count, checks, classifications, simulation_mode, date_created"
 )
 
 
@@ -179,6 +179,15 @@ class ModelService:
                 targets=sum(r.trained for r in models.reports),
             )
             return models
+
+    async def predict_post(self, rows: list[dict[str, Any]]) -> list[dict[str, float]]:
+        """For simulated Alphas: the correlations expected from what BRAIN already reported
+        (Sharpe, turnover, margin, long/short counts...) besides the expression itself."""
+        models = await self.current()
+        if models is None:
+            return [{} for _ in rows]
+        fields = await field_infos(self.catalog, [r.get("expression") for r in rows])
+        return await asyncio.to_thread(models.predict_post, rows, fields)
 
     async def predict(self, rows: list[dict[str, Any]]) -> list[dict[str, float]]:
         models = await self.current()

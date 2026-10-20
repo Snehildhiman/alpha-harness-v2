@@ -363,3 +363,40 @@ def today_days() -> float:
 
 def dumps(vocab: Vocabulary) -> str:
     return json.dumps(vocab.to_json())
+
+
+# -- after simulating ---------------------------------------------------------------------
+
+#: What BRAIN reports once an Alpha is simulated. Never known before, so these feed only the
+#: ``post:`` models, which sharpen a correlation estimate before a re-check is spent.
+RESULT_COLUMNS = (
+    "sharpe",
+    "fitness",
+    "turnover",
+    "returns",
+    "drawdown",
+    "margin",
+    "long_count",
+    "short_count",
+    "long_share",
+    "log_positions",
+)
+
+
+def result_matrix(rows: list[dict[str, Any]]) -> np.ndarray:
+    """One float32 row per Alpha of :data:`RESULT_COLUMNS`; missing is NaN."""
+    out = np.full((len(rows), len(RESULT_COLUMNS)), np.nan, dtype=np.float32)
+    for r, row in enumerate(rows):
+        for c, key in enumerate(RESULT_COLUMNS[:8]):
+            value = row.get(key)
+            if isinstance(value, int | float) and math.isfinite(value):
+                out[r, c] = float(value)
+        longs, shorts = row.get("long_count"), row.get("short_count")
+        if (
+            isinstance(longs, int | float)
+            and isinstance(shorts, int | float)
+            and longs + shorts > 0
+        ):
+            out[r, 8] = float(longs) / float(longs + shorts)
+            out[r, 9] = math.log1p(float(longs + shorts))
+    return out

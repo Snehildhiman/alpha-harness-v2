@@ -122,6 +122,26 @@ function regions(row: TabRow) {
   }`
 }
 
+/** What the models expect the type's correlation to be, from the expression and BRAIN's
+ * reported figures, at least the prod floor. Low is good. */
+const EXPECTED_COLUMN: Column<TabRow> = {
+  key: 'expected',
+  header: 'Expected corr',
+  width: '112px',
+  align: 'right',
+  cell: (r) =>
+    r.expectedCorr == null ? (
+      <span className="text-ink-subtle">—</span>
+    ) : (
+      <span
+        className={`num ${r.expectedCorr >= 0.7 ? 'text-pnl-negative-text' : r.expectedCorr < 0.5 ? 'text-pnl-positive-text' : ''}`}
+        title="What the models expect from this simulated Alpha's expression, Sharpe, turnover, margin and long/short counts (at least its prod floor). Re-checks go to the lowest first."
+      >
+        {fmt.ratio(r.expectedCorr, 2)}
+      </span>
+    ),
+}
+
 /** Repair a failing Alpha, or improve one that passes: its variants on the Repair screen. */
 const ACTION_COLUMN: Column<TabRow> = {
   key: 'action',
@@ -265,8 +285,8 @@ export function TypesScreen() {
   const counts = kind ? summary.data?.counts[kind] : undefined
   const columns =
     kind === 'power_pool' || kind === 'theme'
-      ? [...COLUMNS, THEME_COLUMN, ACTION_COLUMN]
-      : [...COLUMNS, FLOOR_COLUMN, ACTION_COLUMN]
+      ? [...COLUMNS, EXPECTED_COLUMN, THEME_COLUMN, ACTION_COLUMN]
+      : [...COLUMNS, EXPECTED_COLUMN, FLOOR_COLUMN, ACTION_COLUMN]
   const running = summary.data?.theme
 
   return (

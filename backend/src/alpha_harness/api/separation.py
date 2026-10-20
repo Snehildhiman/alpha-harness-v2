@@ -271,6 +271,10 @@ class Issue(Out):
 
 
 class TabRow(Out):
+    #: The type's correlation the models expect from this simulated Alpha, from its
+    #: expression and what BRAIN reported (Sharpe, turnover, margin, long/short counts), at
+    #: least its prod floor. ``None`` before the models are trained.
+    expected_corr: float | None = None
     alpha_id: str
     expression: str | None
     kind: str
@@ -356,6 +360,48 @@ def _row(item: Judged, floors: dict[str, Floor] | None = None) -> TabRow:
         # Stored naive UTC; sent with its zone so the browser does not read it as local.
         checked_at=j.checked_at.replace(tzinfo=UTC) if j.checked_at else None,
     )
+
+
+#: Which correlation decides each tab.
+_TAB_CORR = {
+    Kind.REGULAR: "prod_corr",
+    Kind.RA: "prod_corr",
+    Kind.SUPER: "prod_corr",
+    Kind.POWER_POOL: "power_pool_corr",
+    Kind.THEME: "power_pool_corr",
+}
+
+
+async def expected_corr(
+    state: State, items: list[Judged], tab: Kind, floors: dict[str, Floor]
+) -> dict[str, float]:
+    """Alpha id → the correlation expected once simulated: the ``post:`` model's estimate
+    from the expression and BRAIN's reported figures, raised to the prod floor where known.
+    An RA family takes its second-best region's, the one BRAIN's two-region rule turns on."""
+    target = _TAB_CORR.get(tab)
+    if target is None or not items:
+        return {}
+    rows: list[dict[str, Any]] = []
+    owner: list[str] = []
+    for item in items:
+        for r in item.children or [item.row]:
+            rows.append(r | {"power_pool": target == "power_pool_corr"})
+            owner.append(str(item.row.get("alpha_id")))
+    predicted = await state.predictors.predict_post(rows)
+    per: dict[str, list[float]] = {}
+    for alpha_id, row, found in zip(owner, rows, predicted, strict=True):
+        value = found.get(target)
+        if value is None:
+            continue
+        floor = floors.get(str(row.get("alpha_id"))) if target == "prod_corr" else None
+        if floor is not None and floor.value is not None:
+            value = max(value, floor.value)
+        per.setdefault(alpha_id, []).append(value)
+    out: dict[str, float] = {}
+    for alpha_id, values in per.items():
+        values.sort()
+        out[alpha_id] = values[1] if len(values) > 1 else values[0]
+    return out
 
 
 @router.get("/summary")
@@ -580,7 +626,11 @@ async def tab(
         picked.sort(key=order)
     page = picked[offset : offset + limit]
     floors = await crowd_floors(state, judged) if tab in _PROD_KINDS else {}
-    return TabPage(total=len(picked), rows=[_row(i, floors) for i in page])
+    rows = [_row(i, floors) for i in page]
+    expected = await expected_corr(state, page, tab, floors)
+    for row in rows:
+        row.expected_corr = expected.get(row.alpha_id)
+    return TabPage(total=len(picked), rows=rows)
 
 
 class RecheckStarted(Out):
@@ -620,6 +670,7 @@ async def recheck(
             and (not region or region == i.row.get("region") or region in i.judgement.regions_tried)
         ]
     judged.sort(key=lambda i: -(figure(i, "sharpe") or float("-inf")))
+    floors: dict[str, Floor] = {}
     if tab in _PROD_KINDS:
         # An Alpha already crowded past the limit by the local floor cannot pass prod
         # correlation (bar BRAIN's Sharpe exception): BRAIN's slow check goes elsewhere.
@@ -631,6 +682,17 @@ async def recheck(
             or f.value is None
             or f.value < PROD_LIMIT
         ]
+    # Likeliest to pass first: a re-check spent on an Alpha the models expect to fail is the
+    # one that finds nothing. Unknown estimates keep their Sharpe order behind the known.
+    expected = await expected_corr(state, judged, tab, floors)
+    if expected:
+        judged.sort(
+            key=lambda i: (
+                (e := expected.get(str(i.row.get("alpha_id")))) is None,
+                e if e is not None else 0.0,
+                -(figure(i, "sharpe") or 0.0),
+            )
+        )
     ids: list[str] = []
     for item in judged[:limit]:
         rows = item.children or [item.row]

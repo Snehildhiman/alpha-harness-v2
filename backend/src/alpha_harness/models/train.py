@@ -27,6 +27,7 @@ import numpy as np
 import structlog
 
 from .features import (
+    RESULT_COLUMNS,
     FieldInfo,
     Parsed,
     Vocabulary,
@@ -35,6 +36,7 @@ from .features import (
     fit_vocabulary,
     matrix,
     read_expression,
+    result_matrix,
     targets_of,
 )
 
@@ -71,7 +73,13 @@ LABELS = {
     "sharpe": "Sharpe",
     "fitness": "Fitness",
     "turnover": "Turnover",
+    "post:prod_corr": "Prod correlation, once simulated",
+    "post:power_pool_corr": "Power Pool correlation, once simulated",
+    "post:self_corr": "Self-correlation, once simulated",
 }
+#: Targets re-learned with BRAIN's reported results as extra inputs (see ``RESULT_COLUMNS``).
+POST_TARGETS = ("prod_corr", "power_pool_corr", "self_corr")
+POST = "post:"
 
 
 def label_of(target: str) -> str:
@@ -123,9 +131,27 @@ class ModelSet:
         x = matrix(rows, parsed, fields, self.vocab)
         out: list[dict[str, float]] = [{} for _ in rows]
         for target, booster in self.boosters.items():
+            if target.startswith(POST):
+                continue  # needs the results of a simulation: see predict_post
             values = np.asarray(booster.predict(x), dtype=np.float64)
             for i, v in enumerate(values):
                 out[i][target] = float(v)
+        return out
+
+    def predict_post(
+        self, rows: list[dict[str, Any]], fields: dict[str, FieldInfo]
+    ) -> list[dict[str, float]]:
+        """The ``post:`` targets for simulated Alphas, keyed without the prefix."""
+        posts = {t: b for t, b in self.boosters.items() if t.startswith(POST)}
+        out: list[dict[str, float]] = [{} for _ in rows]
+        if not posts or not rows:
+            return out
+        parsed = [read_expression(r.get("expression")) for r in rows]
+        x = np.hstack([matrix(rows, parsed, fields, self.vocab), result_matrix(rows)])
+        for target, booster in posts.items():
+            values = np.asarray(booster.predict(x), dtype=np.float64)
+            for i, v in enumerate(values):
+                out[i][target.removeprefix(POST)] = float(v)
         return out
 
     # -- storage -----------------------------------------------------------------
@@ -264,10 +290,17 @@ def train_all(
     parsed: list[Parsed] = [read_expression(r.get("expression")) for r in rows]
     cut = int(len(rows) * (1 - TEST_SHARE))
     vocab = fit_vocabulary(rows[:cut], parsed[:cut], fields)
-    x = matrix(rows, parsed, fields, vocab)
+    pre = matrix(rows, parsed, fields, vocab)
+    post_x = np.hstack([pre, result_matrix(rows)])
     columns = vocab.columns()
+    post_columns = [*columns, *(f"result:{c}" for c in RESULT_COLUMNS)]
     categorical = categorical_columns(vocab)
     labels = [targets_of(r) for r in rows]
+    # The same correlation labels again, for models that also see the simulation's results.
+    for found in labels:
+        for target in POST_TARGETS:
+            if target in found:
+                found[POST + target] = found[target]
     counts: dict[str, int] = {}
     for found in labels:
         for target in found:
@@ -281,6 +314,8 @@ def train_all(
         if progress is not None:
             progress(done, len(targets), target)
         kind = "classification" if target.startswith("check:") else "regression"
+        x = post_x if target.startswith(POST) else pre
+        names = post_columns if target.startswith(POST) else columns
         have = np.array([i for i, found in enumerate(labels) if target in found], dtype=np.int64)
         y_all = np.array([labels[i][target] for i in have], dtype=np.float64)
         report = Report(target, label_of(target), kind, labelled=len(have), trained=False)
@@ -355,7 +390,7 @@ def train_all(
         )
         final = lgb.train(params, full, num_boost_round=trees)
         gains = final.feature_importance(importance_type="gain")
-        top = sorted(zip(columns, gains, strict=True), key=lambda c: -c[1])[:12]
+        top = sorted(zip(names, gains, strict=True), key=lambda c: -c[1])[:12]
         total = float(sum(gains)) or 1.0
         report.top_features = [(name, round(float(g) / total, 4)) for name, g in top if g > 0]
         holdout[target] = (

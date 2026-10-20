@@ -6971,6 +6971,8 @@ export interface components {
             decay: number | null;
             /** Delay */
             delay: number | null;
+            /** Expectedcorr */
+            expectedCorr?: number | null;
             /** Expression */
             expression: string | null;
             /** Failed */
