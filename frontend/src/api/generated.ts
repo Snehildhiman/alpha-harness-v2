@@ -4127,6 +4127,30 @@ export interface components {
             /** Vector Operators */
             vector_operators?: string[];
         };
+        /** GateCompared */
+        GateCompared: {
+            /** Alphas */
+            alphas: number;
+            /** Label */
+            label: string;
+            /** New */
+            new: number;
+            /** Old */
+            old: number;
+            /** Target */
+            target: string;
+        };
+        /** GateReport */
+        GateReport: {
+            /** Accepted */
+            accepted: boolean;
+            /** At */
+            at: string;
+            /** Compared */
+            compared: components["schemas"]["GateCompared"][];
+            /** Reason */
+            reason: string;
+        };
         /** GroupAlpha */
         GroupAlpha: {
             /** Alphaid */
@@ -4573,6 +4597,11 @@ export interface components {
         ModelStatus: {
             /** Alphas */
             alphas: number;
+            /** Auto */
+            auto: boolean;
+            lastGate: components["schemas"]["GateReport"] | null;
+            /** Newsincetraining */
+            newSinceTraining: number;
             /** Reports */
             reports: components["schemas"]["TargetReport"][];
             /** Testfrom */
@@ -5046,6 +5075,11 @@ export interface components {
         };
         /** Preferences */
         Preferences: {
+            /**
+             * Autoretrain
+             * @default true
+             */
+            autoRetrain: boolean;
             /**
              * Autoupdate
              * @default false

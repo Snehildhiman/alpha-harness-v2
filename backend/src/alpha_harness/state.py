@@ -182,6 +182,7 @@ class AppState:
         await self.optimizer.start()
         self._session_watch = asyncio.create_task(self._watch_session(), name="session-watch")
         await self.daily_sync.start()
+        await self.predictors.start()
         log.info("startup.complete", data_dir=str(self.settings.data_dir))
 
     async def _replay_last_sync(self) -> None:
@@ -285,6 +286,7 @@ class AppState:
             with contextlib.suppress(asyncio.CancelledError):
                 await watch
         await self.daily_sync.stop()
+        await self.predictors.stop()
         await self.optimizer.stop()
         await self.engine.stop()
         await self.tracker.stop()

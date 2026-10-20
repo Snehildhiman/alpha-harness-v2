@@ -33,6 +33,26 @@ class ModelStatus(Out):
     reports: list[TargetReport]
     #: ``[done, total, target]`` while training runs.
     training: tuple[int, int, str] | None
+    #: Retraining by itself, and how many new or re-checked Alphas have arrived since.
+    auto: bool
+    new_since_training: int
+    #: The last automatic retrain: when, whether it replaced the models, and why.
+    last_gate: GateReport | None
+
+
+class GateCompared(Out):
+    target: str
+    label: str
+    old: float
+    new: float
+    alphas: int
+
+
+class GateReport(Out):
+    at: str
+    accepted: bool
+    reason: str
+    compared: list[GateCompared]
 
 
 class Candidate(Out):
@@ -87,6 +107,25 @@ async def status(state: State) -> ModelStatus:
         test_from=models.test_from if models else None,
         reports=reports,
         training=state.predictors.progress,
+        auto=state.predictors.auto,
+        new_since_training=await state.predictors.new_since_training(),
+        last_gate=_gate(state),
+    )
+
+
+def _gate(state: State) -> GateReport | None:
+    last = state.predictors.last_gate
+    if last is None:
+        return None
+    at, verdict = last
+    return GateReport(
+        at=at,
+        accepted=verdict.accepted,
+        reason=verdict.reason,
+        compared=[
+            GateCompared(target=t, label=label_of(t), old=o, new=n, alphas=k)
+            for t, o, n, k in verdict.compared
+        ],
     )
 
 

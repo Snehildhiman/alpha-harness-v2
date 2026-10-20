@@ -34,6 +34,9 @@ import {
   trainModels,
 } from './api'
 
+/** New or re-checked Alphas that earn an automatic retrain (backend `models.service.AUTO_NEW`). */
+const AUTO_NEW = 100
+
 type Quality = { tone: Tone; label: string }
 
 /** Judged against a model that knows nothing, so an unhelpful model never reads as good. */
@@ -317,6 +320,30 @@ export function ModelsScreen() {
             Scores are on Alphas simulated from {fmt.date(data.testFrom)} onward, held out of
             training. “Useful” means it ranks those Alphas clearly better than guessing; retrain as
             new results arrive.
+          </Notice>
+          <Notice
+            title={
+              data.auto
+                ? `Learning by itself: ${fmt.int(data.newSinceTraining)} new or re-checked Alphas since training`
+                : 'Automatic retraining is off'
+            }
+          >
+            {data.auto
+              ? `It retrains once ${fmt.int(AUTO_NEW)} have arrived, and only keeps the new models if they do at least as well on Alphas the current ones never saw.`
+              : 'Turn it back on in Settings, or press Retrain.'}
+            {data.lastGate && (
+              <span className="mt-1 block">
+                Last automatic retrain {fmt.ago(data.lastGate.at)}:{' '}
+                <span
+                  className={
+                    data.lastGate.accepted ? 'text-pnl-positive-text' : 'text-status-warning'
+                  }
+                >
+                  {data.lastGate.accepted ? 'replaced the models' : 'kept the old models'}
+                </span>
+                . {data.lastGate.reason}
+              </span>
+            )}
           </Notice>
           <Panel title="Figures and correlations">
             <DataTable

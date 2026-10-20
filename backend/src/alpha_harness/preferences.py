@@ -55,6 +55,9 @@ class Preferences(Out):
     #: How many hours a passing prod or Power Pool correlation result is trusted. Past it, the
     #: Alpha moves from Submittable to Needs re-check: the pool moves as others submit.
     correlation_fresh_hours: int = Field(default=24, ge=1, le=720)
+    #: Retrain the models by themselves once enough new results or re-checks arrive; a new set
+    #: replaces the old only if it does at least as well on Alphas the old never saw.
+    auto_retrain: bool = True
     #: The Power Pool theme calendar, as BRAIN publishes it: the Current Theme tab tests
     #: Alphas against whichever rule is running today.
     power_pool_themes: list[ThemeRule] = Field(
@@ -86,6 +89,7 @@ def apply(state: AppState, preferences: Preferences) -> None:
     )
     updates.check_hours = preferences.update_check_hours
     updates.auto_install = preferences.auto_update
+    state.predictors.auto = preferences.auto_retrain
     state.daily_sync.configure(
         enabled=preferences.daily_sync,
         hour=preferences.daily_sync_hour,

@@ -109,6 +109,10 @@ class ModelSet:
     trained_at: str
     alphas: int
     test_from: str | None
+    #: Per target, the held-out predictions made before the final refit: ``(alpha ids,
+    #: predictions, labels)``. Kept in memory only, for the gate that decides whether a newly
+    #: trained set may replace the one in use.
+    holdout: dict[str, tuple[list[str], np.ndarray, np.ndarray]] = field(default_factory=dict)
 
     # -- use ---------------------------------------------------------------------
 
@@ -272,6 +276,7 @@ def train_all(
     targets = sorted(counts, key=lambda t: (t.startswith("check:"), t))
     boosters: dict[str, Any] = {}
     reports: list[Report] = []
+    holdout: dict[str, tuple[list[str], np.ndarray, np.ndarray]] = {}
     for done, target in enumerate(targets, start=1):
         if progress is not None:
             progress(done, len(targets), target)
@@ -353,6 +358,11 @@ def train_all(
         top = sorted(zip(columns, gains, strict=True), key=lambda c: -c[1])[:12]
         total = float(sum(gains)) or 1.0
         report.top_features = [(name, round(float(g) / total, 4)) for name, g in top if g > 0]
+        holdout[target] = (
+            [str(rows[i].get("alpha_id")) for i in test_idx],
+            predicted,
+            y_test,
+        )
         report.n_train, report.n_test, report.trees, report.trained = (
             len(train_idx),
             len(test_idx),
@@ -369,4 +379,70 @@ def train_all(
         trained_at=datetime.now(UTC).isoformat(timespec="seconds"),
         alphas=len(rows),
         test_from=test_from.isoformat() if test_from else None,
+        holdout=holdout,
+    )
+
+
+# -- the gate -----------------------------------------------------------------------
+
+#: Fewest Alphas the old set never saw before a comparison means anything.
+GATE_MIN_ROWS = 30
+#: How much worse, on average, a new set may score and still replace the old (noise).
+GATE_TOLERANCE = 0.01
+#: The targets the gate weighs: what decides submission.
+GATE_TARGETS = ("prod_corr", "power_pool_corr", "sharpe", "fitness")
+
+
+@dataclass(slots=True)
+class Gate:
+    accepted: bool
+    reason: str
+    #: ``(target, old score, new score, Alphas compared)``.
+    compared: list[tuple[str, float, float, int]] = field(default_factory=list)
+
+
+def _quality(target: str, predicted: np.ndarray, labels: np.ndarray) -> float:
+    if target.startswith("check:"):
+        return auc(labels, predicted)
+    return spearman(predicted, labels)
+
+
+def gate(
+    old: ModelSet,
+    new: ModelSet,
+    rows: dict[str, dict[str, Any]],
+    fields: dict[str, FieldInfo],
+) -> Gate:
+    """Whether ``new`` may replace ``old``: scored on Alphas ``old`` never trained on.
+
+    Those are the new set's held-out Alphas simulated after ``old`` was trained. The new set is
+    scored by its held-out predictions (made before it saw them), the old set by its own
+    predictions; it is replaced unless it does worse on average beyond noise.
+    """
+    cutoff = old.trained_at[:10]
+    compared: list[tuple[str, float, float, int]] = []
+    for target, (ids, predicted, labels) in new.holdout.items():
+        weighed = target in GATE_TARGETS or target.startswith("check:")
+        if not weighed or target not in old.boosters:
+            continue
+        keep = [
+            i
+            for i, alpha_id in enumerate(ids)
+            if str((rows.get(alpha_id) or {}).get("date_created") or "")[:10] > cutoff
+        ]
+        if len(keep) < GATE_MIN_ROWS:
+            continue
+        unseen = [rows[ids[i]] for i in keep]
+        old_predicted = np.array([p.get(target, np.nan) for p in old.predict(unseen, fields)])
+        old_score = _quality(target, old_predicted, labels[keep])
+        new_score = _quality(target, predicted[keep], labels[keep])
+        if math.isfinite(old_score) and math.isfinite(new_score):
+            compared.append((target, old_score, new_score, len(keep)))
+    if not compared:
+        return Gate(True, "Not enough new Alphas to compare yet; the larger set is kept.")
+    change = float(np.mean([n - o for _, o, n, _ in compared]))
+    if change >= -GATE_TOLERANCE:
+        return Gate(True, f"Scores {change:+.3f} on Alphas the old models never saw.", compared)
+    return Gate(
+        False, f"Scores {change:+.3f} on Alphas the old models never saw; kept the old.", compared
     )
