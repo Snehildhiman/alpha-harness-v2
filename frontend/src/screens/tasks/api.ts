@@ -77,3 +77,11 @@ export const labTasks = {
   /** Stops that check; the answers already back stay. */
   stopProdCorrelation: () => http.post<void>(`${B}/prod-correlation/stop`),
 }
+
+export type GovernorStatus = components['schemas']['GovernorStatus']
+
+/** Each running task's yield, and the cores a re-deal would give it. */
+export const governorStatus = () => http.get<GovernorStatus>('/api/governor')
+
+export const rebalanceCores = () =>
+  http.post<Record<string, [number, number]>>('/api/governor/rebalance')

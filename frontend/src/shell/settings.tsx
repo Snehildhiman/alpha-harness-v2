@@ -307,6 +307,17 @@ function TaskRows({ current, change }: Rows) {
         stacked
       />
       <SettingRow
+        title="Re-deal cores by yield"
+        description="Every 30 minutes, moves the cores the running tasks hold toward the tasks whose recent Alphas pass every check most often. The total stays the same and every task keeps at least one core. Off, every task keeps the cores you gave it."
+        control={(labels) => (
+          <Switch
+            checked={current.autoBalanceCores}
+            onChange={(on) => change({ autoBalanceCores: on })}
+            {...labels}
+          />
+        )}
+      />
+      <SettingRow
         title="Read research feeds"
         description="Twice a day, reads arXiv's quantitative finance listing and the feeds below into the Research screen, for the LLM labs to draw on. Free feeds only."
         control={(labels) => (

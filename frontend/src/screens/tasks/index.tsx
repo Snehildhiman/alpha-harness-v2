@@ -26,7 +26,13 @@ import { useRefetchOn } from '@/lib/ws'
 import { DatasetChips, useDatasetTree } from '@/screens/data/dataset-chips'
 import { DetailSheet } from '@/screens/pool/detail'
 import { MAX_SIMULATIONS } from '@/screens/research-labs/lab-task'
-import { type LabTask, labTasks, type RankedAlpha } from '@/screens/tasks/api'
+import {
+  governorStatus,
+  type LabTask,
+  labTasks,
+  type RankedAlpha,
+  rebalanceCores,
+} from '@/screens/tasks/api'
 import {
   AFTER_COST_HEADER,
   DELAY,
@@ -304,6 +310,16 @@ export function TasksScreen() {
     setConfirming(a)
   }
 
+  const governor = useQuery({ queryKey: ['governor'], queryFn: governorStatus })
+  useRefetchOn('studies', ['governor'], 30_000)
+  const yieldOf = new Map((governor.data?.tasks ?? []).map((t) => [t.studyId, t]))
+  const redeal = useMutation({
+    mutationFn: rebalanceCores,
+    onSuccess: () => {
+      for (const key of [['lab-tasks'], ['governor']])
+        void queryClient.invalidateQueries({ queryKey: key })
+    },
+  })
   const all = list.data?.tasks ?? []
   const slots = list.data?.slots ?? 8
   const live = all.filter((t) => t.status !== 'COMPLETE' && t.status !== 'FAILED')
@@ -369,6 +385,25 @@ export function TasksScreen() {
       ),
     },
     {
+      key: 'yield',
+      header: 'Yield',
+      width: '84px',
+      align: 'right',
+      cell: (t) => {
+        const y = yieldOf.get(t.id)
+        if (!y || y.rate === null || y.rate === undefined)
+          return <span className="text-ink-subtle">{DASH}</span>
+        return (
+          <span
+            className="num"
+            title={`${fmt.int(y.passing)} of ${fmt.int(y.passing + y.refused)} judged Alphas pass every check their type needs. A re-deal would give it ${fmt.int(y.suggested)} cores.`}
+          >
+            {fmt.pct(y.rate)}
+          </span>
+        )
+      },
+    },
+    {
       key: 'actions',
       header: '',
       width: '186px',
@@ -392,14 +427,25 @@ export function TasksScreen() {
       <PageHeader
         title="Tasks"
         actions={
-          <Button
-            variant="primary"
-            disabled={fresh === 0}
-            onClick={() => ask({ action: 'runAll' })}
-          >
-            <PlayIcon />
-            Run All
-          </Button>
+          <>
+            {(governor.data?.tasks.length ?? 0) > 1 && (
+              <Button
+                loading={redeal.isPending}
+                onClick={() => redeal.mutate()}
+                title="Move the running tasks' cores toward the ones whose Alphas pass most often. The total stays the same and every task keeps at least one."
+              >
+                Re-deal cores by yield
+              </Button>
+            )}
+            <Button
+              variant="primary"
+              disabled={fresh === 0}
+              onClick={() => ask({ action: 'runAll' })}
+            >
+              <PlayIcon />
+              Run All
+            </Button>
+          </>
         }
       />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">

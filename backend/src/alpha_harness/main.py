@@ -33,6 +33,7 @@ from .api import (
     competitions,
     crowding,
     ga,
+    governor,
     lab_tasks,
     llm,
     portfolio,
@@ -179,6 +180,7 @@ def create_app() -> FastAPI:
     app.include_router(auth.router)
     app.include_router(catalog.router)
     app.include_router(crowding.router)
+    app.include_router(governor.router)
     app.include_router(research.router)
     app.include_router(scorecards.router)
     app.include_router(separation.router)

@@ -30,6 +30,7 @@ from .db.sqlite import Database, snapshot
 from .engine.slots import BatchEngine
 from .engine.tracker import SimulationTracker
 from .engine.vault_dedup import VaultIndex
+from .governor import Governor
 from .labs.study import Optimizer
 from .llm.chat import ChatService
 from .llm.registry import ModelRegistry
@@ -131,6 +132,7 @@ class AppState:
         )
         self.optimizer.llm = self.llm
         self.optimizer.predictors = self.predictors
+        self.governor = Governor(self.optimizer, self.catalog)
 
         self._renew_lock = asyncio.Lock()
         self._last_session_check = float("-inf")
@@ -188,6 +190,7 @@ class AppState:
         self._session_watch = asyncio.create_task(self._watch_session(), name="session-watch")
         await self.daily_sync.start()
         await self.research.start()
+        await self.governor.start()
         await self.predictors.start()
         log.info("startup.complete", data_dir=str(self.settings.data_dir))
 
@@ -293,6 +296,7 @@ class AppState:
                 await watch
         await self.daily_sync.stop()
         await self.research.stop()
+        await self.governor.stop()
         await self.predictors.stop()
         await self.optimizer.stop()
         await self.engine.stop()

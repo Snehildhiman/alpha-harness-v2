@@ -63,6 +63,9 @@ class Preferences(Out):
     screen_factor: int = Field(default=4, ge=1, le=10)
     #: Share of each screened round picked at random, so the models keep learning.
     screen_explore: float = Field(default=0.2, ge=0.0, le=0.5)
+    #: Every 30 minutes, re-deal the cores the running tasks hold toward the tasks whose
+    #: recent Alphas pass most often. Off: every task keeps the cores it was given.
+    auto_balance_cores: bool = False
     #: Read research feeds (arXiv quantitative finance, and any added below) twice a day.
     research: bool = True
     #: Atom or RSS feeds read beside arXiv's.
@@ -101,6 +104,7 @@ def apply(state: AppState, preferences: Preferences) -> None:
     state.predictors.auto = preferences.auto_retrain
     state.optimizer.screen_factor = preferences.screen_factor
     state.optimizer.screen_explore = preferences.screen_explore
+    state.governor.enabled = preferences.auto_balance_cores
     state.research.configure(enabled=preferences.research, feeds=preferences.research_feeds)
     state.daily_sync.configure(
         enabled=preferences.daily_sync,
