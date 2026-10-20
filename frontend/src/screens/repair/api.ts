@@ -26,3 +26,16 @@ export const repairPlan = (alphaId: string | null) =>
 
 export const queueRepair = (body: { alphaId: string; take: number }) =>
   http.post<Schemas['AddedTask']>('/api/repair/tasks', body)
+
+export type TransplantPlan = Schemas['TransplantPlan']
+export type TransplantRow = Schemas['TransplantRow']
+
+export const transplantPlan = (region: string | null) =>
+  queryOptions({
+    queryKey: ['repair', 'transplants', region],
+    queryFn: () => http.get<TransplantPlan>(`/api/repair/transplants${qs({ region })}`),
+    staleTime: 60_000,
+  })
+
+export const queueTransplants = (body: { take: number; region: string | null }) =>
+  http.post<Schemas['AddedTask']>('/api/repair/transplants/tasks', body)

@@ -32,6 +32,7 @@ import {
   type RepairVariant,
   repairPlan,
 } from './api'
+import { TransplantsPanel } from './transplants'
 
 const TABS: { value: RepairKind | 'all'; label: string }[] = [
   { value: 'all', label: 'All' },
@@ -284,6 +285,7 @@ export function RepairScreen() {
         )}
       </Panel>
       {picked && <PlanPanel key={picked} alphaId={picked} />}
+      <TransplantsPanel />
     </Page>
   )
 }

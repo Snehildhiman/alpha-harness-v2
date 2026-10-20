@@ -24,6 +24,7 @@ How to run it, what each part does, how it learns, and how to change it yourself
 | See what can be submitted | **Alpha Types** | Pick the tab (Regular, Region Agnostic, Power Pool, Current Theme, SuperAlpha). *Submittable* is safe now; *Needs re-check* passed but its correlation result is old. |
 | Refresh old correlation results | Alpha Types → *Needs re-check* | *Re-check top N*. No simulations are spent. Alphas whose **Prod floor** is already ≥ 0.7 are skipped: they cannot pass. |
 | Fix near-misses | **Repair** | Pick an alpha that fails narrowly (e.g. prod corr 0.70–0.75, robust universe in ASI). The models rank one-step variants; *Simulate top N* queues the best. RA families are repaired region by region. |
+| Try alphas in other regions | **Repair → Transplants** | Every passing regular alpha, in each downloaded region it has not run in (same settings, same-size universe, only where every field exists). Ranked by the models; *Simulate top N*. Passing in 2+ regions makes an all-region alpha. |
 | Find new alphas | **Research Labs** | Search / Template / Evolution / LLM labs. Search and Template rounds are **screened** by the models (Settings → Model screening). |
 | Use papers | **Research** | Tick papers, then add an LLM Power Pool or Region Agnostic Lab task: each LLM call carries one paper's idea over to your fields. |
 | Learn what to avoid | **Scorecards** | Which operators, pairs, fields, datasets, categories, lookbacks and settings run hot or cold on prod / Power Pool / self-correlation. |

@@ -1828,6 +1828,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/repair/transplants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Transplant Plan
+         * @description Passing regular Alphas, each in the downloaded regions it has not run in, best first.
+         *     Simulates nothing.
+         */
+        get: operations["transplant_plan_api_repair_transplants_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/repair/transplants/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Queue Transplants
+         * @description Simulate the best ``take`` transplants as one task, in Full mode so the correlation
+         *     checks run.
+         */
+        post: operations["queue_transplants_api_repair_transplants_tasks_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/research/papers": {
         parameters: {
             query?: never;
@@ -3450,6 +3492,21 @@ export interface components {
             /**
              * Take
              * @default 10
+             */
+            take: number;
+        };
+        /** Body_queue_transplants_api_repair_transplants_tasks_post */
+        Body_queue_transplants_api_repair_transplants_tasks_post: {
+            /**
+             * Cores
+             * @default 8
+             */
+            cores: number;
+            /** Region */
+            region?: string | null;
+            /**
+             * Take
+             * @default 40
              */
             take: number;
         };
@@ -7063,6 +7120,46 @@ export interface components {
             /** Taskid */
             taskId: string;
         };
+        /** TransplantPlan */
+        TransplantPlan: {
+            /** Found */
+            found: number;
+            /** Markets */
+            markets: string[];
+            /** Ranked */
+            ranked: boolean;
+            /** Transplants */
+            transplants: components["schemas"]["TransplantRow"][];
+        };
+        /** TransplantRow */
+        TransplantRow: {
+            /** Correlation */
+            correlation: number | null;
+            /** Delay */
+            delay: number;
+            /** Expression */
+            expression: string;
+            /** Fitness */
+            fitness: number | null;
+            /** Id */
+            id: string;
+            /** Origin */
+            origin: string;
+            /** Pall */
+            pAll: number | null;
+            /** Region */
+            region: string;
+            /** Sharpe */
+            sharpe: number | null;
+            /** Sourceid */
+            sourceId: string;
+            /** Sourcesharpe */
+            sourceSharpe: number | null;
+            /** Sourceverdict */
+            sourceVerdict: string;
+            /** Universe */
+            universe: string;
+        };
         /**
          * TreeNode
          * @description One step of a template, as the Blocks view draws it. ``...`` is a name: an empty input.
@@ -10050,6 +10147,71 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["Body_queue_api_repair_tasks_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AddedTask"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    transplant_plan_api_repair_transplants_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                region?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransplantPlan"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    queue_transplants_api_repair_transplants_tasks_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["Body_queue_transplants_api_repair_transplants_tasks_post"];
             };
         };
         responses: {
