@@ -25,7 +25,7 @@ import { errorMessage } from '@/api/http'
 import { fmt } from '@/lib/format'
 import { usePreferences, useSavePreferences } from '@/lib/preferences'
 import { DEFAULT_SCOPE, REGION_AGNOSTIC, useScopeOptions } from '@/lib/scope'
-import { Button, Chips, ErrorNotice, Segmented, Skeleton, Switch } from '@/ui/kit'
+import { Button, Chips, ErrorNotice, Segmented, Skeleton, Switch, Textarea } from '@/ui/kit'
 import { BACKDROP, Select } from '@/ui/overlay'
 import { useApplyUpdate, useUpdateStatus } from './update'
 
@@ -306,6 +306,32 @@ function TaskRows({ current, change }: Rows) {
         )}
         stacked
       />
+      <SettingRow
+        title="Read research feeds"
+        description="Twice a day, reads arXiv's quantitative finance listing and the feeds below into the Research screen, for the LLM labs to draw on. Free feeds only."
+        control={(labels) => (
+          <Switch
+            checked={current.research}
+            onChange={(on) => change({ research: on })}
+            {...labels}
+          />
+        )}
+      >
+        <Textarea
+          aria-label="More research feeds, one Atom or RSS address a line"
+          placeholder="More Atom or RSS feeds, one address a line"
+          defaultValue={(current.researchFeeds ?? []).join('\n')}
+          onBlur={(e) =>
+            change({
+              researchFeeds: e.target.value
+                .split('\n')
+                .map((line) => line.trim())
+                .filter((line) => /^https?:\/\//.test(line))
+                .slice(0, 20),
+            })
+          }
+        />
+      </SettingRow>
       <SettingRow
         title="Default cores for new tasks"
         description="Every lab and tool starts a new task with this many cores. Change the cores in a lab's own form to use a different number there; that form then keeps its own choice."

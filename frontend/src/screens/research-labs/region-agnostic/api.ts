@@ -24,6 +24,8 @@ export interface RegionAgnosticRequest {
   neutralizations: string[]
   cores: number
   simulations: number
+  /** Research papers the LLM draws on, one a call in turn. */
+  research_ids: number[]
 }
 
 const B = '/api/region-agnostic-lab'

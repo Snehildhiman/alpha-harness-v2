@@ -16,6 +16,7 @@ import { useProviderLabel } from '@/screens/ai/shared'
 import type { PickedField } from '@/screens/data/dataset-pick'
 import type { FieldFilterState } from '@/screens/data/state'
 import { PromptPicker, useChosenPrompt } from '@/screens/prompts/picker'
+import { ResearchPicked, useResearchIds } from '@/screens/research/picked'
 import { AddTaskButtons, useAddTask } from '@/screens/research-labs/add-task'
 import {
   fieldIdsOf,
@@ -142,6 +143,7 @@ export function RegionAgnosticLabScreen() {
       null,
     )
 
+  const researchIds = useResearchIds()
   const body: RegionAgnosticRequest = {
     delay: draft.delay,
     universe: draft.universe,
@@ -155,6 +157,7 @@ export function RegionAgnosticLabScreen() {
     neutralizations: draft.neutralizations,
     cores,
     simulations: draft.simulations ?? 0,
+    research_ids: researchIds,
   }
   const { preview, current } = useLabPreview('region-agnostic-lab', body, regionAgnosticLab.preview)
   const plan = preview.data
@@ -265,6 +268,7 @@ export function RegionAgnosticLabScreen() {
         </div>
       </Panel>
 
+      <ResearchPicked />
       <Panel title="Settings">
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-start gap-x-8 gap-y-4">

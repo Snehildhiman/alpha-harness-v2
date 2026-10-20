@@ -571,6 +571,29 @@ normalise by scale, or compare a stock against its own history with time-series 
 """.rstrip()
 
 
+#: Heads the research a call draws on.
+RESEARCH_HEAD = (
+    "RESEARCH TO DRAW ON\n"
+    "Carry the economic idea below over to the fields above. If it is a well-known idea, other "
+    "consultants have built it already: express it through less obvious fields, a different "
+    "horizon or a condition the paper names, or combine it with an unrelated signal, rather "
+    "than the textbook version.\n\n"
+)
+
+
+async def research_for(optimizer: Optimizer, run: PowerPoolParams) -> str:
+    """The task's research, one paper a call in turn; empty when it has none."""
+    if not run.research_ids:
+        return ""
+    from ..db.models import ResearchPaper
+    from ..research.service import brief
+
+    turn = int(run.llm.get("calls", 0) or 0) % len(run.research_ids)
+    async with optimizer.db.session() as session:
+        paper = await session.get(ResearchPaper, run.research_ids[turn])
+    return brief([paper]) if paper is not None else ""
+
+
 def user_prompt(
     ctx: Context,
     operators: list[dict[str, Any]],
@@ -579,6 +602,7 @@ def user_prompt(
     offset: int,
     budget: int,
     system: str = POWER_POOL_LAB,
+    research: str = "",
 ) -> tuple[str, int]:
     """The user turn, and how many field lines it shows beside ``system``.
 
@@ -619,6 +643,7 @@ def user_prompt(
             + "\n".join(_line(f) for f in ctx.basics),
             "GROUPING FIELDS · not counted\n" + ", ".join(ctx.groups),
             f"YOUR EARLIER ALPHAS ON {mine}\n{memory}",
+            *([RESEARCH_HEAD + research] if research else []),
             ask,
         ]
     )
@@ -769,7 +794,10 @@ async def _write(optimizer: Optimizer, study_id: int) -> None:
         prompt_name, system = await _system(optimizer, run)
         memory = await memory_of(optimizer, study_id, dataset)
         offset = int(by.get(dataset, {}).get("offset", 0))
-        user, shown = user_prompt(ctx, operators, run, memory, offset, model.prompt_tokens, system)
+        research = await research_for(optimizer, run)
+        user, shown = user_prompt(
+            ctx, operators, run, memory, offset, model.prompt_tokens, system, research
+        )
         entry: dict[str, Any] = {
             "at": utcnow().isoformat(),
             "dataset": dataset,

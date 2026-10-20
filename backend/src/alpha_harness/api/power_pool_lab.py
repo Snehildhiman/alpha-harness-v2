@@ -25,6 +25,7 @@ from ..labs.launch import (
 )
 from ..labs.params import POWER_POOL_SAMPLER, PowerPoolParams
 from ..llm.text import estimate_tokens
+from ..research.service import first_brief
 from ..schemas import Out
 from .deps import State, refuse
 from .prompts import chosen
@@ -52,6 +53,8 @@ class PowerPoolRequest(BaseModel):
     simulations: int = Field(default=0, ge=0, le=search.MAX_SIMULATIONS)
     #: The Data Explorer's filter the datasets were chosen under: only fields it shows are used.
     field_filter: FieldFilter | None = None
+    #: Research papers to draw ideas from, one a call in turn.
+    research_ids: list[int] = Field(default_factory=list, max_length=50)
 
 
 class PowerPoolModel(Out):
@@ -179,8 +182,9 @@ async def _plan(body: PowerPoolRequest, state: Any) -> dict[str, Any]:
                 warnings.append(missing)
             fields += len(ctx.fields)
             if prompt is None and info is not None and operators:
+                research = await first_brief(state.db, body.research_ids)
                 user, shown = power_pool.user_prompt(
-                    ctx, operators, run, "None yet.", 0, info.prompt_tokens, system
+                    ctx, operators, run, "None yet.", 0, info.prompt_tokens, system, research
                 )
                 prompt = {
                     "name": prompt_name,
@@ -294,6 +298,7 @@ async def add_task(body: PowerPoolRequest, state: State) -> AddedTask:
             system=plan["system"] if body.prompt_id is not None else None,
             cores=body.cores,
             llm={"calls": 0},
+            research_ids=body.research_ids,
         ),
         simulations=body.simulations,
         batch_size=body.cores * 10,

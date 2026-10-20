@@ -242,6 +242,25 @@ class TaskQuota(Base):
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow, onupdate=utcnow)
 
 
+class ResearchPaper(Base):
+    """One paper or post from a research feed, kept so the LLM labs can draw on it."""
+
+    __tablename__ = "research_paper"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    #: The feed's own identity for it (an arXiv id, or the item's link): one row per paper.
+    key: Mapped[str] = mapped_column(String(512), unique=True)
+    source: Mapped[str] = mapped_column(String(64))
+    title: Mapped[str] = mapped_column(Text)
+    summary: Mapped[str] = mapped_column(Text, default="")
+    url: Mapped[str] = mapped_column(Text, default="")
+    authors: Mapped[str] = mapped_column(Text, default="")
+    published: Mapped[datetime | None] = mapped_column(UtcDateTime)
+    fetched_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
+    #: Marked by the user as worth using.
+    starred: Mapped[bool] = mapped_column(default=False)
+
+
 class Preference(Base):
     """One choice made in Settings, by name. A missing row means the default.
 

@@ -43,6 +43,7 @@ from .realtime import (
     TOPIC_TASKS,
     Hub,
 )
+from .research.service import ResearchService
 from .sealing import Sealer
 from .tasks import TaskRegistry, cancel_background, spawn
 from .vault.backfill import Backfill
@@ -98,6 +99,7 @@ class AppState:
             self.db, self.endpoints, self.tracker, on_unauthorized=self.renew_session
         )
         self.engine.vault = VaultIndex(self.catalog)
+        self.research = ResearchService(self.db)
         self.sync = CatalogSync(
             self.db,
             self.catalog,
@@ -185,6 +187,7 @@ class AppState:
         await self.optimizer.start()
         self._session_watch = asyncio.create_task(self._watch_session(), name="session-watch")
         await self.daily_sync.start()
+        await self.research.start()
         await self.predictors.start()
         log.info("startup.complete", data_dir=str(self.settings.data_dir))
 
@@ -289,6 +292,7 @@ class AppState:
             with contextlib.suppress(asyncio.CancelledError):
                 await watch
         await self.daily_sync.stop()
+        await self.research.stop()
         await self.predictors.stop()
         await self.optimizer.stop()
         await self.engine.stop()

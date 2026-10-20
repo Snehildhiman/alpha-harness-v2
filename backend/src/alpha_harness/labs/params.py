@@ -117,6 +117,8 @@ class PowerPoolParams(TaskParams):
     llm: dict[str, Any] = Field(default_factory=dict)
     #: The last hundred LLM calls, for the task's detail view.
     calls: list[dict[str, Any]] = Field(default_factory=list)
+    #: Research papers (``research_paper`` ids) the LLM draws on, one a call in turn.
+    research_ids: list[int] = Field(default_factory=list)
 
 
 class RegionAgnosticParams(PowerPoolParams):

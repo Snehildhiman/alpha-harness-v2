@@ -29,6 +29,7 @@ from ..labs.launch import (
 )
 from ..labs.params import REGION_AGNOSTIC_SAMPLER, RegionAgnosticParams
 from ..llm.text import estimate_tokens
+from ..research.service import first_brief
 from ..schemas import Out
 from .deps import State, refuse
 from .power_pool_lab import PowerPoolModel, PowerPoolPrompt, llm_models
@@ -53,6 +54,8 @@ class RegionAgnosticRequest(BaseModel):
     neutralizations: list[str] = Field(default_factory=list, max_length=20)
     cores: int = Field(default=search.MAX_CORES, ge=1, le=search.MAX_CORES)
     simulations: int = Field(default=0, ge=0, le=search.MAX_SIMULATIONS)
+    #: Research papers to draw ideas from, one a call in turn.
+    research_ids: list[int] = Field(default_factory=list, max_length=50)
 
 
 class RegionChoice(Out):
@@ -187,6 +190,7 @@ async def _plan(body: RegionAgnosticRequest, state: Any) -> dict[str, Any]:
         dataset_ids=body.dataset_ids,
         rank_by=body.rank_by,
         size=body.size,
+        research_ids=body.research_ids,
     )
     fields = 0
     per_region: list[dict[str, Any]] = []
@@ -217,8 +221,9 @@ async def _plan(body: RegionAgnosticRequest, state: Any) -> dict[str, Any]:
                     "fields, so the LLM won't see them."
                 )
             if info is not None and operators:
+                research = await first_brief(state.db, body.research_ids)
                 user, shown = power_pool.user_prompt(
-                    ctx, operators, run, "None yet.", 0, info.prompt_tokens, system
+                    ctx, operators, run, "None yet.", 0, info.prompt_tokens, system, research
                 )
                 prompt = {
                     "name": prompt_name,

@@ -11,6 +11,7 @@ import { useProviderLabel } from '@/screens/ai/shared'
 import type { PickedField } from '@/screens/data/dataset-pick'
 import type { FieldFilterState } from '@/screens/data/state'
 import { PromptPicker, useChosenPrompt } from '@/screens/prompts/picker'
+import { ResearchPicked, useResearchIds } from '@/screens/research/picked'
 import { AddTaskButtons, useAddTask } from '@/screens/research-labs/add-task'
 import {
   fieldIdsOf,
@@ -124,6 +125,7 @@ export function PowerPoolLabScreen() {
   })
 
   const cores = useCores(draft.cores)
+  const researchIds = useResearchIds()
   const body: PowerPoolRequest = {
     region: draft.region,
     delay: draft.delay,
@@ -138,6 +140,7 @@ export function PowerPoolLabScreen() {
     universes: draft.universes,
     cores,
     simulations: draft.simulations ?? 0,
+    research_ids: researchIds,
   }
   const { preview, current } = useLabPreview('power-pool-lab', body, powerPoolLab.preview)
   const plan = preview.data
@@ -182,6 +185,7 @@ export function PowerPoolLabScreen() {
           />
         </Fieldset>
       </DatasetsPanel>
+      <ResearchPicked />
       <Panel title="Settings">
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-start gap-x-8 gap-y-4">

@@ -1791,6 +1791,63 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/research/papers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Papers
+         * @description Kept papers, newest first; ``search`` matches title and summary.
+         */
+        get: operations["papers_api_research_papers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/research/papers/{paper_id}/star": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Star */
+        put: operations["star_api_research_papers__paper_id__star_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/research/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refresh
+         * @description Read every feed now. Returns how many new papers each gave.
+         */
+        post: operations["refresh_api_research_refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/scorecards": {
         parameters: {
             query?: never;
@@ -3370,6 +3427,11 @@ export interface components {
             /** @default recheck */
             verdict: components["schemas"]["Verdict"];
         };
+        /** Body_star_api_research_papers__paper_id__star_put */
+        Body_star_api_research_papers__paper_id__star_put: {
+            /** On */
+            on: boolean;
+        };
         /**
          * BrainPayload
          * @description BRAIN's own JSON, passed through as the platform sent it.
@@ -4811,6 +4873,38 @@ export interface components {
              */
             maxTrade: "ON" | "OFF";
         };
+        /** Paper */
+        Paper: {
+            /** Authors */
+            authors: string;
+            /** Id */
+            id: number;
+            /** Published */
+            published: string | null;
+            /** Source */
+            source: string;
+            /** Starred */
+            starred: boolean;
+            /** Summary */
+            summary: string;
+            /** Title */
+            title: string;
+            /** Url */
+            url: string;
+        };
+        /** PaperPage */
+        PaperPage: {
+            /** Lasterror */
+            lastError: string | null;
+            /** Lastread */
+            lastRead: string | null;
+            /** Papers */
+            papers: components["schemas"]["Paper"][];
+            /** Sources */
+            sources: string[];
+            /** Total */
+            total: number;
+        };
         /** Pause */
         Pause: {
             /**
@@ -5098,6 +5192,8 @@ export interface components {
             rank_by?: string | null;
             /** Region */
             region: string;
+            /** Research Ids */
+            research_ids?: number[];
             /**
              * Simulations
              * @default 0
@@ -5221,6 +5317,13 @@ export interface components {
              * @enum {integer}
              */
             raSyncDays: 0 | 1 | 2 | 3 | 7;
+            /**
+             * Research
+             * @default true
+             */
+            research: boolean;
+            /** Researchfeeds */
+            researchFeeds?: string[];
             /**
              * Screenexplore
              * @default 0.2
@@ -5529,6 +5632,8 @@ export interface components {
             rank_by?: string | null;
             /** Regions */
             regions?: string[];
+            /** Research Ids */
+            research_ids?: number[];
             /**
              * Simulations
              * @default 0
@@ -9832,6 +9937,97 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    papers_api_research_papers_get: {
+        parameters: {
+            query?: {
+                search?: string | null;
+                starred?: boolean;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaperPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    star_api_research_papers__paper_id__star_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                paper_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Body_star_api_research_papers__paper_id__star_put"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Paper"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    refresh_api_research_refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number;
+                    };
                 };
             };
         };

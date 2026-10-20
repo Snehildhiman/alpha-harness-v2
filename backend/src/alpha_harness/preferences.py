@@ -63,6 +63,10 @@ class Preferences(Out):
     screen_factor: int = Field(default=4, ge=1, le=10)
     #: Share of each screened round picked at random, so the models keep learning.
     screen_explore: float = Field(default=0.2, ge=0.0, le=0.5)
+    #: Read research feeds (arXiv quantitative finance, and any added below) twice a day.
+    research: bool = True
+    #: Atom or RSS feeds read beside arXiv's.
+    research_feeds: list[str] = Field(default_factory=list, max_length=20)
     #: The Power Pool theme calendar, as BRAIN publishes it: the Current Theme tab tests
     #: Alphas against whichever rule is running today.
     power_pool_themes: list[ThemeRule] = Field(
@@ -97,6 +101,7 @@ def apply(state: AppState, preferences: Preferences) -> None:
     state.predictors.auto = preferences.auto_retrain
     state.optimizer.screen_factor = preferences.screen_factor
     state.optimizer.screen_explore = preferences.screen_explore
+    state.research.configure(enabled=preferences.research, feeds=preferences.research_feeds)
     state.daily_sync.configure(
         enabled=preferences.daily_sync,
         hour=preferences.daily_sync_hour,

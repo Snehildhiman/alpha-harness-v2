@@ -1,4 +1,5 @@
 import {
+  BookOpenIcon,
   BrainCircuitIcon,
   ChartPieIcon,
   DatabaseIcon,
@@ -107,6 +108,12 @@ export const NAV = [
     group: 'Research',
     label: 'Repair',
     icon: HammerIcon,
+  },
+  {
+    to: '/research',
+    group: 'Research',
+    label: 'Research',
+    icon: BookOpenIcon,
   },
   {
     to: '/scorecards',
