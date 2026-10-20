@@ -67,11 +67,24 @@ def fields_of(expression: str) -> frozenset[str] | None:
         return None
 
 
+#: Expression text → its canonical form. Expressions never change, and a vault re-read every
+#: few minutes while simulations land would otherwise re-parse 50k of them each time.
+_CANONICAL: dict[str, str | None] = {}
+
+
+def _canonical(expression: str) -> str | None:
+    if expression not in _CANONICAL:
+        if len(_CANONICAL) > 500_000:
+            _CANONICAL.clear()
+        _CANONICAL[expression] = canonical(expression)
+    return _CANONICAL[expression]
+
+
 def ran_in(rows: Iterable[dict[str, Any]]) -> dict[str, set[tuple[str, int]]]:
     """Canonical expression → every (region, delay) it has run in."""
     out: dict[str, set[tuple[str, int]]] = defaultdict(set)
     for row in rows:
-        key = canonical(str(row.get("expression") or ""))
+        key = _canonical(str(row.get("expression") or ""))
         if key and row.get("region"):
             out[key].add((str(row["region"]), int(row.get("delay") or 0)))
     return out
@@ -91,7 +104,7 @@ def transplants(
     seen: set[tuple[str, str, int]] = set()
     for row in sources:
         expression = str(row.get("expression") or "")
-        key = canonical(expression)
+        key = _canonical(expression)
         fields = fields_of(expression)
         if not key or fields is None:
             continue
@@ -158,7 +171,7 @@ def promotions(
     groups: dict[tuple[str, int], list[dict[str, Any]]] = defaultdict(list)
     for row in passing:
         region = str(row.get("region") or "")
-        key = canonical(str(row.get("expression") or ""))
+        key = _canonical(str(row.get("expression") or ""))
         if key and region in RA_MARKETS:
             groups[(key, int(row.get("delay") or 0))].append(row)
     out: list[Promotion] = []
