@@ -161,6 +161,17 @@ async def train(state: State) -> TrainStarted:
     return TrainStarted(task_id=task_id)
 
 
+_REGION_CHECKS = ("USA", "EUR", "ASI", "GLB", "CHN", "JPN", "KOR", "TWN", "HKG", "AMR", "IND")
+
+
+def _applies(target: str, region: str) -> bool:
+    """Whether a target means anything for an Alpha in ``region``."""
+    if not target.startswith("check:"):
+        return True
+    head = target.removeprefix("check:").split("_", 1)[0].upper()
+    return head not in _REGION_CHECKS or head == region.upper()
+
+
 async def expression_problems(state: State, candidate: Candidate) -> list[str]:
     """Why BRAIN would refuse this expression in this market, or nothing: it must parse,
     use operators the account has, and read fields the market's download carries."""
@@ -230,6 +241,8 @@ async def predict(state: State, candidate: Annotated[Candidate, Body()]) -> list
         "checks": None,
     }
     found = (await state.predictors.predict([row]))[0]
+    # Region-specific checks (GLB_AMER_SHARPE, ASI_JPN_SHARPE, ...) only exist in their region.
+    found = {t: v for t, v in found.items() if _applies(t, candidate.region)}
     order = sorted(found, key=lambda t: (t.startswith("check:"), t))
     return [
         Prediction(

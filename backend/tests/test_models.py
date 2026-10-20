@@ -152,3 +152,11 @@ def test_growth_columns_only_for_sets_trained_with_them() -> None:
     x = matrix(rows, parsed, fields, new)
     at = new.columns().index("crowd_growth_max")
     assert abs(float(x[0, at]) - 1.3862944) < 1e-5  # log1p(3)
+
+
+def test_region_checks_only_for_their_region() -> None:
+    from alpha_harness.api.predictors import _applies
+
+    assert _applies("check:ASI_JPN_SHARPE", "ASI")
+    assert not _applies("check:GLB_AMER_SHARPE", "ASI")
+    assert _applies("check:LOW_SHARPE", "ASI") and _applies("prod_corr", "USA")

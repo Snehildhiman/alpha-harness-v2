@@ -157,7 +157,8 @@ const BLANK: Candidate = {
   powerPool: false,
 }
 
-function PredictPanel({ ready }: { ready: boolean }) {
+function PredictPanel({ ready, reports }: { ready: boolean; reports: TargetReport[] }) {
+  const qualityOf = new Map(reports.map((r) => [r.target, quality(r)]))
   const [candidate, setCandidate] = useState<Candidate>(BLANK)
   const ask = useMutation({ mutationFn: predict })
   const set = (patch: Partial<Candidate>) => {
@@ -248,9 +249,23 @@ function PredictPanel({ ready }: { ready: boolean }) {
                 key={p.target}
                 className="flex items-baseline justify-between gap-3 border-b border-hairline-subtle py-1"
               >
-                <span className="text-body-compact text-ink-muted">{p.label}</span>
+                <span className="text-body-compact text-ink-muted">
+                  {p.label}
+                  {qualityOf.get(p.target)?.label === 'Not learning' && (
+                    <span
+                      className="ml-1.5 text-ink-subtle"
+                      title="This model does no better than guessing on unseen Alphas; ignore this number"
+                    >
+                      (guess)
+                    </span>
+                  )}
+                </span>
                 <span
                   className={`num ${
+                    qualityOf.get(p.target)?.label === 'Not learning'
+                      ? 'text-ink-subtle line-through'
+                      : ''
+                  } ${
                     p.kind === 'probability'
                       ? p.value >= 0.6
                         ? 'text-pnl-positive-text'
@@ -411,7 +426,7 @@ export function ModelsScreen() {
         </>
       )}
       <ScreeningPanel />
-      <PredictPanel ready={!!data?.trainedAt} />
+      <PredictPanel ready={!!data?.trainedAt} reports={data?.reports ?? []} />
     </Page>
   )
 }
