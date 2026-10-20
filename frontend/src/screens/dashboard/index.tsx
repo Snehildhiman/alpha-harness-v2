@@ -18,6 +18,7 @@ import { useNow } from '@/lib/now'
 import { useRefetchOn } from '@/lib/ws'
 import { ErrorNotice, Page, Panel, Progress, Skeleton, TEXT_TONE, type Tone } from '@/ui/kit'
 import { GettingStarted } from './getting-started'
+import { Opportunities } from './opportunities'
 import { WorkInFlight } from './work'
 
 export function DashboardScreen() {
@@ -129,6 +130,7 @@ export function DashboardScreen() {
         />
       </div>
 
+      <Opportunities />
       <WorkInFlight />
     </Page>
   )

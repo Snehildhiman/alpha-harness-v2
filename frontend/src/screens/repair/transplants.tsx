@@ -27,10 +27,10 @@ const COLUMNS: Column<TransplantRow>[] = [
   {
     key: 'from',
     header: 'From',
-    width: '150px',
+    width: '200px',
     cell: (r) => (
       <span className="truncate text-body-compact text-ink-muted" title={r.sourceId}>
-        {r.origin} · {r.sourceVerdict}
+        {r.origin} · {r.sourceVerdict === 'recheck' ? 're-check' : r.sourceVerdict}
       </span>
     ),
   },
