@@ -41,6 +41,7 @@ import {
   Disclosure,
   ErrorNotice,
   Fieldset,
+  LINK,
   Metric,
   Notice,
   Page,
@@ -176,6 +177,22 @@ export function RegionAgnosticLabScreen() {
         description="Region-agnostic fields, written into Alphas by an LLM and run as ordinary simulations in every region that carries them: the same settings but the region, ten to a core. Results come back grouped by Alpha, a row per region."
         actions={<AddTaskButtons add={add} disabled={!ready} />}
       />
+      <Notice tone="info" title="No LLM? Three ways to region-agnostic Alphas without one">
+        Choose <b>All regions</b> as the market in the{' '}
+        <Link to="/labs/template" className={LINK}>
+          Template Lab
+        </Link>{' '}
+        or{' '}
+        <Link to="/labs/search" className={LINK}>
+          Search Lab
+        </Link>
+        : every Alpha then runs as one region-agnostic simulation. Or, in{' '}
+        <Link to="/repair" className={LINK}>
+          Repair
+        </Link>
+        , transplant passing Alphas into other regions and promote the ones that pass in two to
+        region-agnostic families.
+      </Notice>
       {options.isError && <ErrorNotice error={options.error} title="Could not load the options" />}
       {options.isSuccess && models.length === 0 && (
         <Notice

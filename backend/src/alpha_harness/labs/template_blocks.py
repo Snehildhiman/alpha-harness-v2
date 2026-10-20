@@ -725,4 +725,94 @@ PRESETS: tuple[Preset, ...] = (
         ),
         source="AIRS",
     ),
+    # Shapes aimed at less crowded signals: scaled changes, stability, spreads and
+    # divergences rarely sit on top of the plain ranks most Alphas are.
+    Preset(
+        "volatility_scaled_change",
+        "Volatility-Scaled Change",
+        "A recent change in the field, measured in its own usual swings, ranked within peers.",
+        _op(
+            "group_rank",
+            _op("divide", _op("ts_delta|ts_av_diff", _F, _FAST), _op("ts_std_dev", _F, _SLOW)),
+            _G,
+        ),
+    ),
+    Preset(
+        "steady_field",
+        "Steady Field",
+        "A field's average over its swings: high and stable beats high and noisy.",
+        _op("group_rank", _op("divide", _op("ts_mean", _F, _LB), _op("ts_std_dev", _F, _LB)), _G),
+    ),
+    Preset(
+        "calm_field",
+        "Calm Field",
+        "Favours stocks whose field has moved least, within peers.",
+        _op("group_rank", _op("reverse", _op("ts_std_dev", _F, _LB)), _G),
+    ),
+    Preset(
+        "two_field_spread",
+        "Two-Field Spread",
+        "How far one field's own-history score runs ahead of another's, within peers.",
+        _op(
+            "group_rank",
+            _op("subtract", _op("ts_zscore", _F, _LB), _op("ts_zscore", _F2, _LB)),
+            _G,
+        ),
+    ),
+    Preset(
+        "field_price_divergence",
+        "Field-Price Divergence",
+        "The field climbing its own history while the price does not.",
+        _op(
+            "group_neutralize",
+            _op("subtract", _op("ts_rank", _F, _LB), _op("ts_rank", _data("close"), _LB)),
+            _G,
+        ),
+    ),
+    Preset(
+        "quiet_days_only",
+        "Quiet Days Only",
+        "Trades only while volume runs below its average, when news is not driving the price.",
+        _op(
+            "trade_when",
+            _op("less", _data("volume"), _data("adv20")),
+            _op("ts_zscore|ts_rank", _F, _LB),
+            _num(-1),
+        ),
+    ),
+    Preset(
+        "ratio_momentum",
+        "Ratio Momentum",
+        "The change in one field over another, neutralized within peers.",
+        _op("group_neutralize", _op("ts_delta|ts_av_diff", _op("divide", _F, _F2), _FAST), _G),
+    ),
+    Preset(
+        "smoothed_backfilled_rank",
+        "Smoothed Backfilled Rank",
+        "Sparse data filled forward, ranked within peers, then smoothed.",
+        _op(
+            "ts_decay_linear|ts_mean",
+            _op("group_rank", _op("ts_backfill", _F, _num(63)), _G),
+            _FAST,
+        ),
+    ),
+    Preset(
+        "rank_change",
+        "Rank Change",
+        "How far a stock has moved up its peers' ranking on the field.",
+        _op("ts_delta|ts_av_diff", _op("group_rank", _F, _G), _FAST),
+    ),
+    Preset(
+        "peer_relative_trend",
+        "Peer-Relative Trend",
+        "A fast average against a slow one, after taking out the peer group's level.",
+        _op(
+            "rank",
+            _op(
+                "subtract",
+                _op("ts_mean", _op("group_neutralize", _F, _G), _FAST),
+                _op("ts_mean", _op("group_neutralize", _F, _G), _SLOW),
+            ),
+        ),
+    ),
 )
