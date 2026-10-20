@@ -1706,6 +1706,67 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/repair/near-misses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Near Misses
+         * @description Refused Alphas whose every failure is narrow, nearest first.
+         */
+        get: operations["near_misses_api_repair_near_misses_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/repair/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Plan
+         * @description Generate every variant of one Alpha and rank them. Simulates nothing.
+         */
+        post: operations["plan_api_repair_plan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/repair/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Queue
+         * @description Simulate the best ``take`` variants as one task, each at its own settings, in Full mode
+         *     (the only mode that runs the correlation checks this is for).
+         */
+        post: operations["queue_api_repair_tasks_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/search-lab/options": {
         parameters: {
             query?: never;
@@ -3217,6 +3278,26 @@ export interface components {
             /** Vector Operators */
             vector_operators?: string[];
         };
+        /** Body_plan_api_repair_plan_post */
+        Body_plan_api_repair_plan_post: {
+            /** Alphaid */
+            alphaId: string;
+        };
+        /** Body_queue_api_repair_tasks_post */
+        Body_queue_api_repair_tasks_post: {
+            /** Alphaid */
+            alphaId: string;
+            /**
+             * Cores
+             * @default 8
+             */
+            cores: number;
+            /**
+             * Take
+             * @default 10
+             */
+            take: number;
+        };
         /** Body_recheck_api_separation_recheck_post */
         Body_recheck_api_separation_recheck_post: {
             /**
@@ -4515,6 +4596,25 @@ export interface components {
              */
             month: string;
         };
+        /** NearMiss */
+        NearMiss: {
+            /** Alphaid */
+            alphaId: string;
+            /** Expression */
+            expression: string | null;
+            /** Failed */
+            failed: components["schemas"]["Issue"][];
+            /** Fitness */
+            fitness: number | null;
+            /** Gap */
+            gap: number;
+            /** Kind */
+            kind: string;
+            /** Region */
+            region: string | null;
+            /** Sharpe */
+            sharpe: number | null;
+        };
         /** NewPrompt */
         NewPrompt: {
             /** Based On */
@@ -5348,6 +5448,54 @@ export interface components {
             total: number;
             /** Universes */
             universes: string[];
+        };
+        /** RepairPlan */
+        RepairPlan: {
+            /** Alphaid */
+            alphaId: string;
+            /** Expression */
+            expression: string;
+            /** Generated */
+            generated: number;
+            /** Kind */
+            kind: string;
+            /** Powerpool */
+            powerPool: boolean;
+            /** Problems */
+            problems: string[];
+            /** Ranked */
+            ranked: boolean;
+            /** Region */
+            region: string;
+            /** Variants */
+            variants: components["schemas"]["RepairVariant"][];
+        };
+        /** RepairVariant */
+        RepairVariant: {
+            /** Correlation */
+            correlation: number | null;
+            /** Decay */
+            decay: number | null;
+            /** Edit */
+            edit: string;
+            /** Expression */
+            expression: string;
+            /** Family */
+            family: string;
+            /** Fitness */
+            fitness: number | null;
+            /** Id */
+            id: string;
+            /** Neutralization */
+            neutralization: string | null;
+            /** Pall */
+            pAll: number | null;
+            /** Pcorrelation */
+            pCorrelation: number | null;
+            /** Sharpe */
+            sharpe: number | null;
+            /** Truncation */
+            truncation: number | null;
         };
         /**
          * ResolveOptionsRequest
@@ -9387,6 +9535,104 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AddedTask"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    near_misses_api_repair_near_misses_get: {
+        parameters: {
+            query?: {
+                tab?: components["schemas"]["Kind"] | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NearMiss"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    plan_api_repair_plan_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Body_plan_api_repair_plan_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RepairPlan"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    queue_api_repair_tasks_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Body_queue_api_repair_tasks_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

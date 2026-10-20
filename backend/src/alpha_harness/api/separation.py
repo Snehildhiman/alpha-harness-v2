@@ -97,7 +97,7 @@ async def _categories(state: State, rows: list[dict[str, Any]], rule: ThemeRule)
     return theme
 
 
-async def _judged(state: State) -> list[Judged]:
+async def judge_vault(state: State) -> list[Judged]:
     """The whole vault, judged; recomputed only when the vault, the running theme or the
     synced catalog changed."""
     marker = await state.catalog.query(
@@ -124,7 +124,7 @@ async def _judged(state: State) -> list[Judged]:
         return _cache["judged"]
 
 
-def _figure(item: Judged, key: str) -> Any:
+def figure(item: Judged, key: str) -> Any:
     """A row's figure; an RA family shows its best passing (else best) child's."""
     if not item.children:
         return item.row.get(key)
@@ -202,11 +202,11 @@ def _row(item: Judged) -> TabRow:
         universe=r.get("universe"),
         neutralization=r.get("neutralization"),
         decay=r.get("decay"),
-        sharpe=_figure(item, "sharpe"),
-        fitness=_figure(item, "fitness"),
-        turnover=_figure(item, "turnover"),
-        returns=_figure(item, "returns"),
-        margin=_figure(item, "margin"),
+        sharpe=figure(item, "sharpe"),
+        fitness=figure(item, "fitness"),
+        turnover=figure(item, "turnover"),
+        returns=figure(item, "returns"),
+        margin=figure(item, "margin"),
         date_created=str(r["date_created"]) if r.get("date_created") else None,
         failed=[Issue(**asdict(i)) for i in j.failed],
         pending=j.pending,
@@ -221,7 +221,7 @@ def _row(item: Judged) -> TabRow:
 
 @router.get("/summary")
 async def get_summary(state: State) -> Summary:
-    judged = await _judged(state)
+    judged = await judge_vault(state)
     rule = await _running_theme(state)
     running = (
         RunningTheme(name=rule.name, rule=rule.describe(), start=rule.start, end=rule.end)
@@ -258,7 +258,7 @@ async def tab(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> TabPage:
     """One tab's Alphas with one verdict, best first."""
-    judged = await _judged(state)
+    judged = await judge_vault(state)
     picked = [
         item
         for item in judged
@@ -273,7 +273,7 @@ async def tab(
     descending = sort != "turnover"
 
     def order(item: Judged) -> tuple[bool, Any]:
-        value = _figure(item, sort) if sort != "date_created" else str(item.row.get(sort) or "")
+        value = figure(item, sort) if sort != "date_created" else str(item.row.get(sort) or "")
         missing = value is None
         return (
             missing,
@@ -309,8 +309,9 @@ async def recheck(
     re-sort themselves as each answer lands. Spends no simulations. RA families are re-checked
     child by child.
     """
-    judged = [i for i in await _judged(state) if in_tab(i, tab) and i.judgement.verdict == verdict]
-    judged.sort(key=lambda i: -(_figure(i, "sharpe") or float("-inf")))
+    vault = await judge_vault(state)
+    judged = [i for i in vault if in_tab(i, tab) and i.judgement.verdict == verdict]
+    judged.sort(key=lambda i: -(figure(i, "sharpe") or float("-inf")))
     ids: list[str] = []
     for item in judged[:limit]:
         rows = item.children or [item.row]

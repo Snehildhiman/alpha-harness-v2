@@ -4,6 +4,7 @@ import {
   DatabaseIcon,
   FlaskConicalIcon,
   Grid3x3Icon,
+  HammerIcon,
   LayersIcon,
   LayoutGridIcon,
   ListChecksIcon,
@@ -99,6 +100,12 @@ export const NAV = [
     group: 'Research',
     label: 'Models',
     icon: BrainCircuitIcon,
+  },
+  {
+    to: '/repair',
+    group: 'Research',
+    label: 'Repair',
+    icon: HammerIcon,
   },
   {
     to: '/prompts',
