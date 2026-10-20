@@ -1,0 +1,333 @@
+# Cut a release: push a tag and users get an Update button. That is the whole procedure —
+# the tag is the only place a version is written, and `backend/pyproject.toml` stays at
+# 0.0.0.dev0 on main.
+#
+#   git tag v2026.9.21 && git push origin v2026.9.21
+#
+# Versions are dates, unpadded (`2026.9.5`, not `2026.09.05`), with `.1` for a second release
+# in a day. Dated rather than semantic on purpose: the app is a local tool with no API
+# consumers, so a major number would signal a stability promise nobody is owed, while a date
+# answers the only question a screenshot raises — how old is this build.
+#
+# To publish without offering it to anyone, tag a pre-release: `v2026.9.21rc1`. GitHub keeps
+# it out of /releases/latest, which is the only thing the in-app updater reads.
+#
+# The wheel carries the app and its built UI; `constraints.txt` pins every transitive
+# dependency to `uv.lock`, so an install a year from now resolves to what was tested today.
+# The launcher (`AlphaHarness.exe`, `AlphaHarness.app`, the Linux `AlphaHarness`) only changes
+# when the launcher does — users who already have it keep it and take the wheel alone, which is
+# the point of splitting them.
+#
+# Each launcher is built on its own system: neither PyInstaller nor Nuitka cross-compiles.
+
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to build, without the leading v
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  wheel:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+      # The pnpm version comes from `packageManager` in the frontend's package.json. Said
+      # here because the action looks in the repository root by default, and this repository
+      # keeps no package.json there — naming a version inline instead would be a second
+      # place to keep in step with the lockfile.
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: frontend/package.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: frontend/.node-version
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      # The tag is the only place a version is written. `backend/pyproject.toml` stays at
+      # 0.0.0.dev0 on main and is stamped here, so there is no bump commit to forget and no
+      # way for a tag and a file to disagree.
+      #
+      # Through the environment, never interpolated into the script: a ref name is attacker
+      # shaped text, and `${{ }}` pastes it in before bash ever sees a quote.
+      - name: Read the version from the tag
+        id: version
+        shell: bash
+        env:
+          REF: ${{ inputs.version || github.ref_name }}
+        run: |
+          uv run --with packaging --no-project --quiet python - <<'PY'
+          import os, pathlib
+          from packaging.version import InvalidVersion, Version
+
+          raw = os.environ["REF"].removeprefix("v")
+          try:
+              parsed = Version(raw)
+          except InvalidVersion:
+              raise SystemExit(f"::error::{raw!r} is not a PEP 440 version")
+          # The launcher builds `/releases/download/v{version}/`, and the wheel is named with
+          # the *normalised* version. A tag of v2026.09.21 would publish assets under a path
+          # that says 2026.9.21, so every download 404s. Demand the canonical spelling.
+          if str(parsed) != raw:
+              raise SystemExit(f"::error::tag v{raw} is not canonical; tag v{parsed} instead")
+
+          # Appended, never rewritten: these files carry whatever earlier steps put in them.
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+              # A release candidate must never become /releases/latest: the updater reads
+              # that, and every running copy would offer it within the hour.
+              out.write(f"prerelease={str(parsed.is_prerelease).lower()}\n")
+              out.write(f"version={raw}\n")
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              env.write(f"VERSION={raw}\n")
+          print(f"version {raw}, prerelease {parsed.is_prerelease}")
+          PY
+
+      # The ci.yml gate itself, so a tag cannot ship what a commit could not. Run against the
+      # committed lockfile, before anything is stamped: measured, uv is happy to sync a
+      # pyproject whose version has moved off uv.lock, but gating the tree exactly as it sits
+      # in git does not depend on it staying happy.
+      - run: cd backend && uv sync --frozen
+      - run: cd frontend && pnpm install --frozen-lockfile
+      - run: uvx lefthook@2.1.14 run check
+
+      # Into the package, so one wheel serves the whole app with no Node at runtime.
+      - run: cd frontend && pnpm build
+
+      # Only now, and only for the artefacts. `--frozen` leaves uv.lock exactly as it was gated.
+      - name: Stamp the version into pyproject
+        run: cd backend && uv version --frozen "$VERSION"
+
+      - run: cd backend && uv build --wheel
+      # With hashes: the launcher installs every dependency through this file, and uv refuses
+      # an artefact whose hash does not match one listed here. The project's own wheel is not
+      # in it (`--no-emit-project`) and stays unhashed, so this covers the PyPI leg only.
+      - run: cd backend && uv export --frozen --no-dev --no-emit-project -o dist/constraints.txt
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wheel
+          path: backend/dist/*
+
+  launcher:
+    # After the wheel job, so the version baked into the launcher is the one that passed the
+    # canonical check rather than whatever the tag happened to say.
+    needs: wheel
+    strategy:
+      # One platform failing must not cancel the others: a run should report every build.
+      # Publishing still needs all four, so a partial release can never go out.
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            asset: AlphaHarness.exe
+          # Apple Silicon.
+          - os: macos-latest
+            asset: AlphaHarness-macOS-arm64.zip
+          # The last Intel label there will be: macOS 26 is the final release for Intel Macs,
+          # and there is no -latest alias for Intel on the standard runners.
+          - os: macos-26-intel
+            asset: AlphaHarness-macOS-x86_64.zip
+          # The binary needs glibc 2.35 or newer, so it runs on Ubuntu 22.04 and later. Measured
+          # on a glibc 2.43 build: the floor is libgcc_s, which PyInstaller bundles from the
+          # runner; uv and the bundled Python need only 2.17.
+          # Archived: a browser downloads a bare binary without its executable bit, and Debian's
+          # file manager then hands it to the software centre instead of running it.
+          - os: ubuntu-latest
+            asset: AlphaHarness-linux-x86_64.tar.gz
+    runs-on: ${{ matrix.os }}
+    env:
+      VERSION: ${{ needs.wheel.outputs.version }}
+      ASSET: ${{ matrix.asset }}
+      # uv's own Python, never one the runner has installed. Measured on v2026.10.1rc2: the
+      # macOS runners' own Python 3.14 is built for the runner's macOS, and the launchers it
+      # froze ran on macOS 26 or 15 only. uv's own needs 11.0 (Apple Silicon) or 10.15 (Intel).
+      UV_PYTHON_PREFERENCE: only-managed
+    steps:
+      - uses: actions/checkout@v7
+      # Pinned, not `latest`: this binary ships inside the exe, so an upstream release must
+      # never change what a re-run of an old tag produces. The action checks its checksum,
+      # and the same uv runs the Python that freezes the launcher below.
+      - id: uv
+        uses: astral-sh/setup-uv@v10.2.0
+        with:
+          version: "0.12.18"
+          python-version: "3.14"
+      - name: Bundle uv.exe
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          UV_PATH: ${{ steps.uv.outputs.uv-path }}
+        # setup-uv reports the binary without its extension on Windows (measured: `...\uv`),
+        # while the file on disk is uv.exe.
+        run: |
+          $uv = if (Test-Path -LiteralPath $env:UV_PATH -PathType Leaf) { $env:UV_PATH } else { "$env:UV_PATH.exe" }
+          Copy-Item -LiteralPath $uv launcher/uv.exe
+          ./launcher/uv.exe --version
+      - name: Bundle uv
+        if: runner.os != 'Windows'
+        env:
+          UV_PATH: ${{ steps.uv.outputs.uv-path }}
+        run: |
+          cp "$UV_PATH" launcher/uv
+          ./launcher/uv --version
+
+      # A fresh machine installs exactly the version this launcher shipped with; the in-app
+      # updater moves it on from there.
+      #
+      # Python, not `sed -i`: Git Bash rewrites in place by renaming a temp file, which on
+      # Windows contends with the checkout's own handles and mangles CRLF. And a stamp that
+      # silently misses ships BUILD_VERSION = "0.0.0", whose download URL 404s on every fresh
+      # install — so a miss has to fail the build, which `sed` would not do.
+      - name: Stamp the version
+        shell: bash
+        run: |
+          uv run --no-project python - <<'PY'
+          import os, pathlib
+          path = pathlib.Path("launcher/alpha_harness_launcher.py")
+          text = path.read_text(encoding="utf-8")
+          old = 'BUILD_VERSION = "0.0.0"'
+          if old not in text:
+              raise SystemExit(f"::error::{old!r} not found — the constant was renamed")
+          new = f'BUILD_VERSION = "{os.environ["VERSION"]}"'
+          path.write_text(text.replace(old, new), encoding="utf-8")
+          print(new)
+          PY
+
+      - name: Build AlphaHarness.exe
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          # Semicolon: PyInstaller splits SOURCE from DEST on os.pathsep, and this runs on
+          # Windows however bash-shaped the step looks.
+          # --paths: the launcher shares one module with the app, alpha_harness.window.
+          # --icon: the tray reads the running exe's own icon, so this is what puts our
+          # mark in the notification area rather than Windows' generic one.
+          uvx --from pyinstaller==6.22.3 pyinstaller --onefile --windowed --name AlphaHarness \
+            --add-binary "launcher/uv.exe;." \
+            --icon launcher/mark.ico \
+            --distpath dist \
+            --paths backend/src \
+            launcher/alpha_harness_launcher.py
+
+      # An .app is a folder, so macOS builds one-folder rather than one-file. LSUIElement keeps
+      # it out of the Dock: it hands itself to a background copy within a second, and a Dock
+      # icon that bounces and vanishes reads as a crash. Editing Info.plist breaks PyInstaller's
+      # ad-hoc signature, and Apple Silicon refuses to run an unsigned binary, so it is
+      # re-signed; ditto keeps the bundle's symlinks, which a plain zip would flatten.
+      # Pillow turns the .ico into the .icns an .app needs.
+      - name: Build AlphaHarness.app
+        if: runner.os == 'macOS'
+        run: |
+          uvx --from pyinstaller==6.22.3 --with pillow==12.3.0 pyinstaller --windowed \
+            --name AlphaHarness \
+            --osx-bundle-identifier io.github.residual-lab.alpha-harness \
+            --add-binary "launcher/uv:." \
+            --icon launcher/mark.ico \
+            --distpath dist \
+            --paths backend/src \
+            launcher/alpha_harness_launcher.py
+          plutil -replace LSUIElement -bool true dist/AlphaHarness.app/Contents/Info.plist
+          codesign --force --deep --sign - dist/AlphaHarness.app
+          ditto -c -k --keepParent dist/AlphaHarness.app "dist/$ASSET"
+
+      # Nothing else would notice a launcher that only opens on the runner's own macOS: CI
+      # builds it without complaint and the Macs it refuses are the users'.
+      - name: Check the oldest macOS it runs on
+        if: runner.os == 'macOS'
+        run: |
+          uv run --no-project python - <<'PY'
+          import pathlib, struct, sys
+
+          FLOOR = (11, 0)
+
+
+          def minimums(data):
+              """Each architecture's minimum macOS, from a thin or fat Mach-O's load commands."""
+              if data[:4] == b"\xca\xfe\xba\xbe":
+                  count = struct.unpack(">I", data[4:8])[0]
+                  arches = [struct.unpack(">5I", data[8 + 20 * i : 28 + 20 * i]) for i in range(count)]
+                  return [v for _, _, at, size, _ in arches for v in minimums(data[at : at + size])]
+              if data[:4] != b"\xcf\xfa\xed\xfe":
+                  return []
+              found, at = [], 32
+              for _ in range(struct.unpack("<I", data[16:20])[0]):
+                  command, size = struct.unpack("<II", data[at : at + 8])
+                  # LC_BUILD_VERSION holds it 12 bytes in; the older LC_VERSION_MIN_MACOSX, 8.
+                  offset = {0x32: 12, 0x24: 8}.get(command)
+                  if offset:
+                      value = struct.unpack("<I", data[at + offset : at + offset + 4])[0]
+                      found.append((value >> 16, (value >> 8) & 0xFF))
+                  at += size
+              return found
+
+
+          too_new = sorted(
+              {(version, file.name)
+               for file in pathlib.Path("dist/AlphaHarness.app").rglob("*")
+               if file.is_file() and not file.is_symlink()
+               for version in minimums(file.read_bytes())
+               if version > FLOOR}
+          )
+          for (major, minor), name in too_new:
+              print(f"::error::{name} needs macOS {major}.{minor}; the floor is {FLOOR[0]}.{FLOOR[1]}")
+          sys.exit(1 if too_new else 0)
+          PY
+
+      # The mark goes in for the applications menu entry the launcher writes on first run.
+      - name: Build the Linux launcher
+        if: runner.os == 'Linux'
+        run: |
+          uvx --from pyinstaller==6.22.3 pyinstaller --onefile --name AlphaHarness \
+            --add-binary "launcher/uv:." \
+            --add-data "frontend/public/mark.svg:." \
+            --distpath dist \
+            --paths backend/src \
+            launcher/alpha_harness_launcher.py
+          chmod 755 dist/AlphaHarness
+          tar -czf "dist/$ASSET" -C dist AlphaHarness
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: launcher-${{ matrix.asset }}
+          path: dist/${{ matrix.asset }}
+
+  publish:
+    needs: [wheel, launcher]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: release
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ inputs.version && format('v{0}', inputs.version) || github.ref_name }}
+          generate_release_notes: true
+          # Keeps a candidate out of /releases/latest, which is the only thing the in-app
+          # updater reads. Tag `v0.1.1rc1` to build and publish without offering it to anyone.
+          prerelease: ${{ needs.wheel.outputs.prerelease == 'true' }}
+          files: release/*
+          body: |
+            **New here?** Download the one for your computer and open it. It installs everything on first start, which takes a couple of minutes, then opens in your browser.
+
+            - **Windows:** `AlphaHarness.exe`. Windows warns that it does not recognise the app — it is unsigned. Choose **More info**, then **Run anyway**.
+            - **Mac:** `AlphaHarness-macOS-arm64.zip` for Apple Silicon (M1 or later), or `AlphaHarness-macOS-x86_64.zip` for Intel. Open the zip and drag **AlphaHarness** into Applications. The first time, macOS will not open it because it is unsigned: open **System Settings › Privacy & Security**, scroll down, and choose **Open Anyway**.
+            - **Linux:** `AlphaHarness-linux-x86_64.tar.gz`. Extract it, then open **AlphaHarness**. It adds Alpha Harness to your applications menu.
+
+            To close it: the tray icon on Windows, or **Quit Alpha Harness** in the account menu at the bottom of the sidebar.
+
+            **Already have it?** Do nothing. Alpha Harness offers this version in the app.

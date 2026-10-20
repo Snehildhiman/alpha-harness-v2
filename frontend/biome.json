@@ -1,0 +1,37 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true, "root": ".." },
+  "files": { "includes": ["**", "!dist", "!public", "!src/api/generated.ts"] },
+  "formatter": { "indentStyle": "space", "indentWidth": 2, "lineWidth": 100 },
+  "javascript": { "formatter": { "quoteStyle": "single", "semicolons": "asNeeded" } },
+  "css": { "parser": { "tailwindDirectives": true } },
+  "assist": { "actions": { "source": { "organizeImports": "on" } } },
+  "linter": {
+    "rules": {
+      "preset": "recommended",
+      "correctness": {
+        "noUnusedImports": "error",
+        "noUnusedVariables": "error",
+        "useExhaustiveDependencies": "error",
+        "useHookAtTopLevel": "error"
+      },
+      "style": { "useImportType": "error" },
+      "a11y": {
+        "noLabelWithoutControl": {
+          "level": "error",
+          "options": { "inputComponents": ["Input", "Select"] }
+        },
+        "useSemanticElements": "off"
+      },
+      "suspicious": { "noArrayIndexKey": "off" },
+      "complexity": { "useLiteralKeys": "off" }
+    },
+    "domains": { "react": "recommended" }
+  },
+  "overrides": [
+    {
+      "includes": ["src/ui/table.tsx"],
+      "linter": { "rules": { "a11y": { "useFocusableInteractive": "off" } } }
+    }
+  ]
+}

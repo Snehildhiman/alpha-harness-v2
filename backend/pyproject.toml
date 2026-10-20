@@ -1,0 +1,117 @@
+[build-system]
+build-backend = "uv_build"
+requires = [ "uv-build>=0.12.18,<0.13.0" ]
+
+[project]
+name = "alpha-harness"
+version = "0.0.0.dev0"
+description = "Local Research Studio for the WorldQuant BRAIN Platform"
+requires-python = ">=3.14"
+dependencies = [
+    "aiosqlite>=0.22.1",
+    # Below 49: from 49 cryptography ships macOS wheels for Apple Silicon only, and an Intel
+    # Mac then fails building it from source. 48 is universal2, macOS 10.9 and up.
+    "cryptography>=46,<49",
+    "duckdb>=1.5.5",
+    "fastapi>=0.141.1",
+    "httpx2>=2.13.1",
+    "msgspec>=0.21.1",
+    "numpy>=2.5.3",
+    "openai>=3.19.2",
+    "optuna>=5.0.0",
+    "packaging>=26.3",
+    "pyarrow>=25.0.1",
+    "pydantic>=2.13.5",
+    "sqlalchemy[asyncio]>=2.0.54",
+    "structlog>=26.1.0",
+    "tzdata>=2026.4",
+    "uvicorn[standard]>=0.53.0",
+]
+scripts.alpha-harness = "alpha_harness.__main__:main"
+
+[dependency-groups]
+dev = [
+    "basedpyright>=1.40.1",
+    "pyproject-fmt>=2.29.4",
+    "pyrefly>=1.3.1",
+    "ruff>=0.16.8",
+]
+
+[tool.ruff]
+target-version = "py314"
+line-length = 100
+src = [ "src" ]
+lint.select = [
+    "A",     # builtins shadowing
+    "ANN",   # missing annotations
+    "ARG",   # unused arguments
+    "ASYNC", # blocking calls in async code
+    "B",     # bugbear
+    "BLE",   # blind except
+    "C4",    # comprehensions
+    "DTZ",   # naive datetimes
+    "E",     # pycodestyle errors
+    "ERA",   # commented-out code
+    "F",     # pyflakes
+    "FAST",  # FastAPI
+    "FURB",  # refurb
+    "I",     # isort
+    "N",     # pep8-naming
+    "PERF",  # perflint
+    "PTH",   # pathlib
+    "RET",   # return statements
+    "RUF",   # ruff-specific
+    "S",     # bandit
+    "SIM",   # simplify
+    "T20",   # print
+    "TC",    # type-checking-only imports
+    "UP",    # pyupgrade
+    "W",     # pycodestyle warnings
+]
+# `random` drives search sampling and retry jitter only; secrets go through `cryptography`.
+# ANN401: JSON payloads at the BRAIN and API boundaries are honestly `Any`.
+# N818: exception names read as outcomes (BrainForbidden, SubmissionFailed, SyncCancelled);
+# an "Error" suffix would make them clumsier, not clearer.
+lint.ignore = [ "ANN401", "N818", "S311" ]
+# S608 is suppressed per line (`# noqa: S608`), never per file, so new dynamic SQL still
+# trips the linter. Each noqa site is audited: values are bound `?` params; interpolated
+# SQL is only module constants, literal columns, placeholder lists, or whitelist lookups
+# (SORTABLE, ALPHA_METRICS, _KEYS).
+# FastAPI resolves route signatures at runtime; ruff can't see that through `@router.get`.
+lint.per-file-ignores."src/alpha_harness/api/*" = [ "TC" ]
+# `type_annotation_map` is SQLAlchemy's documented declarative idiom.
+lint.per-file-ignores."src/alpha_harness/db/models.py" = [ "RUF012" ]
+# "›" is the category breadcrumb separator shown in the UI.
+lint.allowed-confusables = [ "›" ]
+# Pydantic and SQLAlchemy resolve annotations at runtime; their imports must stay real.
+lint.flake8-type-checking.runtime-evaluated-base-classes = [
+    "pydantic.BaseModel",
+    "sqlalchemy.orm.DeclarativeBase",
+]
+
+[tool.pyproject-fmt]
+indent = 4
+keep_full_version = true
+generate_python_version_classifiers = false
+
+# pyrefly is the sub-second loop (pre-commit); basedpyright strict stays in `check`.
+[tool.pyrefly]
+project-includes = [ "src" ]
+# Honor the audited `# pyright: ignore[...]` sites instead of duplicating them.
+permissive-ignores = true
+
+[tool.basedpyright]
+pythonVersion = "3.14"
+venv = ".venv"
+venvPath = "."
+typeCheckingMode = "strict"
+include = [ "src" ]
+# pyarrow ships no stubs; its values are Unknown like duckdb's.
+reportMissingTypeStubs = false
+# Unknown leaks come from JSON payloads and un-stubbed duckdb/optuna; casting them away would
+# be type theater. Re-enable per module once those boundaries sit behind typed wrappers.
+reportUnknownArgumentType = false
+reportUnknownLambdaType = false
+reportUnknownMemberType = false
+reportUnknownParameterType = false
+reportUnknownVariableType = false

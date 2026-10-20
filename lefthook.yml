@@ -1,0 +1,98 @@
+# One task interface for both halves: `lefthook run dev|format|check|build|gate`.
+# Every tool comes from uv.lock / pnpm-lock.yaml (`uv run`, `pnpm`), never an unpinned `uvx`.
+
+# Sub-second checks before each commit. basedpyright strict (~9s) stays in `check`.
+pre-commit:
+  parallel: true
+  jobs:
+    - name: ruff
+      root: backend/
+      glob: "*.py"
+      run: uv run ruff check --fix {staged_files} && uv run ruff format {staged_files}
+      stage_fixed: true
+    - name: pyproject-fmt
+      root: backend/
+      # Matched against the path from the repository root, so a bare name never matches:
+      # this job silently skipped every commit. ``*.py`` works because ``*`` crosses
+      # directories here.
+      glob: "backend/pyproject.toml"
+      # It exits 1 whenever it rewrites, which would fail the commit over its own fix; the
+      # re-check passes once the file is formatted and still fails on a file it cannot read.
+      run: uv run pyproject-fmt pyproject.toml || uv run pyproject-fmt --check pyproject.toml
+      stage_fixed: true
+    - name: pyrefly
+      root: backend/
+      glob: "*.py"
+      run: uv run pyrefly check
+    - name: biome
+      root: frontend/
+      glob: "*.{ts,tsx,css,json}"
+      run: pnpm exec biome check --write --no-errors-on-unmatched {staged_files}
+      stage_fixed: true
+    - name: design
+      # At the repository root, so the bare name is the whole path and does match.
+      glob: "DESIGN.md"
+      run: sh frontend/tools/design-lint.sh DESIGN.md
+
+dev:
+  parallel: true
+  # Without this lefthook buffers a job's output and only prints it if the job fails, so a
+  # server that never exits prints nothing at all.
+  follow: true
+  jobs:
+    - name: backend
+      root: backend/
+      run: uv run uvicorn alpha_harness.main:app --reload --port 8000
+    - name: frontend
+      root: frontend/
+      run: pnpm dev
+
+format:
+  parallel: true
+  jobs:
+    - name: backend
+      root: backend/
+      run: uv run ruff check --fix . && uv run ruff format . && uv run pyproject-fmt pyproject.toml
+    - name: frontend
+      root: frontend/
+      run: pnpm format
+    # The frontend's API types, regenerated from the backend's response models.
+    - name: contract
+      run: sh frontend/tools/codegen/generate.sh frontend/src/api/generated.ts
+
+check:
+  parallel: true
+  jobs:
+    - name: backend
+      root: backend/
+      run: >-
+        uv run ruff check . && uv run ruff format --check . && uv run pyproject-fmt --check pyproject.toml
+        && uv run pyrefly check && uv run basedpyright
+    # The Windows launcher is frozen separately and imports nothing from the backend, so it
+    # sits outside the package and would otherwise be the one Python here nothing checks.
+    - name: launcher
+      root: backend/
+      run: uv run ruff check ../launcher && uv run ruff format --check ../launcher
+    - name: frontend
+      root: frontend/
+      run: pnpm check
+    - name: contract
+      run: sh frontend/tools/codegen/generate.sh --check frontend/src/api/generated.ts
+    - name: design
+      run: sh frontend/tools/design-lint.sh DESIGN.md
+
+build:
+  jobs:
+    - name: frontend
+      root: frontend/
+      run: pnpm build
+    # The wheel carries no lock; consultants install with `uvx -c dist/constraints.txt`.
+    - name: constraints
+      root: backend/
+      run: uv export --frozen --no-dev --no-emit-project -o dist/constraints.txt
+
+# Full gate: check -> build, each stage running both halves in parallel.
+gate:
+  jobs:
+    - name: gate
+      run: lefthook run check && lefthook run build
