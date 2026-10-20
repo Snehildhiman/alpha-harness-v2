@@ -129,6 +129,34 @@ PROVIDERS: dict[str, Provider] = {
         limits_url="https://huggingface.co/docs/inference-providers/pricing",
         key_hint="hf_…",
     ),
+    # Cohere's OpenAI-compatible endpoint; its free trial key allows about 1,000 calls a
+    # month, enough for a few LLM tasks.
+    "cohere": Provider(
+        id="cohere",
+        label="Cohere",
+        base_url="https://api.cohere.ai/compatibility/v1",
+        onboarding_url="https://dashboard.cohere.com/api-keys",
+        limits_url="https://docs.cohere.com/docs/rate-limits",
+        key_hint="your trial key",
+    ),
+    # Vercel's AI Gateway: one key for many models, with a monthly free credit.
+    "vercel": Provider(
+        id="vercel",
+        label="Vercel AI Gateway",
+        base_url="https://ai-gateway.vercel.sh/v1",
+        onboarding_url="https://vercel.com/docs/ai-gateway",
+        limits_url="https://vercel.com/docs/ai-gateway/pricing",
+        key_hint="your AI Gateway API key",
+    ),
+    # LM Studio's local server, like Ollama: any model you downloaded, free and private.
+    "lmstudio": Provider(
+        id="lmstudio",
+        label="LM Studio (on this computer)",
+        base_url="http://localhost:1234/v1",
+        onboarding_url="https://lmstudio.ai/download",
+        limits_url="https://lmstudio.ai/docs/developer",
+        key_hint="no key needed: type lmstudio",
+    ),
     # A model running on this computer through Ollama: free, unlimited and private, at the
     # laptop's own speed. Ollama serves the same chat-completions protocol; it asks for no
     # key, so any text stands in for one.
