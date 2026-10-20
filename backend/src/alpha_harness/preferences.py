@@ -63,6 +63,9 @@ class Preferences(Out):
     screen_factor: int = Field(default=4, ge=1, le=10)
     #: Share of each screened round picked at random, so the models keep learning.
     screen_explore: float = Field(default=0.2, ge=0.0, le=0.5)
+    #: Screened-out points teach the search the models' estimate (steering) instead of
+    #: being dropped. Off: the search learns only from BRAIN's results.
+    screen_steer: bool = True
     #: Every 30 minutes, re-deal the cores the running tasks hold toward the tasks whose
     #: recent Alphas pass most often. Off: every task keeps the cores it was given.
     auto_balance_cores: bool = False
@@ -113,6 +116,7 @@ def apply(state: AppState, preferences: Preferences) -> None:
     state.predictors.auto = preferences.auto_retrain
     state.optimizer.screen_factor = preferences.screen_factor
     state.optimizer.screen_explore = preferences.screen_explore
+    state.optimizer.screen_steer = preferences.screen_steer
     state.governor.enabled = preferences.auto_balance_cores
     state.autopilot.configure(
         enabled=preferences.autopilot,

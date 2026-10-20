@@ -126,3 +126,12 @@ def test_screening_report_compares_model_and_random_picks(tmp_path: Any) -> None
         return {g.group: (g.passing, g.refused) for g in report.groups}
 
     assert asyncio.run(body()) == {"explore": (0, 2), "model": (2, 1)}
+
+
+def test_steering_tells_the_search_a_penalised_estimate() -> None:
+    from alpha_harness.labs.scheduler import STEER_PENALTY, steered
+
+    assert steered({"sharpe": 1.5}, 1.0) == 1.5
+    assert steered({"sharpe": 1.5}, 0.5) == 1.5 - STEER_PENALTY * 0.5
+    assert steered({}, 0.9) is None
+    assert steered({"sharpe": 1.0}, None) is None

@@ -107,6 +107,9 @@ class Optimizer:
         #: picked at random instead, so the models keep learning outside their comfort zone.
         self.screen_factor = 4
         self.screen_explore = 0.2
+        #: Tell the sampler the models' estimate for screened-out points, so it steers
+        #: toward what the models expect to pass instead of only discarding the rest.
+        self.screen_steer = True
         #: The trained models (``AppState.predictors``), set once the app state exists.
         self.predictors: Any = None
         self._task: asyncio.Task[None] | None = None

@@ -383,6 +383,19 @@ async def advance(optimizer: Optimizer, study_id: int) -> int:
     return await _queue(optimizer, row, last_number, picked)
 
 
+#: Sharpe units taken off a model estimate for every point of chance it lacks of passing.
+STEER_PENALTY = 1.5
+
+
+def steered(predicted: dict[str, float], chance: float | None) -> float | None:
+    """What a screened-out point is told to the sampler as: its predicted Sharpe, less a
+    penalty for its chance of failing a check. ``None`` when the models said nothing."""
+    sharpe = predicted.get("sharpe")
+    if sharpe is None or chance is None:
+        return None
+    return float(sharpe) - STEER_PENALTY * (1.0 - float(chance))
+
+
 async def _screened(
     optimizer: Optimizer,
     predictors: Any,
@@ -405,9 +418,22 @@ async def _screened(
     chosen = screen.pick(chances, want, explore=optimizer.screen_explore, rng=random.Random())
     keep = set(chosen.keep)
 
+    steer = getattr(optimizer, "screen_steer", False)
+    objectives = study.directions
+
     def prune() -> None:
         for index, (trial, _, _) in enumerate(picked):
-            if index not in keep:
+            if index in keep:
+                continue
+            guess = steered(predicted[index], chances[index]) if steer else None
+            if guess is not None and len(objectives) == 1:
+                # Steering: the sampler learns the models' verdict on points never simulated,
+                # so it asks next where the models expect passing Alphas, not only where
+                # BRAIN has already answered. Real results outnumber none of these for long:
+                # each kept point comes back with BRAIN's own figure.
+                trial.set_user_attr("model_estimate", True)
+                study.tell(trial, guess)
+            else:
                 study.tell(trial, state=OptunaState.PRUNED)
 
     await asyncio.to_thread(prune)

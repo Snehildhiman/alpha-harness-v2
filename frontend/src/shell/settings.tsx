@@ -301,6 +301,17 @@ function TaskRows({ current, change }: Rows) {
         stacked
       />
       <SettingRow
+        title="Let the models steer the search"
+        description="The candidates the screen leaves out still teach the Search and Template Labs what the models expect of them (their predicted Sharpe, less a penalty for a low chance of passing), so the next round is asked where the models expect passing Alphas. Off, the labs learn only from BRAIN's own results."
+        control={(labels) => (
+          <Switch
+            checked={current.screenSteer}
+            onChange={(on) => change({ screenSteer: on })}
+            {...labels}
+          />
+        )}
+      />
+      <SettingRow
         title="Trust a correlation pass for"
         description="Prod and Power Pool correlation rise as others submit. A passing result older than this moves an Alpha from Submittable to Needs re-check on the Alpha Types screen."
         control={() => (

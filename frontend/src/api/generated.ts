@@ -5754,6 +5754,11 @@ export interface components {
              */
             screenFactor: number;
             /**
+             * Screensteer
+             * @default true
+             */
+            screenSteer: boolean;
+            /**
              * Updatecheckhours
              * @default 1
              * @enum {integer}
