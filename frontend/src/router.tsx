@@ -185,6 +185,20 @@ const poolTab = createRoute({
   component: lazyRouteComponent(() => import('@/screens/pool'), 'PoolScreen'),
 })
 
+const types = createRoute({ getParentRoute: () => root, path: '/types' })
+const typesIndex = createRoute({
+  getParentRoute: () => types,
+  path: '/',
+  beforeLoad: () => {
+    throw redirect({ to: '/types/$tab', params: { tab: 'regular' } })
+  },
+})
+const typesTab = createRoute({
+  getParentRoute: () => types,
+  path: '$tab',
+  component: lazyRouteComponent(() => import('@/screens/types'), 'TypesScreen'),
+})
+
 const portfolio = createRoute({
   getParentRoute: () => root,
   path: '/portfolio',
@@ -260,6 +274,7 @@ const routeTree = root.addChildren([
   competitionsRoute,
   tasks.addChildren([tasksIndex, taskResults]),
   pool.addChildren([poolIndex, poolTab]),
+  types.addChildren([typesIndex, typesTab]),
   portfolio,
   alpha,
   ai.addChildren([aiIndex, aiTab, aiThread]),

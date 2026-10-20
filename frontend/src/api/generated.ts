@@ -664,6 +664,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/crowding/datasets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Datasets
+         * @description Datasets in one market, fastest-growing first over ``days``.
+         */
+        get: operations["datasets_api_crowding_datasets_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/crowding/days": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Snapshot Days
+         * @description Every day a crowding snapshot exists for.
+         */
+        get: operations["snapshot_days_api_crowding_days_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/crowding/fields": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Fields
+         * @description Fields in one market (optionally one dataset), fastest-growing first over ``days``.
+         */
+        get: operations["fields_api_crowding_fields_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/evolution-lab/options": {
         parameters: {
             query?: never;
@@ -1640,6 +1700,43 @@ export interface paths {
          * @description Add the search to Tasks, not started. Running it is the Tasks route's job.
          */
         post: operations["add_task_api_search_lab_tasks_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/separation/alphas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Tab
+         * @description One tab's Alphas with one verdict, best first.
+         */
+        get: operations["tab_api_separation_alphas_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/separation/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Summary */
+        get: operations["get_summary_api_separation_summary_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3449,6 +3546,34 @@ export interface components {
             /** Value Score */
             value_score: number | null;
         };
+        /** DatasetTrend */
+        DatasetTrend: {
+            /** Alphacount */
+            alphaCount: number | null;
+            /** Alphagrowth */
+            alphaGrowth: number | null;
+            /** Alphagrowthperday */
+            alphaGrowthPerDay: number | null;
+            /**
+             * Asof
+             * Format: date
+             */
+            asOf: string;
+            /** Datasetid */
+            datasetId: string;
+            /** Fieldcount */
+            fieldCount: number | null;
+            /** Pyramidmultiplier */
+            pyramidMultiplier: number | null;
+            /** Since */
+            since: string | null;
+            /** Themes */
+            themes: string | null;
+            /** Usercount */
+            userCount: number | null;
+            /** Usergrowth */
+            userGrowth: number | null;
+        };
         /** DropResult */
         DropResult: {
             /** Dropped */
@@ -3730,6 +3855,25 @@ export interface components {
             /** Total */
             total: number;
         };
+        /** FieldTrend */
+        FieldTrend: {
+            /** Alphacount */
+            alphaCount: number | null;
+            /** Alphagrowth */
+            alphaGrowth: number | null;
+            /** Asof */
+            asOf: string | null;
+            /** Datasetid */
+            datasetId: string | null;
+            /** Fieldid */
+            fieldId: string;
+            /** Since */
+            since: string | null;
+            /** Usercount */
+            userCount: number | null;
+            /** Usergrowth */
+            userGrowth: number | null;
+        };
         /**
          * FieldsVariable
          * @description A variable whose values are data fields: the chosen datasets', narrowed by a filter.
@@ -3799,6 +3943,17 @@ export interface components {
             /** Websocketclients */
             websocketClients: number;
         };
+        /** Issue */
+        Issue: {
+            /** Limit */
+            limit?: unknown;
+            /** Name */
+            name: string;
+            /** Result */
+            result: string;
+            /** Value */
+            value?: unknown;
+        };
         /** KeyFailed */
         KeyFailed: {
             /** Error */
@@ -3839,6 +3994,11 @@ export interface components {
              */
             ok: true;
         };
+        /**
+         * Kind
+         * @enum {string}
+         */
+        Kind: "regular" | "ra" | "power_pool" | "theme" | "super";
         /** LLMBudget */
         LLMBudget: {
             /** Allowedtoday */
@@ -4604,9 +4764,19 @@ export interface components {
         Preferences: {
             /**
              * Autoupdate
-             * @default true
+             * @default false
              */
             autoUpdate: boolean;
+            /**
+             * Dailysync
+             * @default true
+             */
+            dailySync: boolean;
+            /**
+             * Dailysynchour
+             * @default 6
+             */
+            dailySyncHour: number;
             /**
              * Defaultcores
              * @default 4
@@ -4631,6 +4801,12 @@ export interface components {
             pnlDownload: boolean;
             /** Quickregions */
             quickRegions?: string[];
+            /**
+             * Rasyncdays
+             * @default 3
+             * @enum {integer}
+             */
+            raSyncDays: 0 | 1 | 2 | 3 | 7;
             /**
              * Updatecheckhours
              * @default 1
@@ -5063,6 +5239,30 @@ export interface components {
              */
             thread_id?: number | null;
         };
+        /** Scope */
+        Scope: {
+            /**
+             * Days
+             * @default 7
+             */
+            days: number;
+            /** Delay */
+            delay: number;
+            /**
+             * Instrumenttype
+             * @default EQUITY
+             */
+            instrumentType: string;
+            /**
+             * Limit
+             * @default 200
+             */
+            limit: number;
+            /** Region */
+            region: string;
+            /** Universe */
+            universe: string;
+        };
         /** SearchRequest */
         SearchRequest: {
             /**
@@ -5437,6 +5637,17 @@ export interface components {
             /** Submitted */
             submitted: boolean;
         };
+        /** Summary */
+        Summary: {
+            /** Alphas */
+            alphas: number;
+            /** Counts */
+            counts: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+        };
         /** SuperPlan */
         SuperPlan: {
             /** Combos */
@@ -5598,6 +5809,56 @@ export interface components {
          * @enum {string}
          */
         SyncStatus: "RUNNING" | "COMPLETE" | "FAILED" | "CANCELLED";
+        /** TabPage */
+        TabPage: {
+            /** Rows */
+            rows: components["schemas"]["TabRow"][];
+            /** Total */
+            total: number;
+        };
+        /** TabRow */
+        TabRow: {
+            /** Alphaid */
+            alphaId: string;
+            /** Children */
+            children: string[];
+            /** Datecreated */
+            dateCreated: string | null;
+            /** Decay */
+            decay: number | null;
+            /** Delay */
+            delay: number | null;
+            /** Expression */
+            expression: string | null;
+            /** Failed */
+            failed: components["schemas"]["Issue"][];
+            /** Fitness */
+            fitness: number | null;
+            /** Kind */
+            kind: string;
+            /** Margin */
+            margin: number | null;
+            /** Neutralization */
+            neutralization: string | null;
+            /** Pending */
+            pending: string[];
+            /** Region */
+            region: string | null;
+            /** Regionspassing */
+            regionsPassing: string[];
+            /** Regionstried */
+            regionsTried: string[];
+            /** Returns */
+            returns: number | null;
+            /** Sharpe */
+            sharpe: number | null;
+            /** Turnover */
+            turnover: number | null;
+            /** Universe */
+            universe: string | null;
+            /** Verdict */
+            verdict: string;
+        };
         /**
          * TaskAlpha
          * @description A submittable Alpha, with the task that found it.
@@ -6189,6 +6450,11 @@ export interface components {
             /** Universe */
             universe: string | null;
         };
+        /**
+         * Verdict
+         * @enum {string}
+         */
+        Verdict: "submitted" | "submittable" | "pending" | "refused";
         /**
          * VerifyRequest
          * @description The Persona inquiry a sign-in was refused with.
@@ -7211,6 +7477,94 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Competitions"];
+                };
+            };
+        };
+    };
+    datasets_api_crowding_datasets_get: {
+        parameters: {
+            query: {
+                instrumentType?: string;
+                region: string;
+                delay: number;
+                universe: string;
+                days?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatasetTrend"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    snapshot_days_api_crowding_days_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
+                };
+            };
+        };
+    };
+    fields_api_crowding_fields_get: {
+        parameters: {
+            query: {
+                scope: components["schemas"]["Scope"];
+                datasetId?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FieldTrend"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -8773,6 +9127,62 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    tab_api_separation_alphas_get: {
+        parameters: {
+            query: {
+                tab: components["schemas"]["Kind"];
+                verdict?: components["schemas"]["Verdict"];
+                region?: string | null;
+                sort?: "sharpe" | "fitness" | "turnover" | "returns" | "margin" | "date_created";
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TabPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_summary_api_separation_summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Summary"];
                 };
             };
         };

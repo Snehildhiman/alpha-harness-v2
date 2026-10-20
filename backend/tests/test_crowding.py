@@ -28,8 +28,14 @@ async def _open(tmp_path: Any) -> Catalog:
     return catalog
 
 
-async def _dataset(catalog: Catalog, dataset_id: str, alphas: int, users: int, at: datetime,
-                   market: tuple[str, str, int, str] = USA) -> None:
+async def _dataset(
+    catalog: Catalog,
+    dataset_id: str,
+    alphas: int,
+    users: int,
+    at: datetime,
+    market: tuple[str, str, int, str] = USA,
+) -> None:
     await catalog.execute(
         "INSERT OR REPLACE INTO data_set (dataset_id, user_count, alpha_count, field_count,"
         " instrument_type, region, delay, universe, synced_at) VALUES (?, ?, ?, 10, ?, ?, ?, ?, ?)",
@@ -37,8 +43,9 @@ async def _dataset(catalog: Catalog, dataset_id: str, alphas: int, users: int, a
     )
 
 
-async def _field(catalog: Catalog, field_id: str, dataset_id: str, alphas: int, users: int,
-                 at: datetime) -> None:
+async def _field(
+    catalog: Catalog, field_id: str, dataset_id: str, alphas: int, users: int, at: datetime
+) -> None:
     await catalog.execute(
         "DELETE FROM data_field WHERE field_id = ? AND region = 'USA'", [field_id]
     )

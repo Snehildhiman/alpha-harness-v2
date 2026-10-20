@@ -8,6 +8,7 @@ import {
   ListChecksIcon,
   RefreshCwIcon,
   ScrollTextIcon,
+  ShapesIcon,
   SparklesIcon,
   TriangleIcon,
   TrophyIcon,
@@ -18,6 +19,15 @@ import {
 export const POOL_TABS = [
   { tab: 'stored', label: 'Stored' },
   { tab: 'submittable', label: 'Submittable' },
+] as const
+
+/** Alpha Types: one tab per kind, each judged by its own checks. */
+export const TYPE_TABS = [
+  { tab: 'regular', label: 'Regular' },
+  { tab: 'ra', label: 'Region Agnostic' },
+  { tab: 'power-pool', label: 'Power Pool' },
+  { tab: 'theme', label: 'Current Theme' },
+  { tab: 'super', label: 'SuperAlpha' },
 ] as const
 
 export const AI_TABS = [
@@ -101,6 +111,13 @@ export const NAV = [
     label: 'Alphas',
     icon: LayersIcon,
     tabs: POOL_TABS,
+  },
+  {
+    to: '/types',
+    group: 'Results',
+    label: 'Alpha Types',
+    icon: ShapesIcon,
+    tabs: TYPE_TABS,
   },
   {
     to: '/portfolio',
