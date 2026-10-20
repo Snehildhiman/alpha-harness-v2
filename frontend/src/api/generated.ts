@@ -1726,6 +1726,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/separation/recheck": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Recheck
+         * @description Re-run BRAIN's submission checks on a tab's best Alphas, without submitting.
+         *
+         *     Fresh prod, Power Pool and self-correlation results replace the stored ones, so the tabs
+         *     re-sort themselves as each answer lands. Spends no simulations. RA families are re-checked
+         *     child by child.
+         */
+        post: operations["recheck_api_separation_recheck_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/separation/summary": {
         parameters: {
             query?: never;
@@ -3135,6 +3159,17 @@ export interface components {
             universe?: string | null;
             /** Vector Operators */
             vector_operators?: string[];
+        };
+        /** Body_recheck_api_separation_recheck_post */
+        Body_recheck_api_separation_recheck_post: {
+            /**
+             * Limit
+             * @default 50
+             */
+            limit: number;
+            tab: components["schemas"]["Kind"];
+            /** @default recheck */
+            verdict: components["schemas"]["Verdict"];
         };
         /**
          * BrainPayload
@@ -4792,6 +4827,11 @@ export interface components {
              */
             autoUpdate: boolean;
             /**
+             * Correlationfreshhours
+             * @default 24
+             */
+            correlationFreshHours: number;
+            /**
              * Dailysync
              * @default true
              */
@@ -5058,6 +5098,13 @@ export interface components {
              */
             level: "MINIMAL" | "LOW" | "MEDIUM" | "HIGH";
             value: components["schemas"]["Reasoning"];
+        };
+        /** RecheckStarted */
+        RecheckStarted: {
+            /** Alphas */
+            alphas: number;
+            /** Taskid */
+            taskId: string;
         };
         /** Recipe */
         Recipe: {
@@ -5864,6 +5911,8 @@ export interface components {
         TabRow: {
             /** Alphaid */
             alphaId: string;
+            /** Checkedat */
+            checkedAt: string | null;
             /** Children */
             children: string[];
             /** Datecreated */
@@ -6532,7 +6581,7 @@ export interface components {
          * Verdict
          * @enum {string}
          */
-        Verdict: "submitted" | "submittable" | "pending" | "refused";
+        Verdict: "submitted" | "submittable" | "recheck" | "pending" | "refused";
         /**
          * VerifyRequest
          * @description The Persona inquiry a sign-in was refused with.
@@ -9232,6 +9281,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TabPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recheck_api_separation_recheck_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Body_recheck_api_separation_recheck_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecheckStarted"];
                 };
             };
             /** @description Validation Error */

@@ -5,17 +5,21 @@
  * correlation instead. A region-agnostic family is one row, submittable once two regions pass.
  */
 
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from '@tanstack/react-router'
+import { RefreshCwIcon } from 'lucide-react'
 import { useState } from 'react'
 import { fmt } from '@/lib/format'
+import { useRefetchOn } from '@/lib/ws'
 import { DetailSheet } from '@/screens/pool/detail'
 import { TYPE_TABS } from '@/shell/nav'
 import {
   Badge,
+  Button,
   Empty,
   ErrorNotice,
   LINK,
+  Notice,
   Page,
   PageHeader,
   Panel,
@@ -26,10 +30,20 @@ import {
   TEXT_TONE,
 } from '@/ui/kit'
 import { type Column, DataTable, Pager } from '@/ui/table'
-import { type Kind, type TabRow, type TypeSort, typeSummary, typeTab, type Verdict } from './api'
+import {
+  type Kind,
+  recheck,
+  type TabRow,
+  type TypeSort,
+  typeSummary,
+  typeTab,
+  type Verdict,
+} from './api'
 import { ThemeCalendar } from './themes'
 
 const LIMIT = 100
+/** Alphas one re-check takes on, best Sharpe first: `/check` is slow and rate-limited. */
+const RECHECK_LIMIT = 50
 
 const KIND_OF_TAB: Record<string, Kind> = {
   regular: 'regular',
@@ -41,6 +55,7 @@ const KIND_OF_TAB: Record<string, Kind> = {
 
 const VERDICTS: { value: Verdict; label: string }[] = [
   { value: 'submittable', label: 'Submittable' },
+  { value: 'recheck', label: 'Needs re-check' },
   { value: 'pending', label: 'Checks pending' },
   { value: 'refused', label: 'Failing' },
   { value: 'submitted', label: 'Submitted' },
@@ -139,6 +154,17 @@ const COLUMNS: Column<TabRow>[] = [
     align: 'right',
     cell: (r) => <span className="num">{fmt.pct(r.turnover)}</span>,
   },
+  {
+    key: 'checked',
+    header: 'Checked',
+    width: '92px',
+    align: 'right',
+    cell: (r) => (
+      <span className="text-body-compact text-ink-subtle" title={r.checkedAt ?? ''}>
+        {fmt.ago(r.checkedAt)}
+      </span>
+    ),
+  },
   { key: 'why', header: 'What stops it', width: 'minmax(220px,2fr)', cell: (r) => <Why row={r} /> },
 ]
 
@@ -168,6 +194,13 @@ export function TypesScreen() {
   const [detailId, setDetailId] = useState<string | null>(null)
 
   const summary = useQuery(typeSummary)
+  const client = useQueryClient()
+  // A re-check writes fresh checks as each answer lands; follow it while it runs.
+  useRefetchOn('tasks', ['separation'], 4000)
+  const rechecking = useMutation({
+    mutationFn: () => recheck({ tab: kind ?? 'regular', verdict, limit: RECHECK_LIMIT }),
+    onSuccess: () => void client.invalidateQueries({ queryKey: ['separation'] }),
+  })
   const page = useQuery({
     ...typeTab({ tab: kind ?? 'regular', verdict, sort, limit: LIMIT, offset }),
     enabled: kind !== undefined,
@@ -186,7 +219,9 @@ export function TypesScreen() {
       <TabBar>
         {TYPE_TABS.map((t) => {
           const k = KIND_OF_TAB[t.tab]
-          const n = k ? summary.data?.counts[k]?.['submittable'] : undefined
+          const c = k ? summary.data?.counts[k] : undefined
+          // Candidates: submittable now, or once a re-check confirms them.
+          const n = c ? (c['submittable'] ?? 0) + (c['recheck'] ?? 0) : undefined
           return (
             <TabLink key={t.tab} to="/types/$tab" params={{ tab: t.tab }}>
               {t.label}
@@ -261,6 +296,35 @@ export function TypesScreen() {
                   setOffset(0)
                 }}
               />
+              {(verdict === 'recheck' || verdict === 'submittable') && (
+                <Notice
+                  title={
+                    verdict === 'recheck'
+                      ? 'These passed, but their correlation results are old'
+                      : 'Re-check right before you submit'
+                  }
+                  action={
+                    <Button
+                      variant={verdict === 'recheck' ? 'primary' : 'secondary'}
+                      loading={rechecking.isPending}
+                      disabled={!page.data?.total}
+                      onClick={() => rechecking.mutate()}
+                    >
+                      <RefreshCwIcon aria-hidden />
+                      Re-check top {fmt.int(Math.min(RECHECK_LIMIT, page.data?.total ?? 0))}
+                    </Button>
+                  }
+                >
+                  Prod and Power Pool correlation rise as others submit. Re-checking asks BRAIN to
+                  run the submission checks again (no simulations, nothing submitted), and each
+                  Alpha moves to the right list as its answer lands.
+                  {rechecking.isSuccess &&
+                    ` Re-checking ${fmt.int(rechecking.data.alphas)} Alphas in the background.`}
+                </Notice>
+              )}
+              {rechecking.isError && (
+                <ErrorNotice error={rechecking.error} title="Could not start the re-check" />
+              )}
               {(summary.isError || page.isError) && (
                 <ErrorNotice
                   error={summary.error ?? page.error}

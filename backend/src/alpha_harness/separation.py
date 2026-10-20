@@ -22,6 +22,7 @@ import json
 from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import Any
 
@@ -40,8 +41,38 @@ class Kind(StrEnum):
 class Verdict(StrEnum):
     SUBMITTED = "submitted"
     SUBMITTABLE = "submittable"
+    #: Every check passes, but its correlation results are too old to trust: the pool has
+    #: moved since, and prod and Power Pool correlation only drift up. Re-check before submitting.
+    RECHECK = "recheck"
     PENDING = "pending"
     REFUSED = "refused"
+
+
+@dataclass(frozen=True, slots=True)
+class Freshness:
+    """How old a passing correlation result may be and still count. ``now`` is naive UTC."""
+
+    now: datetime
+    max_age: timedelta
+
+    def stale(self, row: dict[str, Any]) -> bool:
+        checked = _when(row)
+        return checked is None or self.now - checked > self.max_age
+
+
+def _when(row: dict[str, Any]) -> datetime | None:
+    """When BRAIN last judged this Alpha: its last ``/check``, else when it was simulated."""
+    for key in ("checks_at", "date_created"):
+        value = row.get(key)
+        if isinstance(value, datetime):
+            return value.replace(tzinfo=None) if value.tzinfo else value
+        if isinstance(value, str) and value:
+            try:
+                parsed = datetime.fromisoformat(value)
+            except ValueError:
+                continue
+            return parsed.astimezone(UTC).replace(tzinfo=None) if parsed.tzinfo else parsed
+    return None
 
 
 PROD_CORRELATION = "PROD_CORRELATION"
@@ -81,6 +112,8 @@ class Judgement:
     regions_tried: list[str] = field(default_factory=list)
     #: Power Pool Alphas: how the running theme's rule reads this Alpha.
     theme_note: str | None = None
+    #: When BRAIN last judged it (naive UTC): its last re-check, else its simulation.
+    checked_at: datetime | None = None
 
 
 def _name(check: dict[str, Any]) -> str:
@@ -243,7 +276,20 @@ def is_submitted(row: dict[str, Any]) -> bool:
 ThemeCheck = Callable[[dict[str, Any]], tuple[bool, str]]
 
 
-def judge(row: dict[str, Any], theme: ThemeCheck | None = None) -> Judgement:
+def _age_out(judgement: Judgement, rows: list[dict[str, Any]], fresh: Freshness | None) -> None:
+    """Move a submittable judgement to RECHECK when any row behind it is stale."""
+    judgement.checked_at = min((w for r in rows if (w := _when(r))), default=None)
+    if (
+        fresh is not None
+        and judgement.verdict == Verdict.SUBMITTABLE
+        and any(fresh.stale(r) for r in rows)
+    ):
+        judgement.verdict = Verdict.RECHECK
+
+
+def judge(
+    row: dict[str, Any], theme: ThemeCheck | None = None, fresh: Freshness | None = None
+) -> Judgement:
     """Judge one stored, non-RA vault row (or an RA child on its own)."""
     checks = checks_of(row.get("checks"))
     in_theme, note = False, None
@@ -260,6 +306,7 @@ def judge(row: dict[str, Any], theme: ThemeCheck | None = None) -> Judgement:
         # Placed by BRAIN's own MATCHES_THEMES; say so, with the local rule's view beside it.
         note = "BRAIN's theme check passed" + (f" (local rule: {note})" if note else "")
     judgement.theme_note = note
+    _age_out(judgement, [row], fresh)
     return judgement
 
 
@@ -331,7 +378,11 @@ class Judged:
     children: list[dict[str, Any]] = field(default_factory=list)
 
 
-def judge_all(rows: list[dict[str, Any]], theme: ThemeCheck | None = None) -> list[Judged]:
+def judge_all(
+    rows: list[dict[str, Any]],
+    theme: ThemeCheck | None = None,
+    fresh: Freshness | None = None,
+) -> list[Judged]:
     """Judge a whole vault. RA children are folded into their parent's row.
 
     A child whose parent is missing from the rows (an import that has not reached it yet)
@@ -347,11 +398,15 @@ def judge_all(rows: list[dict[str, Any]], theme: ThemeCheck | None = None) -> li
         elif sim_type == "RA_CHILD":
             children[family_key(row)].append(row)
         else:
-            out.append(Judged(row, judge(row, theme)))
-    for key, parent in parents.items():
-        family = children.pop(key, [])
-        out.append(Judged(parent, judge_family(parent, family), family))
-    out.extend(Judged(f[0], judge_family(f[0], f), f) for f in children.values())
+            out.append(Judged(row, judge(row, theme, fresh)))
+    families = [(parent, children.pop(key, [])) for key, parent in parents.items()]
+    families.extend((f[0], f) for f in children.values())
+    for parent, family in families:
+        judgement = judge_family(parent, family)
+        # A family is as fresh as the children it passes on.
+        passing = [c for c in family if str(c.get("region")) in judgement.regions_passing]
+        _age_out(judgement, passing or family, fresh)
+        out.append(Judged(parent, judgement, family))
     return out
 
 

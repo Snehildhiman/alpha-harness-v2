@@ -10,7 +10,7 @@ if the series are kept. The stored series rebuilds the platform's own figures (s
 
 import itertools
 import json
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -486,7 +486,12 @@ class AlphaVault:
         this alpha was stored with.
         """
         kept = json.dumps(without_quota_checks(checks))
-        await self.catalog.upsert("alpha", ("alpha_id", "checks"), [(alpha_id, kept)])
+        # Stamped so the type tabs know how fresh its correlation results are (naive UTC, as
+        # every catalog timestamp is stored).
+        now = datetime.now(UTC).replace(tzinfo=None)
+        await self.catalog.upsert(
+            "alpha", ("alpha_id", "checks", "checks_at"), [(alpha_id, kept, now)]
+        )
 
     # -- reading ---------------------------------------------------------
 

@@ -151,3 +151,39 @@ def test_summary_counts_theme_under_power_pool_too() -> None:
     assert counts["theme"]["submittable"] == 1
     assert counts["power_pool"]["submittable"] == 1
     assert counts["regular"]["submittable"] == 1
+
+
+def test_old_correlation_passes_move_to_recheck() -> None:
+    from datetime import datetime, timedelta
+
+    from alpha_harness.separation import Freshness
+
+    now = datetime(2026, 10, 20, 12, 0)
+    fresh = Freshness(now=now, max_age=timedelta(hours=24))
+    old = row(OK, alpha_id="old", date_created=now - timedelta(days=5))
+    rechecked = row(
+        OK, alpha_id="new", date_created=now - timedelta(days=5), checks_at=now - timedelta(hours=2)
+    )
+    failing = row(CROWDED, alpha_id="bad", date_created=now - timedelta(days=5))
+    got = {
+        j.row["alpha_id"]: j.judgement.verdict
+        for j in judge_all([old, rechecked, failing], fresh=fresh)
+    }
+    assert got == {"old": Verdict.RECHECK, "new": Verdict.SUBMITTABLE, "bad": Verdict.REFUSED}
+
+
+def test_ra_family_freshness_follows_its_passing_children() -> None:
+    from datetime import datetime, timedelta
+
+    from alpha_harness.separation import Freshness
+
+    now = datetime(2026, 10, 20, 12, 0)
+    rows = _family({"USA": OK, "EUR": OK})
+    for r in rows:
+        r["date_created"] = now - timedelta(days=3)
+    fam = judge_all(rows, fresh=Freshness(now=now, max_age=timedelta(hours=24)))[0].judgement
+    assert fam.verdict == Verdict.RECHECK
+    for r in rows[1:]:
+        r["checks_at"] = now - timedelta(hours=1)
+    fam = judge_all(rows, fresh=Freshness(now=now, max_age=timedelta(hours=24)))[0].judgement
+    assert fam.verdict == Verdict.SUBMITTABLE

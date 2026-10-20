@@ -185,6 +185,10 @@ CREATE TABLE IF NOT EXISTS alpha_pnl (
 -- is re-fetched: the old daily-pnl recordset is rounded separately from the platform's stats.
 ALTER TABLE alpha_pnl ADD COLUMN IF NOT EXISTS turnover DOUBLE;
 
+-- When BRAIN last re-ran this Alpha's submission checks through `/check` (v2). Correlation
+-- results drift upward as others submit, so a pass is trusted only while it is recent.
+ALTER TABLE alpha ADD COLUMN IF NOT EXISTS checks_at TIMESTAMP;
+
 -- Crowding history (v2): how busy each dataset and field was on each day a sync ran. The
 -- catalog tables above hold only today's counts; these keep the trend, which is what says a
 -- dataset is filling up before prod correlation does. Datasets are small, so every sync

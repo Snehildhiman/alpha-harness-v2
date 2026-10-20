@@ -11,14 +11,15 @@ changes, so paging and switching tabs cost nothing.
 import asyncio
 import json
 from dataclasses import asdict
-from datetime import date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Body, Query
 
 from .. import preferences
 from ..schemas import Out
 from ..separation import (
+    Freshness,
     Judged,
     Kind,
     ThemeCheck,
@@ -30,7 +31,7 @@ from ..separation import (
 )
 from ..themes import ThemeRule, check, current, fields_of
 from ..vault.yields import checks_of
-from .deps import State
+from .deps import State, refuse
 
 router = APIRouter(prefix="/api/separation", tags=["separation"])
 
@@ -38,7 +39,7 @@ COLUMNS = (
     "alpha_id, expression, sim_type, instrument_type, region, delay, universe, neutralization, "
     "decay, truncation, sharpe, fitness, turnover, returns, drawdown, margin, long_count, "
     "short_count, status, checks, classifications, simulation_mode, date_created, train_sharpe, "
-    "test_sharpe, after_cost_t10"
+    "test_sharpe, after_cost_t10, checks_at"
 )
 
 #: Figures a tab can sort by.
@@ -101,18 +102,24 @@ async def _judged(state: State) -> list[Judged]:
     synced catalog changed."""
     marker = await state.catalog.query(
         "SELECT (SELECT count(*) FROM alpha) AS n, (SELECT max(fetched_at) FROM alpha) AS t, "
-        "(SELECT max(synced_at) FROM data_field) AS c"
+        "(SELECT max(checks_at) FROM alpha) AS k, (SELECT max(synced_at) FROM data_field) AS c"
     )
-    rule = await _running_theme(state)
+    prefs = await preferences.load(state.db)
+    rule = current(prefs.power_pool_themes, _today())
+    now = datetime.now(UTC).replace(tzinfo=None)
+    fresh = Freshness(now=now, max_age=timedelta(hours=prefs.correlation_fresh_hours))
     key = (
         tuple(str(v) for v in marker[0].values()) if marker else None,
         json.dumps(rule.model_dump(mode="json")) if rule else None,
+        # Results age by the clock, not only by writes: re-judge at least hourly.
+        prefs.correlation_fresh_hours,
+        now.strftime("%Y-%m-%d %H"),
     )
     async with _lock:
         if _cache["key"] != key:
             rows = await state.catalog.query(f"SELECT {COLUMNS} FROM alpha")  # noqa: S608 - constant
             theme = await _categories(state, rows, rule) if rule else None
-            _cache["judged"] = await asyncio.to_thread(judge_all, rows, theme)
+            _cache["judged"] = await asyncio.to_thread(judge_all, rows, theme, fresh)
             _cache["key"] = key
         return _cache["judged"]
 
@@ -159,6 +166,8 @@ class TabRow(Out):
     children: list[str]
     #: Power Pool rows: how the running theme reads this Alpha.
     theme_note: str | None
+    #: When BRAIN last judged it: its last re-check, else its simulation (UTC).
+    checked_at: datetime | None
 
 
 class TabPage(Out):
@@ -205,6 +214,8 @@ def _row(item: Judged) -> TabRow:
         regions_tried=j.regions_tried,
         children=[str(c.get("alpha_id")) for c in item.children],
         theme_note=j.theme_note,
+        # Stored naive UTC; sent with its zone so the browser does not read it as local.
+        checked_at=j.checked_at.replace(tzinfo=UTC) if j.checked_at else None,
     )
 
 
@@ -274,3 +285,61 @@ async def tab(
     else:
         picked.sort(key=order)
     return TabPage(total=len(picked), rows=[_row(i) for i in picked[offset : offset + limit]])
+
+
+class RecheckStarted(Out):
+    task_id: str
+    alphas: int
+
+
+#: Most Alphas one re-check takes on: ``/check`` is slow and rate-limited.
+RECHECK_MAX = 200
+
+
+@router.post("/recheck")
+async def recheck(
+    state: State,
+    tab: Annotated[Kind, Body()],
+    verdict: Annotated[Verdict, Body()] = Verdict.RECHECK,
+    limit: Annotated[int, Body(ge=1, le=RECHECK_MAX)] = 50,
+) -> RecheckStarted:
+    """Re-run BRAIN's submission checks on a tab's best Alphas, without submitting.
+
+    Fresh prod, Power Pool and self-correlation results replace the stored ones, so the tabs
+    re-sort themselves as each answer lands. Spends no simulations. RA families are re-checked
+    child by child.
+    """
+    judged = [i for i in await _judged(state) if in_tab(i, tab) and i.judgement.verdict == verdict]
+    judged.sort(key=lambda i: -(_figure(i, "sharpe") or float("-inf")))
+    ids: list[str] = []
+    for item in judged[:limit]:
+        rows = item.children or [item.row]
+        ids.extend(str(r.get("alpha_id")) for r in rows)
+    if not ids:
+        raise refuse(409, "nothing_to_check", "No Alphas in this view to re-check.")
+
+    async def work(task: Any) -> str:
+        failed = 0
+        for done, alpha_id in enumerate(ids, start=1):
+            try:
+                body = await state.endpoints.check_alpha(alpha_id)
+                checks = (body.get("is") or {}).get("checks") or []
+                if checks:
+                    await state.alphas.save_checks(alpha_id, checks)
+            # One Alpha that BRAIN will not check must not stop the rest.
+            except Exception:  # noqa: BLE001
+                failed += 1
+            await state.tasks.update(
+                task, progress=done / len(ids), detail=f"Re-checked {done} of {len(ids)} Alphas"
+            )
+        return f"Re-checked {len(ids) - failed} of {len(ids)} Alphas" + (
+            f"; {failed} could not be read" if failed else ""
+        )
+
+    try:
+        task_id = await state.backfill.start_job(
+            "separation-recheck", f"Re-checking {len(ids)} {tab.value} Alphas", work
+        )
+    except RuntimeError as exc:
+        raise refuse(409, "busy", str(exc)) from exc
+    return RecheckStarted(task_id=task_id, alphas=len(ids))

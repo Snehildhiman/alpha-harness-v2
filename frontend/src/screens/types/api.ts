@@ -11,7 +11,7 @@ export type TabRow = Schemas['TabRow']
 
 /** The backend's kinds; the URL spells `power_pool` as `power-pool`. */
 export type Kind = 'regular' | 'ra' | 'power_pool' | 'theme' | 'super'
-export type Verdict = 'submittable' | 'pending' | 'refused' | 'submitted'
+export type Verdict = 'submittable' | 'recheck' | 'pending' | 'refused' | 'submitted'
 export type TypeSort = 'sharpe' | 'fitness' | 'turnover' | 'returns' | 'margin' | 'date_created'
 
 export const typeSummary = queryOptions({
@@ -40,3 +40,6 @@ export const themeCalendar = queryOptions({
 
 export const saveThemes = (rules: ThemeRule[]) =>
   http.put<ThemeRule[]>('/api/separation/themes', rules)
+
+export const recheck = (body: { tab: Kind; verdict: Verdict; limit: number }) =>
+  http.post<Schemas['RecheckStarted']>('/api/separation/recheck', body)
