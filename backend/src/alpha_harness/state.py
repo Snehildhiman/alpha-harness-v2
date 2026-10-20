@@ -29,6 +29,7 @@ from .db.models import SimStatus, SimulationRecord, utcnow
 from .db.sqlite import Database, snapshot
 from .engine.slots import BatchEngine
 from .engine.tracker import SimulationTracker
+from .engine.vault_dedup import VaultIndex
 from .labs.study import Optimizer
 from .llm.chat import ChatService
 from .llm.registry import ModelRegistry
@@ -96,6 +97,7 @@ class AppState:
         self.engine = BatchEngine(
             self.db, self.endpoints, self.tracker, on_unauthorized=self.renew_session
         )
+        self.engine.vault = VaultIndex(self.catalog)
         self.sync = CatalogSync(
             self.db,
             self.catalog,

@@ -21,6 +21,7 @@ from sqlalchemy import case, update
 
 from ..brain.errors import BrainError
 from ..brain.schemas import FULL_MODE, SimulationRequest, SimulationStatus, SimulationType
+from ..canon import canonical
 from ..db.models import ACTIVE, DedupEntry, QuotaSnapshot, SimStatus, SimulationRecord, utcnow
 
 if TYPE_CHECKING:
@@ -103,14 +104,32 @@ def hash_payload(payload: Any) -> str:
     return hashlib.sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
 
 
-def request_hash(request: SimulationRequest) -> str:
-    """What an identical request shares. ``FULL`` is BRAIN's default, so naming it changes
-    nothing: a Full re-run matches every Alpha simulated before modes were sent."""
+def _hashable(request: SimulationRequest) -> dict[str, Any]:
     payload = request.to_wire()
     settings = payload.get("settings")
     if isinstance(settings, dict) and settings.get("simulationMode") == FULL_MODE:
         del settings["simulationMode"]
+    return payload
+
+
+def request_hash(request: SimulationRequest) -> str:
+    """What an identical request shares. ``FULL`` is BRAIN's default, so naming it changes
+    nothing: a Full re-run matches every Alpha simulated before modes were sent.
+
+    The expression is hashed in its canonical spelling (:mod:`alpha_harness.canon`), so
+    ``add(a, b)`` and ``b + a`` written by two labs are recognised as one alpha.
+    """
+    payload = _hashable(request)
+    for key in ("regular", "combo", "selection"):
+        if isinstance(payload.get(key), str):
+            payload[key] = canonical(payload[key])
     return hash_payload(payload)
+
+
+def legacy_request_hash(request: SimulationRequest) -> str:
+    """The exact-text hash every row written before canonical hashing carries. Looked up
+    beside :func:`request_hash` so older results are still reused."""
+    return hash_payload(_hashable(request))
 
 
 async def remember(session: Any, record: SimulationRecord, alpha_id: str) -> None:

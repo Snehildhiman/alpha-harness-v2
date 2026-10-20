@@ -43,6 +43,7 @@ from .lifecycle import (
     extract_simulation_id,
     finish,
     hash_payload,
+    legacy_request_hash,
     new_record,
     record_launch,
     request_hash,
@@ -65,6 +66,7 @@ if TYPE_CHECKING:
     from ..brain.endpoints import BrainEndpoints
     from ..db.sqlite import Database
     from .tracker import SimulationTracker
+    from .vault_dedup import VaultIndex
 
 log = structlog.get_logger(__name__)
 
@@ -136,6 +138,8 @@ class BatchEngine:
         #: Monotonic time of BRAIN's quota reset; the flag clears once it passes.
         self._limit_resets_at: float | None = None
         self._enqueue_lock = asyncio.Lock()
+        #: Canonical index of the vault, so an Alpha already imported is never re-run.
+        self.vault: VaultIndex | None = None
         #: Reads finished batches back beside the scheduling round; at most one at a time.
         self._expansion: asyncio.Task[None] | None = None
         #: Child platform id -> (body, outcome) of a finished child not yet written to its
@@ -221,6 +225,9 @@ class BatchEngine:
         skipped: list[dict[str, Any]] = []
         outcomes: list[dict[str, Any]] = []
         moded = [self._moded(request) for request in requests]
+        # Alphas the vault already holds (imported from BRAIN, not only sent from here).
+        # Read before the lock: the first read after an import indexes the whole vault.
+        stored = await self.vault.find(requests) if self.vault is not None else [None] * len(moded)
 
         # The duplicate lookup and the insert must not interleave with another enqueue:
         # two callers would each find no active row and both queue, spending quota twice.
@@ -232,13 +239,20 @@ class BatchEngine:
                 request_hash(asked) if sent is not asked else None
                 for sent, asked in zip(moded, requests, strict=True)
             ]
+            # Rows written before canonical hashing carry the exact-text hash; asking for both
+            # keeps every result simulated so far reusable.
+            legacy = {
+                request_hash(r): legacy_request_hash(r)
+                for pair in zip(moded, requests, strict=True)
+                for r in pair
+            }
             known: dict[str, str] = {}
             #: Hash -> an active row's id, or the row this call is adding for it.
             in_flight: dict[str, int | SimulationRecord] = {}
             # Looked up in bulk — a harvest enqueues thousands, and two reads per request
             # would scale queueing with round-trips — and chunked to stay under SQLite's
             # variable cap.
-            looked_up = set(hashes) | {full for full in fulls if full}
+            looked_up = set(hashes) | {full for full in fulls if full} | set(legacy.values())
             for chunk in itertools.batched(looked_up, ENQUEUE_CHUNK, strict=False):
                 for entry in await session.scalars(
                     select(DedupEntry).where(DedupEntry.request_hash.in_(chunk))
@@ -253,6 +267,11 @@ class BatchEngine:
                     )
                 ).tuples():
                     in_flight.setdefault(digest, record_id)
+            for new, old in legacy.items():
+                if new not in known and old in known:
+                    known[new] = known[old]
+                if new not in in_flight and old in in_flight:
+                    in_flight[new] = in_flight[old]
 
             # (index, hash, status, alpha id, the row: new, or an existing row's id)
             plan: list[tuple[int, str, SimStatus, str | None, int | SimulationRecord]] = []
@@ -269,6 +288,17 @@ class BatchEngine:
                     )
                     session.add(record)
                     plan.append((index, digest, SimStatus.SKIPPED, alpha_id, record))
+                elif stored[index] is not None:
+                    record = new_record(
+                        request,
+                        task=task,
+                        status=SimStatus.SKIPPED,
+                        alpha_id=stored[index],
+                        message="The same alpha is already in your vault; reused it.",
+                        finished_at=utcnow(),
+                    )
+                    session.add(record)
+                    plan.append((index, digest, SimStatus.SKIPPED, stored[index], record))
                 elif digest in in_flight:
                     # Same payload still queued or running (possibly from earlier in this
                     # call): share that row, so its result reaches both callers for one run.
