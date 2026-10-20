@@ -633,6 +633,7 @@ function TaskName({ task: t }: { task: LabTask }) {
     ? new Date(t.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     : null
   const title = [
+    t.name,
     t.labName,
     t.templateName,
     t.region ? `${t.region} D${t.delay}` : null,
@@ -646,8 +647,8 @@ function TaskName({ task: t }: { task: LabTask }) {
   return (
     <span className="block min-w-0 truncate" title={title}>
       <span className="text-ink">
-        {t.labName}
-        {t.templateName ? ` · ${t.templateName}` : ''}
+        {t.name ? t.name : t.labName}
+        {!t.name && t.templateName ? ` · ${t.templateName}` : ''}
       </span>
       <span className="text-ink-subtle">
         {t.lab !== SETTINGS_SAMPLER && t.region && (

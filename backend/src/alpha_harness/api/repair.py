@@ -352,6 +352,7 @@ async def queue(
     take: Annotated[int, Body(ge=1, le=40)] = 10,
     rank_by: Annotated[RankBy, Body(alias="rankBy")] = "pass",
     cores: Annotated[int, Body(ge=1)] = DEFAULT_SLOTS,
+    start: Annotated[bool, Body()] = True,
 ) -> AddedTask:
     """Simulate the best ``take`` variants as one task, each at its own settings, in Full mode
     (the only mode that runs the correlation checks this is for)."""
@@ -391,6 +392,8 @@ async def queue(
         batch_size=(cores + 1) * MAX_BATCH,
         template_source=found.expression,
         template_name=f"Repair · {found.alpha_id}",
+        label=f"Repair · {found.alpha_id}",
+        run=start,
         seeds=settings_sampler.seed_trials(requests, has_source=False),
     )
 
@@ -584,6 +587,7 @@ async def queue_transplants(
     kind: Annotated[TransplantKind | None, Body()] = None,
     filters: Annotated[TabFilter | None, Body()] = None,
     cores: Annotated[int, Body(ge=1)] = DEFAULT_SLOTS,
+    start: Annotated[bool, Body()] = True,
 ) -> AddedTask:
     """Simulate the best ``take`` transplants as one task, in Full mode so the correlation
     checks run."""
@@ -602,6 +606,7 @@ async def queue_transplants(
         chosen,
         cores=cores,
         name=f"Transplants · {len(chosen)} into {region or 'other regions'}",
+        run=start,
     )
 
 
@@ -640,6 +645,7 @@ async def add_transplants(
         batch_size=(cores + 1) * MAX_BATCH,
         template_source=first.expression,
         template_name=name,
+        label=name,
         run=run,
         seeds=settings_sampler.seed_trials(requests, has_source=False),
     )
@@ -715,6 +721,7 @@ async def queue_promotions(
     delay: Annotated[int, Body()] = 1,
     take: Annotated[int, Body(ge=1, le=100)] = 20,
     cores: Annotated[int, Body(ge=1)] = DEFAULT_SLOTS,
+    start: Annotated[bool, Body()] = True,
 ) -> AddedTask:
     """Run the best ``take`` as region-agnostic Alphas in ``universe``, in Full mode."""
     if cores > state.engine.slots:
@@ -739,6 +746,7 @@ async def queue_promotions(
         delay=delay,
         cores=cores,
         name=f"RA promotions · {len(chosen)} families",
+        run=start,
     )
 
 
@@ -794,6 +802,7 @@ async def add_promotions(
         batch_size=(cores + 1) * MAX_BATCH,
         template_source=first.expression,
         template_name=name,
+        label=name,
         run=run,
         seeds=settings_sampler.seed_trials(requests, has_source=False),
     )

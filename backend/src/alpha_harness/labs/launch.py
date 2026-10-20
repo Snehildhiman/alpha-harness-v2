@@ -332,6 +332,7 @@ async def add_study(
     run: bool = False,
     seeds: Callable[[int], list[Trial]] | None = None,
     objective: str | None = None,
+    label: str | None = None,
 ) -> AddedTask:
     """Store a task: not started, or queued for the scheduler when ``run``.
 
@@ -354,6 +355,7 @@ async def add_study(
         max_trials=simulations,
         task=task,
         status=StudyStatus.QUEUED if run else StudyStatus.IDLE,
+        label=label[:128] if label else None,
     )
     async with state.db.session() as session:
         session.add(row)
@@ -365,4 +367,4 @@ async def add_study(
     if run:
         await scheduler.start_waiting(state.optimizer)
     await state.optimizer.notify()
-    return AddedTask(id=row.id, name=row.name)
+    return AddedTask(id=row.id, name=row.label or row.name)

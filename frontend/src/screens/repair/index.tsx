@@ -228,8 +228,8 @@ function PlanPanel({ alphaId, improve }: { alphaId: string; improve?: boolean })
           </Notice>
         )}
         {queue.isSuccess && (
-          <Notice title={`Queued as task “${queue.data.name}”`}>
-            Start it from{' '}
+          <Notice title={`Started task “${queue.data.name}”`}>
+            It is running; watch it on{' '}
             <Link to="/tasks" className={LINK}>
               Tasks
             </Link>

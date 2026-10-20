@@ -3680,6 +3680,11 @@ export interface components {
              */
             rankBy: "pass" | "sharpe" | "fitness";
             /**
+             * Start
+             * @default true
+             */
+            start: boolean;
+            /**
              * Take
              * @default 10
              */
@@ -3697,6 +3702,11 @@ export interface components {
              * @default 1
              */
             delay: number;
+            /**
+             * Start
+             * @default true
+             */
+            start: boolean;
             /**
              * Take
              * @default 20
@@ -3717,6 +3727,11 @@ export interface components {
             kind?: ("regular" | "power_pool") | null;
             /** Region */
             region?: string | null;
+            /**
+             * Start
+             * @default true
+             */
+            start: boolean;
             /**
              * Take
              * @default 40
