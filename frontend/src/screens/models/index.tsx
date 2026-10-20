@@ -5,8 +5,10 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { BrainCircuitIcon, PlayIcon, SparklesIcon } from 'lucide-react'
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
+import type { Scope } from '@/api/types'
 import { fmt } from '@/lib/format'
+import { useScopeOptions } from '@/lib/scope'
 import { useRefetchOn } from '@/lib/ws'
 import {
   Badge,
@@ -25,6 +27,8 @@ import {
   Textarea,
   type Tone,
 } from '@/ui/kit'
+import { Select } from '@/ui/overlay'
+import { ScopePicker } from '@/ui/scope-picker'
 import { type Column, DataTable } from '@/ui/table'
 import {
   type Candidate,
@@ -156,7 +160,21 @@ const BLANK: Candidate = {
 function PredictPanel({ ready }: { ready: boolean }) {
   const [candidate, setCandidate] = useState<Candidate>(BLANK)
   const ask = useMutation({ mutationFn: predict })
-  const set = (patch: Partial<Candidate>) => setCandidate({ ...candidate, ...patch })
+  const set = (patch: Partial<Candidate>) => {
+    // An answer for other inputs must not stay on screen as if it were for these.
+    ask.reset()
+    setCandidate((c) => ({ ...c, ...patch }))
+  }
+  const scope = {
+    instrumentType: 'EQUITY',
+    region: candidate.region,
+    delay: candidate.delay,
+    universe: candidate.universe,
+  }
+  const setScope = useCallback((change: Partial<Scope>) => {
+    setCandidate((c) => ({ ...c, ...change }))
+  }, [])
+  const options = useScopeOptions(scope)
   const rows: Prediction[] = ask.data ?? []
   return (
     <Panel title="Ask before you simulate">
@@ -170,31 +188,20 @@ function PredictPanel({ ready }: { ready: boolean }) {
           />
         </Field>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-7">
-          <Field label="Region">
-            <Input
-              value={candidate.region}
-              onChange={(e) => set({ region: e.target.value.toUpperCase() })}
-            />
-          </Field>
-          <Field label="Delay">
-            <Input
-              type="number"
-              min={0}
-              max={1}
-              value={candidate.delay}
-              onChange={(e) => set({ delay: Number(e.target.value) })}
-            />
-          </Field>
-          <Field label="Universe">
-            <Input
-              value={candidate.universe}
-              onChange={(e) => set({ universe: e.target.value.toUpperCase() })}
-            />
-          </Field>
+          <div className="col-span-2 flex items-end lg:col-span-3">
+            <ScopePicker scope={scope} onChange={setScope} />
+          </div>
           <Field label="Neutralization">
-            <Input
+            <Select
+              label="Neutralization"
+              mono
+              items={
+                options.neutralizations.length
+                  ? options.neutralizations
+                  : [{ value: candidate.neutralization, label: candidate.neutralization }]
+              }
               value={candidate.neutralization}
-              onChange={(e) => set({ neutralization: e.target.value.toUpperCase() })}
+              onChange={(value) => set({ neutralization: value })}
             />
           </Field>
           <Field label="Decay">

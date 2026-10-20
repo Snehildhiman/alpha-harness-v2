@@ -6,6 +6,19 @@ from fastapi import APIRouter, Body
 from sqlalchemy import func, select
 
 from ..db.models import Trial, TrialState
+from ..labs.fastexpr import (
+    MAX_FIELDS,
+    MAX_OPERATORS,
+    ParseError,
+    data_fields,
+    node_at,
+    operator_count,
+    parse,
+    validate,
+    walk,
+)
+from ..labs.ga import market_for
+from ..labs.launch import account_operators
 from ..models.train import label_of
 from ..schemas import Out
 from ..separation import Verdict, judge
@@ -148,11 +161,69 @@ async def train(state: State) -> TrainStarted:
     return TrainStarted(task_id=task_id)
 
 
+async def expression_problems(state: State, candidate: Candidate) -> list[str]:
+    """Why BRAIN would refuse this expression in this market, or nothing: it must parse,
+    use operators the account has, and read fields the market's download carries."""
+    try:
+        tree = parse(candidate.expression)
+    except ParseError as exc:
+        return [f"The expression could not be read: {exc}"]
+    except RecursionError:
+        return ["The expression is nested too deeply to read."]
+    operators = await account_operators(state, refresh=False)
+    market = await market_for(
+        state.catalog,
+        # Unread operators (signed out): every call is let through, fields are still checked.
+        operators or [{"name": "_", "definition": "_(x)"}],
+        candidate.region,
+        candidate.delay,
+        candidate.universe,
+        [candidate.neutralization],
+    )
+    if market is None:
+        return [
+            f"{candidate.region} {candidate.universe} delay {candidate.delay} is not "
+            "downloaded. Sync it on the Sync screen first."
+        ]
+    problems = validate(tree, market.table, market.names)
+    if not operators:
+        problems = [p for p in problems if "is not an operator" not in p and "inputs" not in p]
+    # Vector fields (several values a day) only make sense straight inside a vec_ operator.
+    names = sorted({n.value for _, n in walk(tree) if n.kind == "name"})
+    types = {
+        str(r["field_id"]): str(r["t"])
+        for r in await state.catalog.query(
+            "SELECT field_id, any_value(field_type) AS t FROM data_field "
+            "WHERE region = ? AND delay = ? AND universe = ? AND field_id IN (SELECT unnest(?)) "
+            "AND field_type IS NOT NULL GROUP BY field_id",
+            [candidate.region, candidate.delay, candidate.universe, names],
+        )
+    }
+    for path, node in walk(tree):
+        if node.kind != "name" or not path or node.value not in types:
+            continue
+        parent = node_at(tree, path[:-1])
+        in_vec = parent.kind == "call" and parent.value.startswith("vec_")
+        if types[node.value] == "VECTOR" and not in_vec:
+            problems.append(f"{node.value} is a vector field: put it inside a vec_ operator.")
+        elif types[node.value] == "MATRIX" and in_vec:
+            problems.append(f"{node.value} is not a vector field; {parent.value} cannot take it.")
+    if candidate.power_pool:
+        if (count := operator_count(tree)) > MAX_OPERATORS:
+            problems.append(f"{count} operators; Power Pool allows {MAX_OPERATORS}.")
+        if (fields := len(data_fields(tree))) > MAX_FIELDS:
+            problems.append(f"{fields} data fields; Power Pool allows {MAX_FIELDS}.")
+    return problems
+
+
 @router.post("/predict")
 async def predict(state: State, candidate: Annotated[Candidate, Body()]) -> list[Prediction]:
     """What the models expect of one expression at these settings, before simulating it."""
     if await state.predictors.current() is None:
         raise refuse(409, "untrained", "Train the models first.")
+    if problems := await expression_problems(state, candidate):
+        # A guess about an Alpha BRAIN would refuse to simulate is worse than no answer.
+        raise refuse(422, "invalid_expression", " ".join(problems[:5]))
     row: dict[str, Any] = {
         **candidate.model_dump(),
         "sim_type": "REGULAR",
