@@ -1807,6 +1807,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/repair/promotions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Promotion Plan
+         * @description Expressions that pass as regular Alphas in two or more region-agnostic markets and
+         *     have never run as a region-agnostic Alpha. Simulates nothing.
+         */
+        get: operations["promotion_plan_api_repair_promotions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/repair/promotions/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Queue Promotions
+         * @description Run the best ``take`` as region-agnostic Alphas in ``universe``, in Full mode.
+         */
+        post: operations["queue_promotions_api_repair_promotions_tasks_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/repair/tasks": {
         parameters: {
             query?: never;
@@ -3494,6 +3535,26 @@ export interface components {
              * @default 10
              */
             take: number;
+        };
+        /** Body_queue_promotions_api_repair_promotions_tasks_post */
+        Body_queue_promotions_api_repair_promotions_tasks_post: {
+            /**
+             * Cores
+             * @default 8
+             */
+            cores: number;
+            /**
+             * Delay
+             * @default 1
+             */
+            delay: number;
+            /**
+             * Take
+             * @default 20
+             */
+            take: number;
+            /** Universe */
+            universe: string;
         };
         /** Body_queue_transplants_api_repair_transplants_tasks_post */
         Body_queue_transplants_api_repair_transplants_tasks_post: {
@@ -5491,6 +5552,36 @@ export interface components {
             testPeriod?: string | null;
             /** Truncation */
             truncation?: number | null;
+        };
+        /** PromotionPlan */
+        PromotionPlan: {
+            /** Promotions */
+            promotions: components["schemas"]["PromotionRow"][];
+            /** Universes */
+            universes: {
+                [key: string]: string[];
+            };
+        };
+        /** PromotionRow */
+        PromotionRow: {
+            /** Decay */
+            decay: number | null;
+            /** Delay */
+            delay: number;
+            /** Expression */
+            expression: string;
+            /** Id */
+            id: string;
+            /** Neutralization */
+            neutralization: string | null;
+            /** Regions */
+            regions: {
+                [key: string]: string;
+            };
+            /** Sharpe */
+            sharpe: number | null;
+            /** Truncation */
+            truncation: number | null;
         };
         /**
          * PromptKind
@@ -10128,6 +10219,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RepairPlan"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    promotion_plan_api_repair_promotions_get: {
+        parameters: {
+            query?: {
+                delay?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromotionPlan"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    queue_promotions_api_repair_promotions_tasks_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Body_queue_promotions_api_repair_promotions_tasks_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AddedTask"];
                 };
             };
             /** @description Validation Error */

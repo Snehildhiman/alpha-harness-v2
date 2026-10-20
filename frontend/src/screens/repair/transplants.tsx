@@ -65,7 +65,7 @@ const COLUMNS: Column<TransplantRow>[] = [
   },
   {
     key: 'corr',
-    header: 'Predicted prod corr',
+    header: 'Predicted corr',
     width: '140px',
     align: 'right',
     cell: (r) => <span className="num">{fmt.ratio(r.correlation, 3)}</span>,
@@ -144,9 +144,10 @@ export function TransplantsPanel() {
     >
       <div className="flex flex-col gap-3">
         <p className="text-body-compact text-ink-subtle">
-          Your passing regular Alphas, each in the downloaded regions it has not run in, at the same
-          settings and a universe of the same size. Prod correlation there is measured against that
-          region’s crowd, and an expression that passes in two regions is an all-region Alpha.
+          Your passing regular and Power Pool Alphas, each in the downloaded regions it has not run
+          in, at the same settings and a universe of the same size. Correlation there is measured
+          against that region’s crowd, and an expression that passes in two regions is an all-region
+          Alpha. Each keeps its type and is judged by its own checks.
         </p>
         {plan.isError && <ErrorNotice error={plan.error} title="Could not find transplants" />}
         {data && !data.ranked && (

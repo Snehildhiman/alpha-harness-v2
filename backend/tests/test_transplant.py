@@ -60,3 +60,20 @@ def test_a_power_pool_alpha_stays_power_pool() -> None:
         [source("rank(close)", power_pool=True)], MARKETS, {}, known_fields=KNOWN
     )
     assert first.power_pool
+
+
+def test_an_expression_passing_in_two_markets_is_offered_as_a_family() -> None:
+    from alpha_harness.repair.transplant import promotions
+
+    rows = [
+        source("rank(close / volume)", alpha_id="U", sharpe=1.5),
+        source("rank(close/volume)", alpha_id="E", region="EUR", sharpe=1.3),
+        source("rank(close)", alpha_id="X", sharpe=2.0),  # one region only
+        source("rank(volume)", alpha_id="C", region="CHN"),  # not a region-agnostic market
+        source("rank(volume)", alpha_id="V"),
+    ]
+    (found,) = promotions(rows, {})
+    assert found.regions == {"EUR": "E", "USA": "U"}
+    assert found.sharpe == 1.4
+    ran = ran_in([{"expression": "rank(close / volume)", "region": "ALL", "delay": 1}])
+    assert promotions(rows, ran) == []

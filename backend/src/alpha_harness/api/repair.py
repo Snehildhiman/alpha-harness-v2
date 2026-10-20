@@ -18,7 +18,7 @@ from ..labs.launch import AddedTask, account_operators, add_study
 from ..labs.params import CORRELATION_BREAKER, BreakerParams
 from ..repair.generate import Reshape, Variant, variants
 from ..repair.rank import Score, at_least, near_miss, score
-from ..repair.transplant import Markets, Transplant, ran_in, transplants
+from ..repair.transplant import Markets, Promotion, Transplant, promotions, ran_in, transplants
 from ..schemas import Out
 from ..separation import RA_MIN_REGIONS, Kind, Verdict
 from ..tools import correlation_breaker, settings_sampler
@@ -528,5 +528,137 @@ async def queue_transplants(
         batch_size=(cores + 1) * MAX_BATCH,
         template_source=first.expression,
         template_name=f"Transplants · {len(chosen)} into {region or 'other regions'}",
+        seeds=settings_sampler.seed_trials(requests, has_source=False),
+    )
+
+
+# -- promotions to region agnostic ------------------------------------------------------------
+
+
+class PromotionRow(Out):
+    id: str
+    expression: str
+    delay: int
+    #: Region → the passing regular Alpha there.
+    regions: dict[str, str]
+    sharpe: float | None
+    neutralization: str | None
+    decay: int | None
+    truncation: float | None
+
+
+class PromotionPlan(Out):
+    promotions: list[PromotionRow]
+    #: Delay → the region-agnostic universes downloaded for it, to run the families in.
+    universes: dict[int, list[str]]
+
+
+async def _promotions(state: State, delay: int | None) -> tuple[PromotionPlan, list[Promotion]]:
+    _, _, ran = await _markets_and_runs(state)
+    passing = [
+        item.row
+        for item in await judge_vault(state)
+        if item.judgement.kind == Kind.REGULAR and item.judgement.verdict in _TRANSPLANT_PASSING
+    ]
+    found = [p for p in promotions(passing, ran) if delay is None or p.delay == delay]
+    universes: dict[int, list[str]] = {}
+    for r in await state.catalog.query(
+        "SELECT DISTINCT delay, universe FROM data_field WHERE region = ? ORDER BY universe",
+        [REGION_AGNOSTIC_REGION],
+    ):
+        universes.setdefault(int(r["delay"]), []).append(str(r["universe"]))
+    plan = PromotionPlan(
+        promotions=[
+            PromotionRow(
+                id=f"p{i}",
+                expression=p.expression,
+                delay=p.delay,
+                regions=p.regions,
+                sharpe=p.sharpe,
+                neutralization=p.neutralization,
+                decay=p.decay,
+                truncation=p.truncation,
+            )
+            for i, p in enumerate(found)
+        ],
+        universes=universes,
+    )
+    return plan, found
+
+
+@router.get("/promotions")
+async def promotion_plan(
+    state: State, delay: Annotated[int | None, Query()] = None
+) -> PromotionPlan:
+    """Expressions that pass as regular Alphas in two or more region-agnostic markets and
+    have never run as a region-agnostic Alpha. Simulates nothing."""
+    return (await _promotions(state, delay))[0]
+
+
+@router.post("/promotions/tasks")
+async def queue_promotions(
+    state: State,
+    universe: Annotated[str, Body()],
+    delay: Annotated[int, Body()] = 1,
+    take: Annotated[int, Body(ge=1, le=100)] = 20,
+    cores: Annotated[int, Body(ge=1)] = DEFAULT_SLOTS,
+) -> AddedTask:
+    """Run the best ``take`` as region-agnostic Alphas in ``universe``, in Full mode."""
+    if cores > state.engine.slots:
+        raise refuse(422, "too_many_cores", f"The engine has {state.engine.slots} slots.")
+    plan, found = await _promotions(state, delay)
+    if universe not in plan.universes.get(delay, []):
+        raise refuse(
+            422,
+            "universe_not_synced",
+            f"The region-agnostic market's {universe} at delay {delay} is not downloaded. "
+            "Sync it on the Sync screen.",
+        )
+    chosen = found[:take]
+    if not chosen:
+        raise refuse(
+            422, "no_promotions", "No expression passes in two region-agnostic markets yet."
+        )
+    requests = [
+        SimulationRequest(
+            settings=SimulationSettings.model_validate(
+                {
+                    k: v
+                    for k, v in {
+                        "region": REGION_AGNOSTIC_REGION,
+                        "universe": universe,
+                        "delay": delay,
+                        "neutralization": p.neutralization,
+                        "decay": p.decay,
+                        "truncation": p.truncation,
+                        "simulationMode": FULL_MODE,
+                    }.items()
+                    if v is not None
+                }
+            ),
+            regular=p.expression,
+        )
+        for p in chosen
+    ]
+    first = chosen[0]
+    return await add_study(
+        state,
+        now=utcnow(),
+        sampler=CORRELATION_BREAKER,
+        params=BreakerParams(
+            region=REGION_AGNOSTIC_REGION,
+            delay=delay,
+            alpha_id="promotions",
+            universe=universe,
+            neutralization=str(first.neutralization or ""),
+            decay=int(first.decay or 0),
+            truncation=float(first.truncation or 0.08),
+            recipes=[" + ".join(sorted(p.regions)) for p in chosen],
+            cores=cores,
+        ),
+        simulations=len(requests),
+        batch_size=(cores + 1) * MAX_BATCH,
+        template_source=first.expression,
+        template_name=f"RA promotions · {len(chosen)} families",
         seeds=settings_sampler.seed_trials(requests, has_source=False),
     )

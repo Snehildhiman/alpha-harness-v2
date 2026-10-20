@@ -44,3 +44,15 @@ export const queueTransplants = (body: {
   region: string | null
   kind: TransplantKind | null
 }) => http.post<Schemas['AddedTask']>('/api/repair/transplants/tasks', body)
+
+export type PromotionPlan = Schemas['PromotionPlan']
+export type PromotionRow = Schemas['PromotionRow']
+
+export const promotionPlan = queryOptions({
+  queryKey: ['repair', 'promotions'],
+  queryFn: () => http.get<PromotionPlan>('/api/repair/promotions'),
+  staleTime: 60_000,
+})
+
+export const queuePromotions = (body: { universe: string; delay: number; take: number }) =>
+  http.post<Schemas['AddedTask']>('/api/repair/promotions/tasks', body)

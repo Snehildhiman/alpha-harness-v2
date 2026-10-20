@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 from ..canon import canonical
 from ..labs.fastexpr import ParseError, data_fields, parse
-from ..labs.power_pool import RA_UNIVERSES
+from ..labs.power_pool import MIN_REGIONS, RA_MARKETS, RA_UNIVERSES
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -127,4 +127,62 @@ def transplants(
                     power_pool=bool(row.get("power_pool")),
                 )
             )
+    return out
+
+
+@dataclass(frozen=True, slots=True)
+class Promotion:
+    """An expression that passes as a regular Alpha in two or more of BRAIN's region-agnostic
+    markets, and has never run as a region-agnostic Alpha: the family BRAIN would take."""
+
+    expression: str
+    delay: int
+    #: Regions it passes in, each with the passing Alpha's id.
+    regions: dict[str, str]
+    sharpe: float | None
+    #: Settings of its strongest passing Alpha; the family runs at these.
+    neutralization: str | None
+    decay: int | None
+    truncation: float | None
+
+
+def promotions(
+    passing: Iterable[dict[str, Any]], simulated: dict[str, set[tuple[str, int]]]
+) -> list[Promotion]:
+    """Group passing regular Alphas by canonical expression and delay; keep the groups that
+    pass in ``MIN_REGIONS`` region-agnostic markets and have not run in region ``ALL``.
+    Most regions first, then the stronger.
+
+    Regular only: an RA family answers to the regular rules, prod correlation included, so a
+    Power Pool pass says nothing about it."""
+    groups: dict[tuple[str, int], list[dict[str, Any]]] = defaultdict(list)
+    for row in passing:
+        region = str(row.get("region") or "")
+        key = canonical(str(row.get("expression") or ""))
+        if key and region in RA_MARKETS:
+            groups[(key, int(row.get("delay") or 0))].append(row)
+    out: list[Promotion] = []
+    for (key, delay), rows in groups.items():
+        by_region: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            region = str(row["region"])
+            best = by_region.get(region)
+            if best is None or (row.get("sharpe") or 0.0) > (best.get("sharpe") or 0.0):
+                by_region[region] = row
+        if len(by_region) < MIN_REGIONS or ("ALL", delay) in simulated.get(key, set()):
+            continue
+        strongest = max(by_region.values(), key=lambda r: r.get("sharpe") or 0.0)
+        sharpes = [float(r["sharpe"]) for r in by_region.values() if r.get("sharpe") is not None]
+        out.append(
+            Promotion(
+                expression=str(strongest.get("expression")),
+                delay=delay,
+                regions={r: str(row.get("alpha_id")) for r, row in sorted(by_region.items())},
+                sharpe=sum(sharpes) / len(sharpes) if sharpes else None,
+                neutralization=strongest.get("neutralization"),
+                decay=strongest.get("decay"),
+                truncation=strongest.get("truncation"),
+            )
+        )
+    out.sort(key=lambda p: (-len(p.regions), -(p.sharpe or 0.0)))
     return out

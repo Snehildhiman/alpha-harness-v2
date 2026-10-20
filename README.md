@@ -14,6 +14,7 @@ v2 adds (see **[GUIDE.md](GUIDE.md)** for how to use each):
   themselves as results arrive, and screen the labs' candidates.
 - **Repair**: model-ranked variants of near-miss alphas, RA families included.
 - **Transplants**: passing alphas tried in the regions they have not run in, ranked by the models.
+- **RA promotion**: expressions passing in 2+ markets run once as region-agnostic families.
 - **Scorecards**: which operators, fields, datasets and lookbacks run hot or cold.
 - **Dedup** of equivalent expressions and of alphas already in your vault.
 - **Crowding history**: daily snapshots of alpha and user counts per dataset and field.
