@@ -11,8 +11,8 @@ Edit families, each one change away from the source:
 * **Lookbacks**: every window moved one or two rungs along a ladder of usual lengths.
 * **Operator swaps**: like-for-like replacements (``ts_mean`` and ``ts_decay_linear``,
   ``rank`` and ``zscore``, ...), only where the account has the replacement.
-* **Settings**: neutralization, decay and truncation, on the source expression and, for
-  neutralization, on each expression edit too.
+* **Settings**: neutralization, decay, truncation and the market's other downloaded
+  universes, on the source expression and, for neutralization, on each expression edit too.
 
 Power Pool Alphas keep within the pool's operator and field limits; a variant that would
 break them is never offered.
@@ -132,6 +132,7 @@ def variants(
     reshapes: Sequence[Reshape] = (),
     operators: set[str] | None = None,
     power_pool: bool = False,
+    universes: Sequence[str] = (),
     limit: int = 600,
 ) -> list[Variant]:
     """Every distinct one-step variant of the Alpha, the source itself excluded."""
@@ -178,6 +179,11 @@ def variants(
     for decay in DECAYS:
         if decay != base.get("decay"):
             add(f"decay → {decay}", "settings", source, {**base, "decay": decay})
+    # Another downloaded universe of the same market: what the robust-universe and
+    # sub-universe checks measure, and a different crowd for correlation.
+    for universe in universes:
+        if universe and universe != base.get("universe"):
+            add(f"universe → {universe}", "settings", source, {**base, "universe": universe})
     for truncation in TRUNCATIONS:
         if truncation != base.get("truncation"):
             add(

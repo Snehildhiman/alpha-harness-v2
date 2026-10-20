@@ -177,3 +177,9 @@ def test_ra_family_is_near_when_narrow_fixes_reach_two_regions() -> None:
     assert near_miss(two_near) is not None
     one_pass_only = judge_all(_ra({"USA": PASS, "EUR": FAR, "ASI": FAR}))[0]
     assert near_miss(one_pass_only) is None
+
+
+def test_other_universes_of_the_market_are_offered() -> None:
+    out = variants("rank(close)", SETTINGS, universes=["TOP3000", "TOP1000", "TOPSP500"])
+    moved = {v.settings["universe"] for v in out if v.edit.startswith("universe →")}
+    assert moved == {"TOP1000", "TOPSP500"}  # never its own

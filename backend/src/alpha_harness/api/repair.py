@@ -138,8 +138,25 @@ async def _plan(
             for o in await account_operators(state, refresh=False)
             if o.get("name")
         }
+        universes = (
+            []
+            if region_agnostic
+            else [
+                str(r["universe"])
+                for r in await state.catalog.query(
+                    "SELECT DISTINCT universe FROM data_field "
+                    "WHERE region = ? AND delay = ? ORDER BY universe",
+                    [str(settings.get("region") or ""), int(settings.get("delay") or 0)],
+                )
+            ]
+        )
         candidates = variants(
-            expression, settings, reshapes=reshapes, operators=operators, power_pool=power_pool
+            expression,
+            settings,
+            reshapes=reshapes,
+            operators=operators,
+            power_pool=power_pool,
+            universes=universes,
         )
     scored: list[tuple[Variant, Score | None]] = [(v, None) for v in candidates]
     per_region: dict[str, dict[str, float]] = {}
