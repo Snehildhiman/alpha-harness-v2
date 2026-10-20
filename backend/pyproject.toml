@@ -15,6 +15,7 @@ dependencies = [
     "duckdb>=1.5.5",
     "fastapi>=0.141.1",
     "httpx2>=2.13.1",
+    "lightgbm>=4.6",
     "msgspec>=0.21.1",
     "numpy>=2.5.3",
     "openai>=3.19.2",

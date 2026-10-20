@@ -1,4 +1,5 @@
 import {
+  BrainCircuitIcon,
   ChartPieIcon,
   DatabaseIcon,
   FlaskConicalIcon,
@@ -92,6 +93,12 @@ export const NAV = [
     label: 'Tools',
     icon: WrenchIcon,
     tabs: TOOL_TABS,
+  },
+  {
+    to: '/models',
+    group: 'Research',
+    label: 'Models',
+    icon: BrainCircuitIcon,
   },
   {
     to: '/prompts',

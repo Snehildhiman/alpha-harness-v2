@@ -33,6 +33,7 @@ from .labs.study import Optimizer
 from .llm.chat import ChatService
 from .llm.registry import ModelRegistry
 from .llm.service import LLMService
+from .models.service import ModelService
 from .realtime import (
     TOPIC_SESSION,
     TOPIC_SIMULATIONS,
@@ -103,6 +104,8 @@ class AppState:
             on_progress=lambda payload: self.hub.broadcast(TOPIC_SYNC, payload),
         )
         self.queries = CatalogQueries(self.catalog)
+        #: The learned models (v2): predict checks and correlations before simulating.
+        self.predictors = ModelService(self.catalog, self.settings.data_dir / "models")
         self.daily_sync = DailySync(
             self.sync,
             self.catalog,

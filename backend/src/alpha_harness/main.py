@@ -37,6 +37,7 @@ from .api import (
     llm,
     portfolio,
     power_pool_lab,
+    predictors,
     preferences,
     prompts,
     quarter,
@@ -176,6 +177,7 @@ def create_app() -> FastAPI:
     app.include_router(catalog.router)
     app.include_router(crowding.router)
     app.include_router(separation.router)
+    app.include_router(predictors.router)
     app.include_router(sims.router)
     app.include_router(alphas.router)
     app.include_router(template_lab.router)

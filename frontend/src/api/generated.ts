@@ -1366,6 +1366,63 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Status */
+        get: operations["status_api_models_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/models/predict": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Predict
+         * @description What the models expect of one expression at these settings, before simulating it.
+         */
+        post: operations["predict_api_models_predict_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/models/train": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Train
+         * @description Train every model on the whole vault in the background. A minute or two for 50k Alphas.
+         */
+        post: operations["train_api_models_train_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/portfolio/compute": {
         parameters: {
             query?: never;
@@ -3246,6 +3303,46 @@ export interface components {
             /** Cancelled */
             cancelled: boolean;
         };
+        /** Candidate */
+        Candidate: {
+            /**
+             * Decay
+             * @default 0
+             */
+            decay: number;
+            /**
+             * Delay
+             * @default 1
+             */
+            delay: number;
+            /** Expression */
+            expression: string;
+            /**
+             * Neutralization
+             * @default SUBINDUSTRY
+             */
+            neutralization: string;
+            /**
+             * Powerpool
+             * @default false
+             */
+            powerPool: boolean;
+            /**
+             * Region
+             * @default USA
+             */
+            region: string;
+            /**
+             * Truncation
+             * @default 0.08
+             */
+            truncation: number;
+            /**
+             * Universe
+             * @default TOP3000
+             */
+            universe: string;
+        };
         /** CatalogCounts */
         CatalogCounts: {
             /** Categories */
@@ -4391,6 +4488,23 @@ export interface components {
             /** Rpm */
             rpm: number;
         };
+        /** ModelStatus */
+        ModelStatus: {
+            /** Alphas */
+            alphas: number;
+            /** Reports */
+            reports: components["schemas"]["TargetReport"][];
+            /** Testfrom */
+            testFrom: string | null;
+            /** Trainedat */
+            trainedAt: string | null;
+            /** Training */
+            training: [
+                number,
+                number,
+                string
+            ] | null;
+        };
         /** MonthCount */
         MonthCount: {
             /** Fields */
@@ -4818,6 +4932,17 @@ export interface components {
             poolWithoutPnl: string[];
             /** Region */
             region: string;
+        };
+        /** Prediction */
+        Prediction: {
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+            /** Target */
+            target: string;
+            /** Value */
+            value: number;
         };
         /** Preferences */
         Preferences: {
@@ -5954,6 +6079,36 @@ export interface components {
             /** Verdict */
             verdict: string;
         };
+        /** TargetReport */
+        TargetReport: {
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+            /** Labelled */
+            labelled: number;
+            /** Metrics */
+            metrics: {
+                [key: string]: number;
+            };
+            /** Ntest */
+            nTest: number;
+            /** Ntrain */
+            nTrain: number;
+            /** Note */
+            note: string | null;
+            /** Target */
+            target: string;
+            /** Topfeatures */
+            topFeatures: [
+                string,
+                number
+            ][];
+            /** Trained */
+            trained: boolean;
+            /** Trees */
+            trees: number;
+        };
         /**
          * TaskAlpha
          * @description A submittable Alpha, with the task that found it.
@@ -6397,6 +6552,11 @@ export interface components {
             unspoken: number;
             /** Used */
             used: number;
+        };
+        /** TrainStarted */
+        TrainStarted: {
+            /** Taskid */
+            taskId: string;
         };
         /**
          * TreeNode
@@ -8702,6 +8862,79 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    status_api_models_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelStatus"];
+                };
+            };
+        };
+    };
+    predict_api_models_predict_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Candidate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Prediction"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    train_api_models_train_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrainStarted"];
                 };
             };
         };
