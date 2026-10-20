@@ -208,6 +208,13 @@ const models = createRoute({
 const repair = createRoute({
   getParentRoute: () => root,
   path: '/repair',
+  // ?alpha=ID opens that Alpha's variants; &improve=1 ranks them for a better Sharpe.
+  validateSearch: (s: Record<string, unknown>): { alpha?: string; improve?: boolean } => ({
+    ...(typeof s['alpha'] === 'string' && s['alpha'] ? { alpha: s['alpha'] } : {}),
+    ...(s['improve'] === true || s['improve'] === '1' || s['improve'] === 1
+      ? { improve: true }
+      : {}),
+  }),
   component: lazyRouteComponent(() => import('@/screens/repair'), 'RepairScreen'),
 })
 

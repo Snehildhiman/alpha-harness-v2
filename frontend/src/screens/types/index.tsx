@@ -121,6 +121,29 @@ function regions(row: TabRow) {
   }`
 }
 
+/** Repair a failing Alpha, or improve one that passes: its variants on the Repair screen. */
+const ACTION_COLUMN: Column<TabRow> = {
+  key: 'action',
+  header: '',
+  width: '84px',
+  align: 'right',
+  cell: (r) => (
+    <Link
+      to="/repair"
+      search={r.verdict === 'refused' ? { alpha: r.alphaId } : { alpha: r.alphaId, improve: true }}
+      className={LINK}
+      onClick={(e) => e.stopPropagation()}
+      title={
+        r.verdict === 'refused'
+          ? 'Variants ranked by their chance of passing'
+          : 'Variants ranked by predicted Sharpe, among those likely to pass'
+      }
+    >
+      {r.verdict === 'refused' ? 'Repair' : 'Improve'}
+    </Link>
+  ),
+}
+
 const COLUMNS: Column<TabRow>[] = [
   {
     key: 'expression',
@@ -241,8 +264,8 @@ export function TypesScreen() {
   const counts = kind ? summary.data?.counts[kind] : undefined
   const columns =
     kind === 'power_pool' || kind === 'theme'
-      ? [...COLUMNS, THEME_COLUMN]
-      : [...COLUMNS, FLOOR_COLUMN]
+      ? [...COLUMNS, THEME_COLUMN, ACTION_COLUMN]
+      : [...COLUMNS, FLOOR_COLUMN, ACTION_COLUMN]
   const running = summary.data?.theme
 
   return (

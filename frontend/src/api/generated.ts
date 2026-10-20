@@ -1855,7 +1855,8 @@ export interface paths {
         put?: never;
         /**
          * Plan
-         * @description Generate every variant of one Alpha and rank them. Simulates nothing.
+         * @description Generate every variant of one Alpha and rank them. Simulates nothing. ``rankBy``
+         *     ``sharpe`` or ``fitness`` improves an Alpha that already passes.
          */
         post: operations["plan_api_repair_plan_post"];
         delete?: never;
@@ -3615,6 +3616,12 @@ export interface components {
         Body_plan_api_repair_plan_post: {
             /** Alphaid */
             alphaId: string;
+            /**
+             * Rankby
+             * @default pass
+             * @enum {string}
+             */
+            rankBy: "pass" | "sharpe" | "fitness";
         };
         /** Body_queue_api_repair_tasks_post */
         Body_queue_api_repair_tasks_post: {
@@ -3625,6 +3632,12 @@ export interface components {
              * @default 8
              */
             cores: number;
+            /**
+             * Rankby
+             * @default pass
+             * @enum {string}
+             */
+            rankBy: "pass" | "sharpe" | "fitness";
             /**
              * Take
              * @default 10

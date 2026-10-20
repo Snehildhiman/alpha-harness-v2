@@ -146,8 +146,30 @@ class RepairPlan(Out):
     problems: list[str]
 
 
+RankBy = Literal["pass", "sharpe", "fitness"]
+#: Below this chance of passing, an improvement is ranked after every likelier one.
+IMPROVE_FLOOR = 0.2
+
+
+def _rank(scored: list[tuple[Variant, Score | None]], rank_by: RankBy) -> None:
+    """``pass``: likeliest to pass everything first (a repair). ``sharpe``/``fitness``: the
+    best predicted figure first among the variants likely enough to pass (an improvement of
+    an Alpha that already passes)."""
+    if rank_by == "pass":
+        return
+
+    def key(vs: tuple[Variant, Score | None]) -> tuple[bool, float]:
+        s = vs[1]
+        if s is None:
+            return (True, 0.0)
+        figure = s.sharpe if rank_by == "sharpe" else s.fitness
+        return ((s.p_all or 0.0) < IMPROVE_FLOOR, -(figure if figure is not None else -9.0))
+
+    scored.sort(key=key)
+
+
 async def _plan(
-    state: State, alpha_id: str
+    state: State, alpha_id: str, rank_by: RankBy = "pass"
 ) -> tuple[RepairPlan, list[tuple[Variant, Score | None]], dict[str, Any]]:
     found = await correlation_breaker.plan(state, alpha_id)
     expression = str(found.get("expression") or "")
@@ -196,6 +218,7 @@ async def _plan(
     if ranked and candidates:
         markets = await _ra_markets(state, alpha_id, settings) if region_agnostic else {}
         scored, per_region = await _score(state, candidates, kind, power_pool, markets)
+        _rank(scored, rank_by)
     shown = [
         RepairVariant(
             id=v.id,
@@ -313,10 +336,13 @@ async def _score(
 
 @router.post("/plan")
 async def plan(
-    state: State, alpha_id: Annotated[str, Body(embed=True, alias="alphaId")]
+    state: State,
+    alpha_id: Annotated[str, Body(alias="alphaId")],
+    rank_by: Annotated[RankBy, Body(alias="rankBy")] = "pass",
 ) -> RepairPlan:
-    """Generate every variant of one Alpha and rank them. Simulates nothing."""
-    return (await _plan(state, alpha_id.strip()))[0]
+    """Generate every variant of one Alpha and rank them. Simulates nothing. ``rankBy``
+    ``sharpe`` or ``fitness`` improves an Alpha that already passes."""
+    return (await _plan(state, alpha_id.strip(), rank_by))[0]
 
 
 @router.post("/tasks")
@@ -324,13 +350,14 @@ async def queue(
     state: State,
     alpha_id: Annotated[str, Body(alias="alphaId")],
     take: Annotated[int, Body(ge=1, le=40)] = 10,
+    rank_by: Annotated[RankBy, Body(alias="rankBy")] = "pass",
     cores: Annotated[int, Body(ge=1)] = DEFAULT_SLOTS,
 ) -> AddedTask:
     """Simulate the best ``take`` variants as one task, each at its own settings, in Full mode
     (the only mode that runs the correlation checks this is for)."""
     if cores > state.engine.slots:
         raise refuse(422, "too_many_cores", f"The engine has {state.engine.slots} slots.")
-    found, scored, settings = await _plan(state, alpha_id.strip())
+    found, scored, settings = await _plan(state, alpha_id.strip(), rank_by)
     if found.problems:
         raise refuse(422, "repair_blocked", found.problems[0])
     chosen = [v for v, _ in scored[:take]]

@@ -183,3 +183,19 @@ def test_other_universes_of_the_market_are_offered() -> None:
     out = variants("rank(close)", SETTINGS, universes=["TOP3000", "TOP1000", "TOPSP500"])
     moved = {v.settings["universe"] for v in out if v.edit.startswith("universe →")}
     assert moved == {"TOP1000", "TOPSP500"}  # never its own
+
+
+def test_improving_ranks_by_the_figure_among_likely_passes() -> None:
+    from alpha_harness.api.repair import _rank
+    from alpha_harness.repair.generate import Variant
+    from alpha_harness.repair.rank import Score
+
+    def v(i: str) -> Variant:
+        return Variant(i, i, "settings", "rank(close)", {})
+
+    def s(p: float, sharpe: float) -> Score:
+        return Score(p_all=p, p_correlation=p, correlation=0.5, sharpe=sharpe, fitness=1.0)
+
+    scored = [(v("likely"), s(0.6, 1.5)), (v("best"), s(0.3, 2.4)), (v("unlikely"), s(0.1, 3.0))]
+    _rank(scored, "sharpe")
+    assert [x.id for x, _ in scored] == ["best", "likely", "unlikely"]

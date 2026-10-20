@@ -4,7 +4,7 @@
  */
 
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query'
-import { Link } from '@tanstack/react-router'
+import { Link, useSearch } from '@tanstack/react-router'
 import { HammerIcon, PlayIcon } from 'lucide-react'
 import { useState } from 'react'
 import { fmt } from '@/lib/format'
@@ -30,6 +30,7 @@ import {
   nearMisses,
   nearMissFacets,
   queueRepair,
+  type RankBy,
   type RepairKind,
   type RepairVariant,
   repairPlan,
@@ -172,8 +173,15 @@ const RA_COLUMNS: Column<RepairVariant>[] = [
   REGIONS_COLUMN,
 ]
 
-function PlanPanel({ alphaId }: { alphaId: string }) {
-  const plan = useQuery(repairPlan(alphaId))
+const RANKS: { value: RankBy; label: string }[] = [
+  { value: 'pass', label: 'Pass everything' },
+  { value: 'sharpe', label: 'Higher Sharpe' },
+  { value: 'fitness', label: 'Higher fitness' },
+]
+
+function PlanPanel({ alphaId, improve }: { alphaId: string; improve?: boolean }) {
+  const [rankBy, setRankBy] = useState<RankBy>(improve ? 'sharpe' : 'pass')
+  const plan = useQuery(repairPlan(alphaId, rankBy))
   const [take, setTake] = useState(10)
   const queue = useMutation({ mutationFn: queueRepair })
   const data = plan.data
@@ -182,7 +190,8 @@ function PlanPanel({ alphaId }: { alphaId: string }) {
       title={`Variants of ${alphaId}`}
       actions={
         data && data.variants.length > 0 ? (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Segmented label="Rank by" items={RANKS} value={rankBy} onChange={setRankBy} />
             <Segmented
               label="How many to simulate"
               items={[5, 10, 20].map((n) => ({ value: n, label: `Top ${n}` }))}
@@ -192,7 +201,7 @@ function PlanPanel({ alphaId }: { alphaId: string }) {
             <Button
               variant="primary"
               loading={queue.isPending}
-              onClick={() => queue.mutate({ alphaId, take })}
+              onClick={() => queue.mutate({ alphaId, take, rankBy })}
             >
               <PlayIcon aria-hidden />
               Simulate top {take}
@@ -255,8 +264,9 @@ function PlanPanel({ alphaId }: { alphaId: string }) {
 }
 
 export function RepairScreen() {
+  const search = useSearch({ from: '/repair' })
   const [tab, setTab] = useState<RepairKind | 'all'>('all')
-  const [picked, setPicked] = useState<string | null>(null)
+  const [picked, setPicked] = useState<string | null>(search.alpha ?? null)
   const [filters, setFilters] = useState<AlphaFilters>({})
   const list = useQuery({
     ...nearMisses(tab === 'all' ? null : tab, filters),
@@ -295,7 +305,13 @@ export function RepairScreen() {
           />
         )}
       </Panel>
-      {picked && <PlanPanel key={picked} alphaId={picked} />}
+      {picked && (
+        <PlanPanel
+          key={picked}
+          alphaId={picked}
+          improve={picked === search.alpha && search.improve === true}
+        />
+      )}
       <TransplantsPanel />
       <PromotionsPanel />
     </Page>

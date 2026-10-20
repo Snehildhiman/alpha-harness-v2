@@ -23,15 +23,17 @@ export const nearMissFacets = (tab: RepairKind | null) =>
     queryFn: () => http.get<Schemas['TabFacets']>(`/api/repair/near-misses/facets${qs({ tab })}`),
   })
 
-export const repairPlan = (alphaId: string | null) =>
+export type RankBy = 'pass' | 'sharpe' | 'fitness'
+
+export const repairPlan = (alphaId: string | null, rankBy: RankBy = 'pass') =>
   queryOptions({
-    queryKey: ['repair', 'plan', alphaId],
-    queryFn: () => http.post<RepairPlan>('/api/repair/plan', { alphaId }),
+    queryKey: ['repair', 'plan', alphaId, rankBy],
+    queryFn: () => http.post<RepairPlan>('/api/repair/plan', { alphaId, rankBy }),
     enabled: alphaId !== null,
     staleTime: 60_000,
   })
 
-export const queueRepair = (body: { alphaId: string; take: number }) =>
+export const queueRepair = (body: { alphaId: string; take: number; rankBy: RankBy }) =>
   http.post<Schemas['AddedTask']>('/api/repair/tasks', body)
 
 export type TransplantPlan = Schemas['TransplantPlan']
