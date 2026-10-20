@@ -552,6 +552,17 @@ async def transplant_rows(
     return plan, rows
 
 
+@router.get("/transplants/facets")
+async def transplant_facets(state: State) -> TabFacets:
+    """What the Alphas a transplant can start from are split by: the filter choices."""
+    sources = [
+        i
+        for i in await judge_vault(state)
+        if i.judgement.kind in _TRANSPLANT_KINDS and i.judgement.verdict in _TRANSPLANT_PASSING
+    ]
+    return await facets_of(state, sources)
+
+
 @router.get("/transplants")
 async def transplant_plan(
     state: State,

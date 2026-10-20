@@ -41,11 +41,15 @@ class DailySync:
         *,
         markets: Callable[[], Awaitable[list[SyncTarget]]],
         signed_in: Callable[[], bool],
+        operators: Callable[[], Awaitable[object]] | None = None,
     ) -> None:
         self.sync = sync
         self.catalog = catalog
         self._markets = markets
         self._signed_in = signed_in
+        #: Re-reads the account's operators, once a day, so a new one is used the day it appears.
+        self._operators = operators
+        self.operators_day: date | None = None
         #: Settings: on/off, the local hour from which the day's sync may start, and how many
         #: days apart the region-agnostic market is downloaded (0: never automatically).
         self.enabled = True
@@ -95,6 +99,14 @@ class DailySync:
         if not self.enabled or now.hour < self.hour or self.sync.running() or not self._signed_in():
             return None
         today = now.date()
+        if self._operators is not None and self.operators_day != today:
+            self.operators_day = today
+            try:
+                await self._operators()
+                log.info("daily_sync.operators_refreshed")
+            # BRAIN being away costs only today's refresh; the cached list stays in use.
+            except Exception:
+                log.warning("daily_sync.operators_failed", exc_info=True)
         ordinary_day, agnostic_day = await self.last_synced()
 
         if ordinary_day is None or ordinary_day < today:

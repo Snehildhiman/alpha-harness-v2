@@ -81,3 +81,8 @@ export const autopilotStatus = queryOptions({
 })
 
 export const autopilotRound = () => http.post<AutopilotStatus>('/api/autopilot/run', {})
+
+export const transplantFacets = queryOptions({
+  queryKey: ['repair', 'transplant-facets'],
+  queryFn: () => http.get<Schemas['TabFacets']>('/api/repair/transplants/facets'),
+})

@@ -118,6 +118,7 @@ class AppState:
             self.catalog,
             markets=lambda: list_markets(self.metadata),
             signed_in=lambda: self.auth.session.authenticated,
+            operators=self.metadata.refresh_operators,
         )
 
         self.models = ModelRegistry(self.db)

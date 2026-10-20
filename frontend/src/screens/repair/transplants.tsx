@@ -18,6 +18,7 @@ import {
   queueTransplants,
   type TransplantKind,
   type TransplantRow,
+  transplantFacets,
   transplantPlan,
 } from './api'
 
@@ -99,6 +100,7 @@ export function TransplantsPanel() {
   const queue = useMutation({ mutationFn: queueTransplants })
   const client = useQueryClient()
   const pilot = useQuery(autopilotStatus)
+  const facets = useQuery(transplantFacets)
   const round = useMutation({
     mutationFn: autopilotRound,
     onSuccess: (status) => client.setQueryData(['autopilot'], status),
@@ -166,7 +168,11 @@ export function TransplantsPanel() {
           against that region’s crowd, and an expression that passes in two regions is an all-region
           Alpha. Each keeps its type and is judged by its own checks.
         </p>
-        <AlphaFilterBar value={filters} onChange={setFilters} />
+        <AlphaFilterBar
+          value={filters}
+          onChange={setFilters}
+          facets={facets.data ? { ...facets.data, regions: [] } : undefined}
+        />
         {pilot.data && (
           <div className="flex flex-wrap items-center gap-2 text-body-compact text-ink-subtle">
             <span>

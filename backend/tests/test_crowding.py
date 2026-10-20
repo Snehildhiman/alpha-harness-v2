@@ -228,3 +228,32 @@ def test_daily_sync_runs_region_agnostic_every_few_days(tmp_path: Any) -> None:
         await catalog.close()
 
     run(body())
+
+
+def test_daily_sync_rereads_operators_once_a_day(tmp_path: Any) -> None:
+    async def body() -> list[int]:
+        catalog = await _open(tmp_path)
+        calls: list[int] = []
+
+        async def markets() -> list[SyncTarget]:
+            return MARKETS
+
+        async def operators() -> None:
+            calls.append(1)
+            if len(calls) == 2:
+                raise RuntimeError("BRAIN away")
+
+        daily = DailySync(
+            FakeSync(),  # type: ignore[arg-type]
+            catalog,
+            markets=markets,
+            signed_in=lambda: True,
+            operators=operators,
+        )
+        await daily.tick(_local(DAY1, 9))
+        await daily.tick(_local(DAY1, 10))  # same day: not again
+        await daily.tick(_local(DAY1 + timedelta(days=1), 9))  # fails, but the tick goes on
+        await catalog.close()
+        return calls
+
+    assert run(body()) == [1, 1]
