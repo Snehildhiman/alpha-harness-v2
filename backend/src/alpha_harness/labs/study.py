@@ -102,6 +102,13 @@ class Optimizer:
         #: Cores no running task holds, while Settings lends them; 0 otherwise. Set each
         #: tick by :func:`scheduler.start_waiting`, read by :func:`scheduler.advance`.
         self.lendable_cores = 0
+        #: Screening (Settings): a round asks this many times what it sends and simulates the
+        #: candidates the models rate best; 1 turns it off. ``screen_explore`` of every round is
+        #: picked at random instead, so the models keep learning outside their comfort zone.
+        self.screen_factor = 4
+        self.screen_explore = 0.2
+        #: The trained models (``AppState.predictors``), set once the app state exists.
+        self.predictors: Any = None
         self._task: asyncio.Task[None] | None = None
 
     # -- lifecycle -------------------------------------------------------

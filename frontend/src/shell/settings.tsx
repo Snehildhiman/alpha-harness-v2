@@ -243,21 +243,83 @@ function SimulationRows({ current, change }: Rows) {
 
 const CORES = Array.from({ length: 8 }, (_, i) => ({ value: i + 1, label: String(i + 1) }))
 
+const SCREEN = [
+  { value: 1, label: 'Off' },
+  { value: 2, label: '2×' },
+  { value: 4, label: '4×' },
+  { value: 6, label: '6×' },
+  { value: 10, label: '10×' },
+]
+const EXPLORE = [
+  { value: 0, label: '0%' },
+  { value: 0.1, label: '10%' },
+  { value: 0.2, label: '20%' },
+  { value: 0.3, label: '30%' },
+]
+const FRESH = [
+  { value: 6, label: '6 h' },
+  { value: 12, label: '12 h' },
+  { value: 24, label: '1 day' },
+  { value: 72, label: '3 days' },
+  { value: 168, label: '1 week' },
+]
+
 function TaskRows({ current, change }: Rows) {
   return (
-    <SettingRow
-      title="Default cores for new tasks"
-      description="Every lab and tool starts a new task with this many cores. Change the cores in a lab's own form to use a different number there; that form then keeps its own choice."
-      control={() => (
-        <Segmented
-          label="Default cores for new tasks"
-          items={CORES}
-          value={current.defaultCores}
-          onChange={(cores) => change({ defaultCores: cores })}
-        />
-      )}
-      stacked
-    />
+    <>
+      <SettingRow
+        title="Model screening"
+        description="The Search and Template Labs ask for this many times more candidates than they simulate, and the trained models pick the ones most likely to pass every check, prod or Power Pool correlation included. Off simulates every point the search asks for. Screening waits until the models are trained."
+        control={() => (
+          <Segmented
+            label="Model screening"
+            items={SCREEN}
+            value={current.screenFactor}
+            onChange={(factor) => change({ screenFactor: factor })}
+          />
+        )}
+        stacked
+      />
+      <SettingRow
+        title="Exploration share"
+        description="Part of every screened round is picked at random instead of by the models, so they keep seeing the kinds of Alpha they are pessimistic about and do not steer the search into one corner."
+        control={() => (
+          <Segmented
+            label="Exploration share"
+            items={EXPLORE}
+            value={current.screenExplore}
+            onChange={(share) => change({ screenExplore: share })}
+          />
+        )}
+        stacked
+      />
+      <SettingRow
+        title="Trust a correlation pass for"
+        description="Prod and Power Pool correlation rise as others submit. A passing result older than this moves an Alpha from Submittable to Needs re-check on the Alpha Types screen."
+        control={() => (
+          <Segmented
+            label="Trust a correlation pass for"
+            items={FRESH}
+            value={current.correlationFreshHours}
+            onChange={(hours) => change({ correlationFreshHours: hours })}
+          />
+        )}
+        stacked
+      />
+      <SettingRow
+        title="Default cores for new tasks"
+        description="Every lab and tool starts a new task with this many cores. Change the cores in a lab's own form to use a different number there; that form then keeps its own choice."
+        control={() => (
+          <Segmented
+            label="Default cores for new tasks"
+            items={CORES}
+            value={current.defaultCores}
+            onChange={(cores) => change({ defaultCores: cores })}
+          />
+        )}
+        stacked
+      />
+    </>
   )
 }
 

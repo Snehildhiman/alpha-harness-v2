@@ -7,6 +7,7 @@ only decides how one point of its search is drawn (its ``draw``).
 
 import asyncio
 import json
+import random
 from typing import TYPE_CHECKING, Any
 
 import structlog
@@ -16,7 +17,7 @@ from ..brain.schemas import SimulationRequest, SimulationSettings, SimulationTyp
 from ..brain.settings_schema import validate_settings
 from ..db.models import SimStatus, SimulationRecord, Study, StudyStatus, Trial, TrialState, utcnow
 from ..engine.packer import MAX_BATCH
-from . import ga, search, template, template_v1
+from . import ga, screen, search, template, template_v1
 from .objectives import StudyNotFoundError
 from .params import (
     CORRELATION_BREAKER,
@@ -365,7 +366,14 @@ async def advance(optimizer: Optimizer, study_id: int) -> int:
 
     study = await optimizer.optuna_study(study_id, row)
     schema = await optimizer.metadata.cached_settings_schema()
-    picked = await asyncio.to_thread(ask_points, study, lab, run, want, seen, cover, schema)
+    predictors = getattr(optimizer, "predictors", None)
+    screening = (
+        optimizer.screen_factor > 1 and predictors is not None and await predictors.current()
+    )
+    asked = want * optimizer.screen_factor if screening else want
+    picked = await asyncio.to_thread(ask_points, study, lab, run, asked, seen, cover, schema)
+    if screening and predictors is not None and len(picked) > want:
+        picked = await _screened(optimizer, predictors, study, picked, want)
     if not picked:
         # Nothing new left to ask: the task is done once what is out has come back.
         if not waiting:
@@ -373,6 +381,52 @@ async def advance(optimizer: Optimizer, study_id: int) -> int:
         return 0
 
     return await _queue(optimizer, row, last_number, picked)
+
+
+async def _screened(
+    optimizer: Optimizer,
+    predictors: Any,
+    study: optuna.Study,
+    picked: list[tuple[Any, dict[str, Any], SimulationRequest]],
+    want: int,
+) -> list[tuple[Any, dict[str, Any], SimulationRequest]]:
+    """Keep the ``want`` candidates the models rate best, plus an exploration share.
+
+    The rest are told to the sampler as pruned. Each kept point records the chance the models
+    gave it, so the screen's precision can be read back from what BRAIN then says.
+    """
+    from optuna.trial import TrialState as OptunaState
+
+    rows = [screen.row_of(request) for _, _, request in picked]
+    predicted = await predictors.predict(rows)
+    chances = [
+        screen.chance_of(p, bool(r["power_pool"])) for p, r in zip(predicted, rows, strict=True)
+    ]
+    chosen = screen.pick(chances, want, explore=optimizer.screen_explore, rng=random.Random())
+    keep = set(chosen.keep)
+
+    def prune() -> None:
+        for index, (trial, _, _) in enumerate(picked):
+            if index not in keep:
+                study.tell(trial, state=OptunaState.PRUNED)
+
+    await asyncio.to_thread(prune)
+    kept: list[tuple[Any, dict[str, Any], SimulationRequest]] = []
+    for index in chosen.keep:
+        trial, params, request = picked[index]
+        chance = chances[index]
+        extra: dict[str, Any] = {"screen": "explore" if index in chosen.explored else "model"}
+        if chance is not None:
+            extra["predicted"] = round(chance, 4)
+        kept.append((trial, {**params, **extra}, request))
+    log.info(
+        "tasks.screened",
+        asked=len(picked),
+        kept=len(kept),
+        explored=len(chosen.explored),
+        best=max((c for c in chances if c is not None), default=None),
+    )
+    return kept
 
 
 def raw_json(column: Any) -> Any:

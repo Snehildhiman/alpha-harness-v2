@@ -128,6 +128,7 @@ class AppState:
             backfill=self.backfill,
         )
         self.optimizer.llm = self.llm
+        self.optimizer.predictors = self.predictors
 
         self._renew_lock = asyncio.Lock()
         self._last_session_check = float("-inf")

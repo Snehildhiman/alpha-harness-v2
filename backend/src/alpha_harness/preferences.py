@@ -58,6 +58,11 @@ class Preferences(Out):
     #: Retrain the models by themselves once enough new results or re-checks arrive; a new set
     #: replaces the old only if it does at least as well on Alphas the old never saw.
     auto_retrain: bool = True
+    #: Screening in the Search and Template Labs: each round asks this many times what it
+    #: simulates and sends the candidates the models rate best. 1 sends every point asked.
+    screen_factor: int = Field(default=4, ge=1, le=10)
+    #: Share of each screened round picked at random, so the models keep learning.
+    screen_explore: float = Field(default=0.2, ge=0.0, le=0.5)
     #: The Power Pool theme calendar, as BRAIN publishes it: the Current Theme tab tests
     #: Alphas against whichever rule is running today.
     power_pool_themes: list[ThemeRule] = Field(
@@ -90,6 +95,8 @@ def apply(state: AppState, preferences: Preferences) -> None:
     updates.check_hours = preferences.update_check_hours
     updates.auto_install = preferences.auto_update
     state.predictors.auto = preferences.auto_retrain
+    state.optimizer.screen_factor = preferences.screen_factor
+    state.optimizer.screen_explore = preferences.screen_explore
     state.daily_sync.configure(
         enabled=preferences.daily_sync,
         hour=preferences.daily_sync_hour,

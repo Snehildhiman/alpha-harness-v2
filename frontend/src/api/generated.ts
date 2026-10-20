@@ -5133,6 +5133,16 @@ export interface components {
              */
             raSyncDays: 0 | 1 | 2 | 3 | 7;
             /**
+             * Screenexplore
+             * @default 0.2
+             */
+            screenExplore: number;
+            /**
+             * Screenfactor
+             * @default 4
+             */
+            screenFactor: number;
+            /**
              * Updatecheckhours
              * @default 1
              * @enum {integer}
