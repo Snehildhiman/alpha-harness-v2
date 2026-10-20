@@ -4,7 +4,7 @@ A local, self-improving alpha factory for [WorldQuant BRAIN](https://platform.wo
 built on [Alpha Harness](https://github.com/residual-lab/alpha-harness) (MIT, © MiracleInvoker).
 It runs entirely on your machine.
 
-v2 adds (see **[GUIDE.md](GUIDE.md)** for how to use each):
+v2 adds (see **[GUIDE.md](GUIDE.md)** for how to use each, and **[CHANGELOG.md](CHANGELOG.md)** for what changed when):
 
 - **Alpha Types**: regular, region-agnostic, Power Pool, current-theme and SuperAlpha tabs, each
   judged only by the checks its type answers to (prod correlation for regular and RA, Power Pool
