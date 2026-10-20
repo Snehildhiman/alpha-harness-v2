@@ -19,3 +19,10 @@ export const trainModels = () => http.post<Schemas['TrainStarted']>('/api/models
 
 export const predict = (candidate: Candidate) =>
   http.post<Prediction[]>('/api/models/predict', candidate)
+
+export type ScreenReport = Schemas['ScreenReport']
+
+export const screening = queryOptions({
+  queryKey: ['models', 'screening'],
+  queryFn: () => http.get<ScreenReport>('/api/models/screening'),
+})

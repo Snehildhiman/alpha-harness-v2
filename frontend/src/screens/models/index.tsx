@@ -15,6 +15,7 @@ import {
   ErrorNotice,
   Field,
   Input,
+  Metric,
   Notice,
   Page,
   PageHeader,
@@ -30,6 +31,7 @@ import {
   modelStatus,
   type Prediction,
   predict,
+  screening,
   type TargetReport,
   trainModels,
 } from './api'
@@ -262,6 +264,42 @@ function PredictPanel({ ready }: { ready: boolean }) {
   )
 }
 
+/** Whether the screen earns its keep: model picks against random picks from the same rounds. */
+function ScreeningPanel() {
+  const report = useQuery(screening)
+  const groups = report.data?.groups ?? []
+  if (groups.length === 0) return null
+  const share = (g: (typeof groups)[number]) => {
+    const judged = g.passing + g.refused
+    return judged ? g.passing / judged : null
+  }
+  const label: Record<string, string> = {
+    model: 'Picked by the models',
+    explore: 'Picked at random (exploration)',
+  }
+  return (
+    <Panel title="Screening in the labs">
+      <div className="flex flex-col gap-3">
+        <p className="text-body text-ink-subtle">
+          Of the screened Alphas BRAIN has judged, the share that passed every check their type
+          answers to. If the models help, their picks pass more often than the random ones.
+        </p>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {groups.map((g) => (
+            <Metric
+              key={g.group}
+              boxed
+              label={label[g.group] ?? g.group}
+              value={fmt.pct(share(g))}
+              hint={`${fmt.int(g.passing)} passed, ${fmt.int(g.refused)} failed, ${fmt.int(g.pending)} waiting on checks${g.predicted === null || g.predicted === undefined ? '' : ` · models expected ${fmt.pct(g.predicted)}`}`}
+            />
+          ))}
+        </div>
+      </div>
+    </Panel>
+  )
+}
+
 export function ModelsScreen() {
   const client = useQueryClient()
   const status = useQuery({
@@ -365,6 +403,7 @@ export function ModelsScreen() {
           </Panel>
         </>
       )}
+      <ScreeningPanel />
       <PredictPanel ready={!!data?.trainedAt} />
     </Page>
   )

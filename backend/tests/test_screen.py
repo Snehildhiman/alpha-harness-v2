@@ -71,3 +71,58 @@ def test_screened_round_sends_the_best_and_prunes_the_rest() -> None:
     assert kept[0][1]["screen"] == "model"
     states = [t.state for t in study.get_trials(deepcopy=False)]
     assert states.count(optuna.trial.TrialState.PRUNED) == 6
+
+
+def test_screening_report_compares_model_and_random_picks(tmp_path: Any) -> None:
+    import json
+
+    from alpha_harness.api.predictors import screening
+    from alpha_harness.db.duck import Catalog
+    from alpha_harness.db.models import Study, Trial, TrialState
+    from alpha_harness.db.sqlite import Database
+
+    ok = [
+        {"name": "LOW_SHARPE", "result": "PASS", "value": 1.5, "limit": 1.25},
+        {"name": "SELF_CORRELATION", "result": "PASS", "value": 0.2, "limit": 0.7},
+        {"name": "PROD_CORRELATION", "result": "PASS", "value": 0.5, "limit": 0.7},
+    ]
+    bad = [*ok[:2], {"name": "PROD_CORRELATION", "result": "FAIL", "value": 0.9, "limit": 0.7}]
+
+    async def body() -> Any:
+        catalog = Catalog(tmp_path / "c.duckdb")
+        await catalog.open()
+        db = Database(tmp_path / "h.db")
+        await db.create_all()
+        picks = [
+            ("model", "A1", ok),
+            ("model", "A2", ok),
+            ("model", "A3", bad),
+            ("explore", "B1", bad),
+            ("explore", "B2", bad),
+        ]
+        async with db.session() as session:
+            study = Study(task="t", name="t", sampler="search", template_source="")
+            session.add(study)
+            await session.flush()
+            for n, (group, alpha_id, checks) in enumerate(picks):
+                session.add(
+                    Trial(
+                        study_id=study.id,
+                        number=n,
+                        state=TrialState.COMPLETE,
+                        alpha_id=alpha_id,
+                        params={"screen": group, "predicted": 0.6},
+                    )
+                )
+                await catalog.execute(
+                    "INSERT INTO alpha (alpha_id, sim_type, status, checks) VALUES "
+                    "(?, 'REGULAR', 'UNSUBMITTED', ?)",
+                    [alpha_id, json.dumps(checks)],
+                )
+            await session.commit()
+        report = await screening(SimpleNamespace(db=db, catalog=catalog))  # type: ignore[arg-type]
+        await db.dispose()
+        await catalog.close()
+        return {g.group: (g.passing, g.refused) for g in report.groups}
+
+    assert asyncio.run(body()) == {"explore": (0, 2), "model": (2, 1)}

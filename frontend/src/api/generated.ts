@@ -1403,6 +1403,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/models/screening": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Screening
+         * @description How the screen's picks fared against its random exploration picks.
+         *
+         *     The test of the screen: if the models help, Alphas kept for their score pass more often
+         *     than Alphas kept at random from the same rounds. Judged on the vault's current checks, so
+         *     a re-check counts.
+         */
+        get: operations["screening_api_models_screening_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/models/train": {
         parameters: {
             query?: never;
@@ -5739,6 +5763,26 @@ export interface components {
             /** Universe */
             universe: string;
         };
+        /** ScreenGroup */
+        ScreenGroup: {
+            /** Finished */
+            finished: number;
+            /** Group */
+            group: string;
+            /** Passing */
+            passing: number;
+            /** Pending */
+            pending: number;
+            /** Predicted */
+            predicted: number | null;
+            /** Refused */
+            refused: number;
+        };
+        /** ScreenReport */
+        ScreenReport: {
+            /** Groups */
+            groups: components["schemas"]["ScreenGroup"][];
+        };
         /** SearchRequest */
         SearchRequest: {
             /**
@@ -9176,6 +9220,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    screening_api_models_screening_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScreenReport"];
                 };
             };
         };

@@ -3,9 +3,12 @@
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Body
+from sqlalchemy import func, select
 
+from ..db.models import Trial, TrialState
 from ..models.train import label_of
 from ..schemas import Out
+from ..separation import Verdict, judge
 from .deps import State, refuse
 
 router = APIRouter(prefix="/api/models", tags=["models"])
@@ -166,3 +169,96 @@ async def predict(state: State, candidate: Annotated[Candidate, Body()]) -> list
         )
         for t in order
     ]
+
+
+class ScreenGroup(Out):
+    #: ``model``: kept for its score; ``explore``: kept at random.
+    group: str
+    #: Simulated and back from BRAIN.
+    finished: int
+    #: Every check its type answers to passed, now or once a re-check confirms it.
+    passing: int
+    #: Still waiting on a check BRAIN has not run (correlations usually).
+    pending: int
+    refused: int
+    #: Mean chance the models gave these Alphas.
+    predicted: float | None
+
+
+class ScreenReport(Out):
+    groups: list[ScreenGroup]
+
+
+#: Most screened trials read back, newest first.
+SCREEN_WINDOW = 5000
+
+
+@router.get("/screening")
+async def screening(state: State) -> ScreenReport:
+    """How the screen's picks fared against its random exploration picks.
+
+    The test of the screen: if the models help, Alphas kept for their score pass more often
+    than Alphas kept at random from the same rounds. Judged on the vault's current checks, so
+    a re-check counts.
+    """
+    async with state.db.session() as session:
+        rows = (
+            await session.execute(
+                select(
+                    func.json_extract(Trial.params, "$.screen"),
+                    func.json_extract(Trial.params, "$.predicted"),
+                    Trial.alpha_id,
+                )
+                .where(
+                    func.json_extract(Trial.params, "$.screen").is_not(None),
+                    Trial.state == TrialState.COMPLETE,
+                    Trial.alpha_id.is_not(None),
+                )
+                .order_by(Trial.id.desc())
+                .limit(SCREEN_WINDOW)
+            )
+        ).all()
+    ids = sorted({str(a) for _, _, a in rows if a})
+    stored = {
+        str(r["alpha_id"]): r
+        for r in (
+            await state.catalog.query(
+                "SELECT alpha_id, sim_type, status, checks, classifications, simulation_mode "
+                "FROM alpha WHERE alpha_id IN (SELECT unnest(?))",
+                [ids],
+            )
+            if ids
+            else []
+        )
+    }
+    tally: dict[str, dict[str, Any]] = {}
+    for group, predicted, alpha_id in rows:
+        row = stored.get(str(alpha_id))
+        if row is None:
+            continue
+        verdict = judge(row).verdict
+        t = tally.setdefault(
+            str(group), {"finished": 0, "passing": 0, "pending": 0, "refused": 0, "p": []}
+        )
+        t["finished"] += 1
+        if verdict in (Verdict.SUBMITTABLE, Verdict.RECHECK, Verdict.SUBMITTED):
+            t["passing"] += 1
+        elif verdict == Verdict.PENDING:
+            t["pending"] += 1
+        else:
+            t["refused"] += 1
+        if isinstance(predicted, int | float):
+            t["p"].append(float(predicted))
+    return ScreenReport(
+        groups=[
+            ScreenGroup(
+                group=group,
+                finished=t["finished"],
+                passing=t["passing"],
+                pending=t["pending"],
+                refused=t["refused"],
+                predicted=sum(t["p"]) / len(t["p"]) if t["p"] else None,
+            )
+            for group, t in sorted(tally.items())
+        ]
+    )
