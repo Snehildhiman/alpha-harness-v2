@@ -439,12 +439,12 @@ class TabFilter(BaseModel):
         return True
 
 
-_NO_FILTER = TabFilter()
+NO_FILTER = TabFilter()
 #: Expression → the datasets and data categories of its fields, kept across requests.
 _data: dict[str, Any] = {"stamp": None, "fields": {}, "by_expression": {}}
 
 
-async def _data_of(state: State, judged: list[Judged]) -> dict[str, tuple[set[str], set[str]]]:
+async def data_of(state: State, judged: list[Judged]) -> dict[str, tuple[set[str], set[str]]]:
     """The datasets and categories every judged Alpha's expression reads."""
     (stamp,) = await state.catalog.query(
         "SELECT count(*) AS n, max(synced_at) AS t FROM data_field"
@@ -499,7 +499,12 @@ async def facets(
     """What a tab's Alphas with one verdict are split by, with counts: the filter choices."""
     judged = await judge_vault(state)
     picked = [i for i in judged if in_tab(i, tab) and i.judgement.verdict == verdict]
-    data = await _data_of(state, picked)
+    return await facets_of(state, picked)
+
+
+async def facets_of(state: State, picked: list[Judged]) -> TabFacets:
+    """Counts of what these Alphas are split by: region, data, settings."""
+    data = await data_of(state, picked)
     counts: dict[str, Counter[str]] = {k: Counter() for k in TabFacets.model_fields}
     for item in picked:
         row = item.row
@@ -526,11 +531,11 @@ async def tab(
     sort: Annotated[SortKey, Query()] = "sharpe",
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
-    filters: Annotated[TabFilter, Depends()] = _NO_FILTER,
+    filters: Annotated[TabFilter, Depends()] = NO_FILTER,
 ) -> TabPage:
     """One tab's Alphas with one verdict, best first, narrowed by the filters."""
     judged = await judge_vault(state)
-    data = await _data_of(state, judged) if filters.dataset or filters.category else {}
+    data = await data_of(state, judged) if filters.dataset or filters.category else {}
     picked = [
         item
         for item in judged
@@ -589,7 +594,7 @@ async def recheck(
     judged = [i for i in vault if in_tab(i, tab) and i.judgement.verdict == verdict]
     if filters is not None:
         # The same Alphas the screen shows, so "Re-check top N" means the filtered top N.
-        data = await _data_of(state, judged) if filters.dataset or filters.category else {}
+        data = await data_of(state, judged) if filters.dataset or filters.category else {}
         region = filters.region
         judged = [
             i

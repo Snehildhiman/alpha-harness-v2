@@ -3,11 +3,12 @@
  * by the models' chance of passing everything. Only the best few are simulated.
  */
 
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { HammerIcon, PlayIcon } from 'lucide-react'
 import { useState } from 'react'
 import { fmt } from '@/lib/format'
+import { AlphaFilterBar, type AlphaFilters } from '@/ui/alpha-filters'
 import {
   Badge,
   Button,
@@ -27,6 +28,7 @@ import { type Column, DataTable } from '@/ui/table'
 import {
   type NearMiss,
   nearMisses,
+  nearMissFacets,
   queueRepair,
   type RepairKind,
   type RepairVariant,
@@ -255,7 +257,12 @@ function PlanPanel({ alphaId }: { alphaId: string }) {
 export function RepairScreen() {
   const [tab, setTab] = useState<RepairKind | 'all'>('all')
   const [picked, setPicked] = useState<string | null>(null)
-  const list = useQuery(nearMisses(tab === 'all' ? null : tab))
+  const [filters, setFilters] = useState<AlphaFilters>({})
+  const list = useQuery({
+    ...nearMisses(tab === 'all' ? null : tab, filters),
+    placeholderData: keepPreviousData,
+  })
+  const facets = useQuery(nearMissFacets(tab === 'all' ? null : tab))
   return (
     <Page>
       <PageHeader
@@ -266,6 +273,9 @@ export function RepairScreen() {
         title="Near-misses"
         actions={<Segmented label="Type" items={TABS} value={tab} onChange={(t) => setTab(t)} />}
       >
+        <div className="mb-3">
+          <AlphaFilterBar value={filters} onChange={setFilters} facets={facets.data} />
+        </div>
         {list.isError && <ErrorNotice error={list.error} title="Could not read near-misses" />}
         {list.data && list.data.length === 0 ? (
           <Empty icon={<HammerIcon />} title="No near-misses here">

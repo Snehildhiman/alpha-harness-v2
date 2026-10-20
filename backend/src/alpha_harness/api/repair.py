@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Body, Query
+from fastapi import APIRouter, Body, Depends, Query
 
 from ..brain.schemas import (
     FULL_MODE,
@@ -20,10 +20,19 @@ from ..repair.generate import Reshape, Variant, variants
 from ..repair.rank import Score, at_least, near_miss, score
 from ..repair.transplant import Markets, Promotion, Transplant, promotions, ran_in, transplants
 from ..schemas import Out
-from ..separation import RA_MIN_REGIONS, Kind, Verdict
+from ..separation import RA_MIN_REGIONS, Judged, Kind, Verdict
 from ..tools import correlation_breaker, settings_sampler
 from .deps import State, refuse
-from .separation import Issue, figure, judge_vault
+from .separation import (
+    NO_FILTER,
+    Issue,
+    TabFacets,
+    TabFilter,
+    data_of,
+    facets_of,
+    figure,
+    judge_vault,
+)
 
 router = APIRouter(prefix="/api/repair", tags=["repair"])
 
@@ -47,18 +56,40 @@ class NearMiss(Out):
     failed: list[Issue]
 
 
+async def _repairable(state: State, tab: Kind | None, region: str | None) -> list[Judged]:
+    return [
+        item
+        for item in await judge_vault(state)
+        if item.judgement.kind in REPAIRABLE
+        and (tab is None or item.judgement.kind == tab)
+        and (
+            not region or region == item.row.get("region") or region in item.judgement.regions_tried
+        )
+        and item.judgement.verdict == Verdict.REFUSED
+    ]
+
+
+@router.get("/near-misses/facets")
+async def near_miss_facets(state: State, tab: Annotated[Kind | None, Query()] = None) -> TabFacets:
+    """What the near-misses are split by, with counts: the filter choices."""
+    near = [i for i in await _repairable(state, tab, None) if near_miss(i) is not None]
+    return await facets_of(state, near)
+
+
 @router.get("/near-misses")
 async def near_misses(
     state: State,
     tab: Annotated[Kind | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 200,
+    region: Annotated[str | None, Query()] = None,
+    filters: Annotated[TabFilter, Depends()] = NO_FILTER,
 ) -> list[NearMiss]:
-    """Refused Alphas whose every failure is narrow, nearest first."""
+    """Refused Alphas whose every failure is narrow, nearest first, narrowed by the filters."""
     found: list[tuple[float, Any]] = []
-    for item in await judge_vault(state):
-        if item.judgement.kind not in REPAIRABLE or (
-            tab is not None and item.judgement.kind != tab
-        ):
+    candidates = await _repairable(state, tab, region)
+    data = await data_of(state, candidates) if filters.dataset or filters.category else {}
+    for item in candidates:
+        if not filters.keeps(item, data):
             continue
         gap = near_miss(item)
         if gap is not None:

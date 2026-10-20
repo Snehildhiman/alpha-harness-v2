@@ -1813,9 +1813,29 @@ export interface paths {
         };
         /**
          * Near Misses
-         * @description Refused Alphas whose every failure is narrow, nearest first.
+         * @description Refused Alphas whose every failure is narrow, nearest first, narrowed by the filters.
          */
         get: operations["near_misses_api_repair_near_misses_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/repair/near-misses/facets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Near Miss Facets
+         * @description What the near-misses are split by, with counts: the filter choices.
+         */
+        get: operations["near_miss_facets_api_repair_near_misses_facets_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -10356,6 +10376,17 @@ export interface operations {
             query?: {
                 tab?: components["schemas"]["Kind"] | null;
                 limit?: number;
+                region?: string | null;
+                delay?: number | null;
+                universe?: string | null;
+                neutralization?: string | null;
+                dataset?: string | null;
+                category?: string | null;
+                minSharpe?: number | null;
+                minFitness?: number | null;
+                minTurnover?: number | null;
+                maxTurnover?: number | null;
+                search?: string | null;
             };
             header?: never;
             path?: never;
@@ -10370,6 +10401,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NearMiss"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    near_miss_facets_api_repair_near_misses_facets_get: {
+        parameters: {
+            query?: {
+                tab?: components["schemas"]["Kind"] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TabFacets"];
                 };
             };
             /** @description Validation Error */

@@ -3,6 +3,7 @@
 import { queryOptions } from '@tanstack/react-query'
 import type { components } from '@/api/generated'
 import { http, qs } from '@/api/http'
+import type { AlphaFilters } from '@/ui/alpha-filters'
 
 type Schemas = components['schemas']
 export type NearMiss = Schemas['NearMiss']
@@ -10,10 +11,16 @@ export type RepairPlan = Schemas['RepairPlan']
 export type RepairVariant = Schemas['RepairVariant']
 export type RepairKind = 'regular' | 'ra' | 'power_pool' | 'theme' | 'super'
 
-export const nearMisses = (tab: RepairKind | null) =>
+export const nearMisses = (tab: RepairKind | null, filters: AlphaFilters = {}) =>
   queryOptions({
-    queryKey: ['repair', 'near', tab],
-    queryFn: () => http.get<NearMiss[]>(`/api/repair/near-misses${qs({ tab })}`),
+    queryKey: ['repair', 'near', tab, filters],
+    queryFn: () => http.get<NearMiss[]>(`/api/repair/near-misses${qs({ tab, ...filters })}`),
+  })
+
+export const nearMissFacets = (tab: RepairKind | null) =>
+  queryOptions({
+    queryKey: ['repair', 'near-facets', tab],
+    queryFn: () => http.get<Schemas['TabFacets']>(`/api/repair/near-misses/facets${qs({ tab })}`),
   })
 
 export const repairPlan = (alphaId: string | null) =>
