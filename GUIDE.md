@@ -28,6 +28,7 @@ How to run it, what each part does, how it learns, and how to change it yourself
 | Use papers | **Research** | Tick papers, then add an LLM Power Pool or Region Agnostic Lab task: each LLM call carries one paper's idea over to your fields. |
 | Learn what to avoid | **Scorecards** | Which operators, pairs, fields, datasets, categories, lookbacks and settings run hot or cold on prod / Power Pool / self-correlation. |
 | Check the models | **Models** | Accuracy on your newest alphas, what drives each prediction, *Screening in the labs* (model picks vs random picks), and a box to predict any expression before simulating. |
+| Track competitions | **Competitions** | Your rank in each ongoing competition is read every 6 hours and kept, so each card shows how it moved. Only your own standing is read. |
 | Spend cores well | **Tasks** | *Yield* column per task; *Re-deal cores by yield* (or turn it on in Settings to run every 30 min). |
 
 ## 3. How it decides

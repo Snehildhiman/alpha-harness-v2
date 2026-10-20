@@ -3810,6 +3810,8 @@ export interface components {
             enrolled: boolean;
             /** Faq */
             faq: string | null;
+            /** History */
+            history: components["schemas"]["StandingPoint"][];
             /** Id */
             id: string;
             /** Name */
@@ -6203,6 +6205,18 @@ export interface components {
             truncation: number | null;
             /** Universe */
             universe: string | null;
+        };
+        /** StandingPoint */
+        StandingPoint: {
+            /** Alphas */
+            alphas: number | null;
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Rank */
+            rank: number | null;
         };
         /** StatsItem */
         StatsItem: {

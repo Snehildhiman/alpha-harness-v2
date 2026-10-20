@@ -46,6 +46,7 @@ from .realtime import (
 )
 from .research.service import ResearchService
 from .sealing import Sealer
+from .standings import Standings
 from .tasks import TaskRegistry, cancel_background, spawn
 from .vault.backfill import Backfill
 from .vault.store import AlphaVault
@@ -133,6 +134,9 @@ class AppState:
         self.optimizer.llm = self.llm
         self.optimizer.predictors = self.predictors
         self.governor = Governor(self.optimizer, self.catalog)
+        self.standings = Standings(
+            self.db, self.endpoints, signed_in=lambda: self.auth.session.authenticated
+        )
 
         self._renew_lock = asyncio.Lock()
         self._last_session_check = float("-inf")
@@ -191,6 +195,7 @@ class AppState:
         await self.daily_sync.start()
         await self.research.start()
         await self.governor.start()
+        await self.standings.start()
         await self.predictors.start()
         log.info("startup.complete", data_dir=str(self.settings.data_dir))
 
@@ -297,6 +302,7 @@ class AppState:
         await self.daily_sync.stop()
         await self.research.stop()
         await self.governor.stop()
+        await self.standings.stop()
         await self.predictors.stop()
         await self.optimizer.stop()
         await self.engine.stop()

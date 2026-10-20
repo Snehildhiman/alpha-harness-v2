@@ -261,6 +261,19 @@ class ResearchPaper(Base):
     starred: Mapped[bool] = mapped_column(default=False)
 
 
+class CompetitionStanding(Base):
+    """Your rank in one competition at one moment, so the board can show how it moved."""
+
+    __tablename__ = "competition_standing"
+    __table_args__ = (Index("ix_competition_standing_at", "competition_id", "at"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    competition_id: Mapped[str] = mapped_column(String(128))
+    at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
+    rank: Mapped[int | None]
+    alphas: Mapped[int | None]
+
+
 class Preference(Base):
     """One choice made in Settings, by name. A missing row means the default.
 

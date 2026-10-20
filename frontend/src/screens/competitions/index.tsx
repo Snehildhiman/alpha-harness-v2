@@ -25,6 +25,59 @@ const BRAIN_COMPETITION_URL = (id: string) =>
 
 const DAY_MS = 86_400_000
 
+type Point = Competition['history'][number]
+
+/** Your rank over the readings kept, best (lowest) at the top. */
+function RankTrend({ points }: { points: Point[] }) {
+  const ranked = points.filter((p): p is Point & { rank: number } => p.rank != null)
+  if (ranked.length < 2) {
+    return (
+      <p className="text-body-compact text-ink-subtle">
+        Your rank is read every six hours and each time you open this page; a trend appears after
+        two readings.
+      </p>
+    )
+  }
+  const W = 600
+  const H = 80
+  const times = ranked.map((p) => new Date(p.at).getTime())
+  const ranks = ranked.map((p) => p.rank)
+  const t0 = Math.min(...times)
+  const t1 = Math.max(...times)
+  const lo = Math.min(...ranks)
+  const hi = Math.max(...ranks)
+  const x = (t: number) => (t1 === t0 ? W / 2 : ((t - t0) / (t1 - t0)) * W)
+  const y = (r: number) => (hi === lo ? H / 2 : 4 + ((r - lo) / (hi - lo)) * (H - 8))
+  const line = ranked.map((p, i) => `${x(times[i] ?? t0)},${y(p.rank)}`).join(' ')
+  const first = ranks[0] ?? 0
+  const last = ranks[ranks.length - 1] ?? 0
+  const moved = first - last
+  return (
+    <div className="flex flex-col gap-1">
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="none"
+        className="h-20 w-full text-primary"
+        role="img"
+        aria-label={`Rank from #${first} to #${last}`}
+      >
+        <polyline
+          points={line}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2}
+          vectorEffect="non-scaling-stroke"
+        />
+      </svg>
+      <p className="text-body-compact text-ink-subtle">
+        #{fmt.int(first)} on {fmt.date(ranked[0]?.at)} → #{fmt.int(last)} now
+        {moved !== 0 && ` (${moved > 0 ? 'up' : 'down'} ${fmt.int(Math.abs(moved))})`} · best #
+        {fmt.int(lo)}
+      </p>
+    </div>
+  )
+}
+
 const daysLeft = (iso: string | null) =>
   iso ? Math.max(0, Math.ceil((new Date(iso).getTime() - Date.now()) / DAY_MS)) : null
 
@@ -72,6 +125,7 @@ function CompetitionCard({ competition: c }: { competition: Competition }) {
           />
           <Metric boxed label="Your Alphas" value={fmt.int(c.standing?.alphas)} />
         </div>
+        {c.enrolled && <RankTrend points={c.history} />}
         {signUpOpen && (
           <p className="text-body text-ink-subtle">
             Sign up on BRAIN by {fmt.date(c.signUpEndDate)} for your Alphas to count. Alpha Harness
