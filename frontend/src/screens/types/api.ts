@@ -3,6 +3,7 @@
 import { queryOptions } from '@tanstack/react-query'
 import type { components } from '@/api/generated'
 import { http, qs } from '@/api/http'
+import type { AlphaFilters } from '@/ui/alpha-filters'
 
 type Schemas = components['schemas']
 export type TypeSummary = Schemas['Summary']
@@ -19,13 +20,23 @@ export const typeSummary = queryOptions({
   queryFn: () => http.get<TypeSummary>('/api/separation/summary'),
 })
 
-export const typeTab = (q: {
-  tab: Kind
-  verdict: Verdict
-  sort: TypeSort
-  limit: number
-  offset: number
-}) =>
+export type TabFacets = Schemas['TabFacets']
+
+export const typeFacets = (tab: Kind, verdict: Verdict) =>
+  queryOptions({
+    queryKey: ['separation', 'facets', tab, verdict],
+    queryFn: () => http.get<TabFacets>(`/api/separation/facets${qs({ tab, verdict })}`),
+  })
+
+export const typeTab = (
+  q: {
+    tab: Kind
+    verdict: Verdict
+    sort: TypeSort
+    limit: number
+    offset: number
+  } & AlphaFilters,
+) =>
   queryOptions({
     queryKey: ['separation', 'alphas', q],
     queryFn: () => http.get<TabPage>(`/api/separation/alphas${qs(q)}`),
@@ -41,5 +52,9 @@ export const themeCalendar = queryOptions({
 export const saveThemes = (rules: ThemeRule[]) =>
   http.put<ThemeRule[]>('/api/separation/themes', rules)
 
-export const recheck = (body: { tab: Kind; verdict: Verdict; limit: number }) =>
-  http.post<Schemas['RecheckStarted']>('/api/separation/recheck', body)
+export const recheck = (body: {
+  tab: Kind
+  verdict: Verdict
+  limit: number
+  filters?: AlphaFilters
+}) => http.post<Schemas['RecheckStarted']>('/api/separation/recheck', body)

@@ -11,12 +11,14 @@ changes, so paging and switching tabs cost nothing.
 import asyncio
 import json
 import time
+from collections import Counter
 from dataclasses import asdict
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Any, Literal
 
 import structlog
-from fastapi import APIRouter, Body, Query
+from fastapi import APIRouter, Body, Depends, Query
+from pydantic import BaseModel, ConfigDict, Field
 
 from .. import preferences
 from ..crowding import crowdmap
@@ -384,6 +386,137 @@ async def put_themes(body: list[ThemeRule], state: State) -> list[ThemeRule]:
     return body
 
 
+class TabFilter(BaseModel):
+    """Narrowing for a tab: settings, figures, and the data an Alpha reads."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    delay: int | None = None
+    universe: str | None = None
+    neutralization: str | None = None
+    #: An Alpha reads at least one field of this dataset / data category.
+    dataset: str | None = None
+    category: str | None = None
+    min_sharpe: float | None = Field(default=None, alias="minSharpe")
+    min_fitness: float | None = Field(default=None, alias="minFitness")
+    min_turnover: float | None = Field(default=None, alias="minTurnover")
+    max_turnover: float | None = Field(default=None, alias="maxTurnover")
+    #: Text the expression or the Alpha id contains.
+    search: str | None = None
+    #: Only read from a request body (a re-check); the tab takes ``region`` on its own.
+    region: str | None = None
+
+    def keeps(self, item: Judged, data: dict[str, tuple[set[str], set[str]]]) -> bool:
+        row = item.row
+        for key in ("delay", "universe", "neutralization"):
+            wanted = getattr(self, key)
+            if wanted is not None and wanted != "" and row.get(key) != wanted:
+                return False
+
+        def above(name: str, low: float | None) -> bool:
+            value = figure(item, name)
+            return low is None or (value is not None and value >= low)
+
+        if not (above("sharpe", self.min_sharpe) and above("fitness", self.min_fitness)):
+            return False
+        if not above("turnover", self.min_turnover):
+            return False
+        if self.max_turnover is not None:
+            value = figure(item, "turnover")
+            if value is None or value > self.max_turnover:
+                return False
+        if self.search:
+            needle = self.search.lower()
+            text = f"{row.get('alpha_id') or ''} {row.get('expression') or ''}".lower()
+            if needle not in text:
+                return False
+        if self.dataset or self.category:
+            datasets, categories = data.get(str(row.get("expression") or ""), (set(), set()))
+            if self.dataset and self.dataset not in datasets:
+                return False
+            if self.category and self.category not in categories:
+                return False
+        return True
+
+
+_NO_FILTER = TabFilter()
+#: Expression → the datasets and data categories of its fields, kept across requests.
+_data: dict[str, Any] = {"stamp": None, "fields": {}, "by_expression": {}}
+
+
+async def _data_of(state: State, judged: list[Judged]) -> dict[str, tuple[set[str], set[str]]]:
+    """The datasets and categories every judged Alpha's expression reads."""
+    (stamp,) = await state.catalog.query(
+        "SELECT count(*) AS n, max(synced_at) AS t FROM data_field"
+    )
+    if _data["stamp"] != tuple(stamp.values()):
+        rows = await state.catalog.query(
+            "SELECT field_id, any_value(dataset_id) AS d, any_value(category_id) AS c "
+            "FROM data_field GROUP BY field_id"
+        )
+        _data.update(
+            stamp=tuple(stamp.values()),
+            fields={str(r["field_id"]): (r["d"], r["c"]) for r in rows},
+            by_expression={},
+        )
+    fields: dict[str, tuple[str | None, str | None]] = _data["fields"]
+    out: dict[str, tuple[set[str], set[str]]] = _data["by_expression"]
+    for item in judged:
+        expression = str(item.row.get("expression") or "")
+        if expression in out:
+            continue
+        datasets: set[str] = set()
+        categories: set[str] = set()
+        for name in fields_of(expression) or []:
+            dataset, category = fields.get(name, (None, None))
+            if dataset:
+                datasets.add(str(dataset))
+            if category:
+                categories.add(str(category))
+        out[expression] = (datasets, categories)
+    return out
+
+
+class Facet(Out):
+    value: str
+    alphas: int
+
+
+class TabFacets(Out):
+    regions: list[Facet]
+    datasets: list[Facet]
+    categories: list[Facet]
+    universes: list[Facet]
+    neutralizations: list[Facet]
+
+
+@router.get("/facets")
+async def facets(
+    state: State,
+    tab: Annotated[Kind, Query()],
+    verdict: Annotated[Verdict, Query()] = Verdict.SUBMITTABLE,
+) -> TabFacets:
+    """What a tab's Alphas with one verdict are split by, with counts: the filter choices."""
+    judged = await judge_vault(state)
+    picked = [i for i in judged if in_tab(i, tab) and i.judgement.verdict == verdict]
+    data = await _data_of(state, picked)
+    counts: dict[str, Counter[str]] = {k: Counter() for k in TabFacets.model_fields}
+    for item in picked:
+        row = item.row
+        regions = set(item.judgement.regions_tried) or {str(row.get("region") or "")}
+        counts["regions"].update(r for r in regions if r)
+        datasets, categories = data.get(str(row.get("expression") or ""), (set(), set()))
+        counts["datasets"].update(datasets)
+        counts["categories"].update(categories)
+        if row.get("universe"):
+            counts["universes"][str(row["universe"])] += 1
+        if row.get("neutralization"):
+            counts["neutralizations"][str(row["neutralization"])] += 1
+    return TabFacets(
+        **{k: [Facet(value=v, alphas=n) for v, n in c.most_common()] for k, c in counts.items()}
+    )
+
+
 @router.get("/alphas")
 async def tab(
     state: State,
@@ -393,9 +526,11 @@ async def tab(
     sort: Annotated[SortKey, Query()] = "sharpe",
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
+    filters: Annotated[TabFilter, Depends()] = _NO_FILTER,
 ) -> TabPage:
-    """One tab's Alphas with one verdict, best first."""
+    """One tab's Alphas with one verdict, best first, narrowed by the filters."""
     judged = await judge_vault(state)
+    data = await _data_of(state, judged) if filters.dataset or filters.category else {}
     picked = [
         item
         for item in judged
@@ -406,6 +541,7 @@ async def tab(
             or region == item.row.get("region")
             or region in item.judgement.regions_tried
         )
+        and filters.keeps(item, data)
     ]
     descending = sort != "turnover"
 
@@ -441,6 +577,7 @@ async def recheck(
     tab: Annotated[Kind, Body()],
     verdict: Annotated[Verdict, Body()] = Verdict.RECHECK,
     limit: Annotated[int, Body(ge=1, le=RECHECK_MAX)] = 50,
+    filters: Annotated[TabFilter | None, Body()] = None,
 ) -> RecheckStarted:
     """Re-run BRAIN's submission checks on a tab's best Alphas, without submitting.
 
@@ -450,6 +587,16 @@ async def recheck(
     """
     vault = await judge_vault(state)
     judged = [i for i in vault if in_tab(i, tab) and i.judgement.verdict == verdict]
+    if filters is not None:
+        # The same Alphas the screen shows, so "Re-check top N" means the filtered top N.
+        data = await _data_of(state, judged) if filters.dataset or filters.category else {}
+        region = filters.region
+        judged = [
+            i
+            for i in judged
+            if filters.keeps(i, data)
+            and (not region or region == i.row.get("region") or region in i.judgement.regions_tried)
+        ]
     judged.sort(key=lambda i: -(figure(i, "sharpe") or float("-inf")))
     if tab in _PROD_KINDS:
         # An Alpha already crowded past the limit by the local floor cannot pass prod

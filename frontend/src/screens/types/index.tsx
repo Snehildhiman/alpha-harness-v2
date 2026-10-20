@@ -13,6 +13,7 @@ import { fmt } from '@/lib/format'
 import { useRefetchOn } from '@/lib/ws'
 import { DetailSheet } from '@/screens/pool/detail'
 import { TYPE_TABS } from '@/shell/nav'
+import { AlphaFilterBar, type AlphaFilters } from '@/ui/alpha-filters'
 import {
   Badge,
   Button,
@@ -35,6 +36,7 @@ import {
   recheck,
   type TabRow,
   type TypeSort,
+  typeFacets,
   typeSummary,
   typeTab,
   type Verdict,
@@ -216,17 +218,23 @@ export function TypesScreen() {
   const [sort, setSort] = useState<TypeSort>('sharpe')
   const [offset, setOffset] = useState(0)
   const [detailId, setDetailId] = useState<string | null>(null)
+  const [filters, setFilters] = useState<AlphaFilters>({})
 
   const summary = useQuery(typeSummary)
   const client = useQueryClient()
   // A re-check writes fresh checks as each answer lands; follow it while it runs.
   useRefetchOn('tasks', ['separation'], 4000)
   const rechecking = useMutation({
-    mutationFn: () => recheck({ tab: kind ?? 'regular', verdict, limit: RECHECK_LIMIT }),
+    mutationFn: () => recheck({ tab: kind ?? 'regular', verdict, limit: RECHECK_LIMIT, filters }),
     onSuccess: () => void client.invalidateQueries({ queryKey: ['separation'] }),
   })
   const page = useQuery({
-    ...typeTab({ tab: kind ?? 'regular', verdict, sort, limit: LIMIT, offset }),
+    ...typeTab({ tab: kind ?? 'regular', verdict, sort, limit: LIMIT, offset, ...filters }),
+    enabled: kind !== undefined,
+    placeholderData: keepPreviousData,
+  })
+  const facets = useQuery({
+    ...typeFacets(kind ?? 'regular', verdict),
     enabled: kind !== undefined,
     placeholderData: keepPreviousData,
   })
@@ -320,6 +328,14 @@ export function TypesScreen() {
                 value={verdict}
                 onChange={(v) => {
                   setVerdict(v)
+                  setOffset(0)
+                }}
+              />
+              <AlphaFilterBar
+                value={filters}
+                facets={facets.data}
+                onChange={(f) => {
+                  setFilters(f)
                   setOffset(0)
                 }}
               />

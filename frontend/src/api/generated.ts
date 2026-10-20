@@ -2108,9 +2108,29 @@ export interface paths {
         };
         /**
          * Tab
-         * @description One tab's Alphas with one verdict, best first.
+         * @description One tab's Alphas with one verdict, best first, narrowed by the filters.
          */
         get: operations["tab_api_separation_alphas_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/separation/facets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Facets
+         * @description What a tab's Alphas with one verdict are split by, with counts: the filter choices.
+         */
+        get: operations["facets_api_separation_facets_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3625,6 +3645,7 @@ export interface components {
         };
         /** Body_recheck_api_separation_recheck_post */
         Body_recheck_api_separation_recheck_post: {
+            filters?: components["schemas"]["TabFilter"] | null;
             /**
              * Limit
              * @default 50
@@ -4297,6 +4318,13 @@ export interface components {
             simulations: number;
             /** Universe */
             universe: string;
+        };
+        /** Facet */
+        Facet: {
+            /** Alphas */
+            alphas: number;
+            /** Value */
+            value: string;
         };
         /** Failure */
         Failure: {
@@ -6730,6 +6758,47 @@ export interface components {
          * @enum {string}
          */
         SyncStatus: "RUNNING" | "COMPLETE" | "FAILED" | "CANCELLED";
+        /** TabFacets */
+        TabFacets: {
+            /** Categories */
+            categories: components["schemas"]["Facet"][];
+            /** Datasets */
+            datasets: components["schemas"]["Facet"][];
+            /** Neutralizations */
+            neutralizations: components["schemas"]["Facet"][];
+            /** Regions */
+            regions: components["schemas"]["Facet"][];
+            /** Universes */
+            universes: components["schemas"]["Facet"][];
+        };
+        /**
+         * TabFilter
+         * @description Narrowing for a tab: settings, figures, and the data an Alpha reads.
+         */
+        TabFilter: {
+            /** Category */
+            category?: string | null;
+            /** Dataset */
+            dataset?: string | null;
+            /** Delay */
+            delay?: number | null;
+            /** Maxturnover */
+            maxTurnover?: number | null;
+            /** Minfitness */
+            minFitness?: number | null;
+            /** Minsharpe */
+            minSharpe?: number | null;
+            /** Minturnover */
+            minTurnover?: number | null;
+            /** Neutralization */
+            neutralization?: string | null;
+            /** Region */
+            region?: string | null;
+            /** Search */
+            search?: string | null;
+            /** Universe */
+            universe?: string | null;
+        };
         /** TabPage */
         TabPage: {
             /** Rows */
@@ -10750,6 +10819,16 @@ export interface operations {
                 sort?: "sharpe" | "fitness" | "turnover" | "returns" | "margin" | "date_created";
                 limit?: number;
                 offset?: number;
+                delay?: number | null;
+                universe?: string | null;
+                neutralization?: string | null;
+                dataset?: string | null;
+                category?: string | null;
+                minSharpe?: number | null;
+                minFitness?: number | null;
+                minTurnover?: number | null;
+                maxTurnover?: number | null;
+                search?: string | null;
             };
             header?: never;
             path?: never;
@@ -10764,6 +10843,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TabPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    facets_api_separation_facets_get: {
+        parameters: {
+            query: {
+                tab: components["schemas"]["Kind"];
+                verdict?: components["schemas"]["Verdict"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TabFacets"];
                 };
             };
             /** @description Validation Error */
