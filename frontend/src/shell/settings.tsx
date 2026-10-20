@@ -25,6 +25,7 @@ import { errorMessage } from '@/api/http'
 import { fmt } from '@/lib/format'
 import { usePreferences, useSavePreferences } from '@/lib/preferences'
 import { DEFAULT_SCOPE, REGION_AGNOSTIC, useScopeOptions } from '@/lib/scope'
+import { promotionPlan } from '@/screens/repair/api'
 import { Button, Chips, ErrorNotice, Segmented, Skeleton, Switch, Textarea } from '@/ui/kit'
 import { BACKDROP, Select } from '@/ui/overlay'
 import { useApplyUpdate, useUpdateStatus } from './update'
@@ -336,7 +337,7 @@ function TaskRows({ current, change }: Rows) {
       />
       <SettingRow
         title="Autopilot"
-        description="Every half hour, queues the transplants the models like best (Repair → Transplants) as a small task, once its last one has finished, up to a daily budget. Spends simulations while you are away; each task can be paused on the Tasks screen."
+        description="Every half hour, once its last task has finished, queues a small task: region-agnostic families for expressions that already pass in two markets (when an RA universe is chosen), otherwise the transplants the models like best. Up to a daily budget; spends simulations while you are away, and each task can be paused on the Tasks screen."
         control={(labels) => (
           <Switch
             checked={current.autopilot}
@@ -364,6 +365,10 @@ function TaskRows({ current, change }: Rows) {
               items={[1, 2, 4].map((n) => ({ value: n, label: `${n} core${n > 1 ? 's' : ''}` }))}
               value={current.autopilotCores}
               onChange={(n) => change({ autopilotCores: n })}
+            />
+            <AutopilotUniverse
+              value={current.autopilotRaUniverse}
+              onChange={(u) => change({ autopilotRaUniverse: u })}
             />
           </div>
         )}
@@ -639,6 +644,36 @@ function ticked<V extends string, T extends { value: V; label: string }>(items: 
 
 function Status({ children }: { children: ReactNode }) {
   return <p className="text-body-compact text-ink-subtle">{children}</p>
+}
+
+/** Where the autopilot promotes region-agnostic families: one of the downloaded RA universes. */
+function AutopilotUniverse({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (universe: string) => void
+}) {
+  const plan = useQuery(promotionPlan)
+  const universes = [...new Set(Object.values(plan.data?.universes ?? {}).flat())].sort()
+  if (!universes.length) {
+    return (
+      <span className="text-body-compact text-ink-subtle">
+        Download region ALL on Sync to let it promote region-agnostic families too.
+      </span>
+    )
+  }
+  return (
+    <Segmented
+      label="Promote RA families into"
+      items={[
+        { value: '', label: 'No RA' },
+        ...universes.map((u) => ({ value: u, label: `RA ${u}` })),
+      ]}
+      value={universes.includes(value) ? value : ''}
+      onChange={onChange}
+    />
+  )
 }
 
 function SettingRow({

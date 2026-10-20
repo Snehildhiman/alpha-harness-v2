@@ -1,11 +1,13 @@
-"""Autopilot: queue the transplants the models like best, a few at a time, while you are away.
+"""Autopilot: queue promotions and the transplants the models like best, while you are away.
 
 Off until Settings turn it on, because it spends simulations. When on, every half hour it
 looks at the transplant plan (Repair → Transplants) and, if its last task has finished, queues
 the best ones whose chance of passing every check is at least the chosen minimum, up to the
-day's budget. Each runs as an ordinary task on the Tasks screen, so it can be paused or stopped
-there like any other. Every result feeds the models, so the next round ranks better, and an
-expression that comes to pass in two markets shows up under *Promote to region agnostic*.
+day's budget. With a region-agnostic universe chosen, expressions that already pass in two
+markets are promoted to region-agnostic families first. Each runs as an ordinary task on the
+Tasks screen, so it can be paused or stopped there like any other. Every result feeds the
+models, so the next round ranks better, and an expression that comes to pass in two markets
+is promoted on a later round.
 """
 
 import asyncio
@@ -41,11 +43,16 @@ class Autopilot:
         self.daily = 100
         self.min_chance = 0.4
         self.cores = 2
+        #: The region-agnostic universe families are promoted into; empty: no promotions.
+        self.ra_universe = ""
         self.last: str | None = None
         self._task: asyncio.Task[None] | None = None
 
-    def configure(self, *, enabled: bool, daily: int, min_chance: float, cores: int) -> None:
+    def configure(
+        self, *, enabled: bool, daily: int, min_chance: float, cores: int, ra_universe: str = ""
+    ) -> None:
         self.enabled, self.daily, self.min_chance, self.cores = enabled, daily, min_chance, cores
+        self.ra_universe = ra_universe
 
     async def start(self) -> None:
         if self._task is None:
@@ -89,7 +96,7 @@ class Autopilot:
     async def tick(self) -> str:
         """One round. Returns what it did, for the status line."""
         # Late: the API module imports the app state, which imports this.
-        from .api.repair import add_transplants, transplant_rows
+        from .api.repair import add_promotions, add_transplants, promotion_rows, transplant_rows
 
         used, busy = await self.spent()
         if busy:
@@ -99,6 +106,24 @@ class Autopilot:
             return f"Today's budget of {self.daily} simulations is spent."
         if self.cores > self.state.engine.slots:
             return f"The engine has {self.state.engine.slots} slots; lower the autopilot's cores."
+        # Region-agnostic families first: they are the type that pays most, and these have
+        # already passed as regular Alphas in two markets.
+        if self.ra_universe:
+            for delay in (1, 0):
+                found, families = await promotion_rows(self.state, delay)
+                if families and self.ra_universe in found.universes.get(delay, []):
+                    chosen = families[:room]
+                    added = await add_promotions(
+                        self.state,
+                        chosen,
+                        universe=self.ra_universe,
+                        delay=delay,
+                        cores=self.cores,
+                        name=f"{NAME} · {len(chosen)} RA families",
+                        run=True,
+                    )
+                    log.info("autopilot.queued", task=added.name, simulations=len(chosen))
+                    return f"Queued {len(chosen)} region-agnostic families."
         plan, rows = await transplant_rows(self.state, room, None)
         if not plan.ranked:
             return "Waiting for the models to be trained."
@@ -113,4 +138,4 @@ class Autopilot:
             run=True,
         )
         log.info("autopilot.queued", task=added.name, simulations=len(chosen))
-        return f"Queued {len(chosen)} transplants as “{added.name}”."
+        return f"Queued {len(chosen)} transplants."

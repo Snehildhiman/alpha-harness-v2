@@ -5519,6 +5519,11 @@ export interface components {
              */
             autopilotMinChance: number;
             /**
+             * Autopilotrauniverse
+             * @default
+             */
+            autopilotRaUniverse: string;
+            /**
              * Correlationfreshhours
              * @default 24
              */

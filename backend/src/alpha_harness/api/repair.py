@@ -567,7 +567,7 @@ class PromotionPlan(Out):
     universes: dict[int, list[str]]
 
 
-async def _promotions(state: State, delay: int | None) -> tuple[PromotionPlan, list[Promotion]]:
+async def promotion_rows(state: State, delay: int | None) -> tuple[PromotionPlan, list[Promotion]]:
     _, _, ran = await _markets_and_runs(state)
     passing = [
         item.row
@@ -606,7 +606,7 @@ async def promotion_plan(
 ) -> PromotionPlan:
     """Expressions that pass as regular Alphas in two or more region-agnostic markets and
     have never run as a region-agnostic Alpha. Simulates nothing."""
-    return (await _promotions(state, delay))[0]
+    return (await promotion_rows(state, delay))[0]
 
 
 @router.post("/promotions/tasks")
@@ -620,7 +620,7 @@ async def queue_promotions(
     """Run the best ``take`` as region-agnostic Alphas in ``universe``, in Full mode."""
     if cores > state.engine.slots:
         raise refuse(422, "too_many_cores", f"The engine has {state.engine.slots} slots.")
-    plan, found = await _promotions(state, delay)
+    plan, found = await promotion_rows(state, delay)
     if universe not in plan.universes.get(delay, []):
         raise refuse(
             422,
@@ -633,6 +633,27 @@ async def queue_promotions(
         raise refuse(
             422, "no_promotions", "No expression passes in two region-agnostic markets yet."
         )
+    return await add_promotions(
+        state,
+        chosen,
+        universe=universe,
+        delay=delay,
+        cores=cores,
+        name=f"RA promotions · {len(chosen)} families",
+    )
+
+
+async def add_promotions(
+    state: State,
+    chosen: list[Promotion],
+    *,
+    universe: str,
+    delay: int,
+    cores: int,
+    name: str,
+    run: bool = False,
+) -> AddedTask:
+    """One Full-mode task running each expression once as a region-agnostic Alpha."""
     requests = [
         SimulationRequest(
             settings=SimulationSettings.model_validate(
@@ -673,6 +694,7 @@ async def queue_promotions(
         simulations=len(requests),
         batch_size=(cores + 1) * MAX_BATCH,
         template_source=first.expression,
-        template_name=f"RA promotions · {len(chosen)} families",
+        template_name=name,
+        run=run,
         seeds=settings_sampler.seed_trials(requests, has_source=False),
     )

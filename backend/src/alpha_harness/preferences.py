@@ -73,6 +73,8 @@ class Preferences(Out):
     #: Lowest chance of passing every check a transplant needs to be queued.
     autopilot_min_chance: float = Field(default=0.4, ge=0.1, le=0.9)
     autopilot_cores: int = Field(default=2, ge=1, le=8)
+    #: Region-agnostic universe the autopilot promotes families into; empty: it does not.
+    autopilot_ra_universe: str = Field(default="", max_length=64)
     #: Read research feeds (arXiv quantitative finance, and any added below) twice a day.
     research: bool = True
     #: Atom or RSS feeds read beside arXiv's.
@@ -117,6 +119,7 @@ def apply(state: AppState, preferences: Preferences) -> None:
         daily=preferences.autopilot_daily,
         min_chance=preferences.autopilot_min_chance,
         cores=preferences.autopilot_cores,
+        ra_universe=preferences.autopilot_ra_universe,
     )
     state.research.configure(enabled=preferences.research, feeds=preferences.research_feeds)
     state.daily_sync.configure(

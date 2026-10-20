@@ -85,7 +85,7 @@ simulated and 20% are picked at random to keep learning.
 | Exploration share | 20% | Part of each screened round picked at random. |
 | Trust a correlation pass for | 1 day | Older passes need a re-check. |
 | Re-deal cores by yield | off | Moves cores toward tasks whose alphas pass. |
-| Autopilot | off | Every 30 min queues up to 20 of the best transplants (chance ≥ 40%), once its last task has finished, up to 100 simulations a day. *Run one round now* on Repair → Transplants. |
+| Autopilot | off | Every 30 min, once its last task has finished, queues up to 20: RA families for expressions passing in 2 markets (when you pick an RA universe), else the best transplants (chance ≥ 40%). Up to 100 simulations a day. *Run one round now* on Repair → Transplants. |
 | Daily sync / hour / RA every | on / 06:00 / 3 days | Catalog downloads that build the crowding history. |
 | Read research feeds | on | arXiv q-fin + your own Atom/RSS feeds, twice a day. |
 | Auto update | off | Installs releases from this repo only when you turn it on. |
