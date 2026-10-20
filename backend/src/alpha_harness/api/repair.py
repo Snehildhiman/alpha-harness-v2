@@ -87,7 +87,8 @@ async def near_misses(
     """Refused Alphas whose every failure is narrow, nearest first, narrowed by the filters."""
     found: list[tuple[float, Any]] = []
     candidates = await _repairable(state, tab, region)
-    data = await data_of(state, candidates) if filters.dataset or filters.category else {}
+    wanted = filters.dataset or filters.category or filters.theme
+    data = await data_of(state, candidates) if wanted else {}
     for item in candidates:
         if not filters.keeps(item, data):
             continue

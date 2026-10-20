@@ -403,6 +403,8 @@ class TabFilter(BaseModel):
     max_turnover: float | None = Field(default=None, alias="maxTurnover")
     #: Text the expression or the Alpha id contains.
     search: str | None = None
+    #: Reads at least one field of a BRAIN theme dataset.
+    theme: bool = False
     #: Only read from a request body (a re-check); the tab takes ``region`` on its own.
     region: str | None = None
 
@@ -430,8 +432,10 @@ class TabFilter(BaseModel):
             text = f"{row.get('alpha_id') or ''} {row.get('expression') or ''}".lower()
             if needle not in text:
                 return False
-        if self.dataset or self.category:
+        if self.dataset or self.category or self.theme:
             datasets, categories = data.get(str(row.get("expression") or ""), (set(), set()))
+            if self.theme and not datasets & _data["themed"]:
+                return False
             if self.dataset and self.dataset not in datasets:
                 return False
             if self.category and self.category not in categories:
@@ -441,7 +445,7 @@ class TabFilter(BaseModel):
 
 NO_FILTER = TabFilter()
 #: Expression → the datasets and data categories of its fields, kept across requests.
-_data: dict[str, Any] = {"stamp": None, "fields": {}, "by_expression": {}}
+_data: dict[str, Any] = {"stamp": None, "fields": {}, "by_expression": {}, "themed": set()}
 
 
 async def data_of(state: State, judged: list[Judged]) -> dict[str, tuple[set[str], set[str]]]:
@@ -458,6 +462,16 @@ async def data_of(state: State, judged: list[Judged]) -> dict[str, tuple[set[str
             stamp=tuple(stamp.values()),
             fields={str(r["field_id"]): (r["d"], r["c"]) for r in rows},
             by_expression={},
+            themed={
+                str(r["dataset_id"])
+                for r in await state.catalog.query(
+                    "SELECT DISTINCT dataset_id FROM data_set "
+                    "WHERE themes IS NOT NULL AND themes NOT IN ('', '[]') "
+                    "UNION SELECT DISTINCT dataset_id FROM data_field "
+                    "WHERE dataset_id IS NOT NULL AND themes IS NOT NULL "
+                    "AND themes NOT IN ('', '[]')"
+                )
+            },
         )
     fields: dict[str, tuple[str | None, str | None]] = _data["fields"]
     out: dict[str, tuple[set[str], set[str]]] = _data["by_expression"]
@@ -535,7 +549,8 @@ async def tab(
 ) -> TabPage:
     """One tab's Alphas with one verdict, best first, narrowed by the filters."""
     judged = await judge_vault(state)
-    data = await data_of(state, judged) if filters.dataset or filters.category else {}
+    wanted = filters.dataset or filters.category or filters.theme
+    data = await data_of(state, judged) if wanted else {}
     picked = [
         item
         for item in judged
@@ -594,7 +609,8 @@ async def recheck(
     judged = [i for i in vault if in_tab(i, tab) and i.judgement.verdict == verdict]
     if filters is not None:
         # The same Alphas the screen shows, so "Re-check top N" means the filtered top N.
-        data = await data_of(state, judged) if filters.dataset or filters.category else {}
+        wanted = filters.dataset or filters.category or filters.theme
+        data = await data_of(state, judged) if wanted else {}
         region = filters.region
         judged = [
             i

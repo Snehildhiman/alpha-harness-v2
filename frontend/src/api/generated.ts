@@ -3431,6 +3431,11 @@ export interface components {
             region_agnostic: number;
             /** Region Exclusive */
             region_exclusive: number;
+            /**
+             * Theme Only
+             * @default 0
+             */
+            theme_only: number;
         };
         /** BackgroundTask */
         BackgroundTask: {
@@ -4475,6 +4480,11 @@ export interface components {
              * @default true
              */
             sort_desc: boolean;
+            /**
+             * Theme Only
+             * @default false
+             */
+            theme_only: boolean;
             /** User Count Max */
             user_count_max?: number | null;
             /** User Count Min */
@@ -6816,6 +6826,11 @@ export interface components {
             region?: string | null;
             /** Search */
             search?: string | null;
+            /**
+             * Theme
+             * @default false
+             */
+            theme: boolean;
             /** Universe */
             universe?: string | null;
         };
@@ -10387,6 +10402,7 @@ export interface operations {
                 minTurnover?: number | null;
                 maxTurnover?: number | null;
                 search?: string | null;
+                theme?: boolean;
             };
             header?: never;
             path?: never;
@@ -10891,6 +10907,7 @@ export interface operations {
                 minTurnover?: number | null;
                 maxTurnover?: number | null;
                 search?: string | null;
+                theme?: boolean;
             };
             header?: never;
             path?: never;

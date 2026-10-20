@@ -7,7 +7,7 @@
 import { XIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { fmt } from '@/lib/format'
-import { Button, Input } from './kit'
+import { Button, Checkbox, Input } from './kit'
 import { Select } from './overlay'
 
 export interface AlphaFilters {
@@ -20,8 +20,10 @@ export interface AlphaFilters {
   minFitness?: number | undefined
   maxTurnover?: number | undefined
   search?: string | undefined
+  /** Reads a field of one of BRAIN's theme datasets. */
+  theme?: boolean | undefined
   // Index signature so it can go straight into a query string.
-  [key: string]: string | number | undefined
+  [key: string]: string | number | boolean | undefined
 }
 
 export interface FacetList {
@@ -119,7 +121,7 @@ export function AlphaFilterBar({
   const set = (patch: Partial<AlphaFilters>) => {
     const next: AlphaFilters = { ...value, ...patch }
     for (const k of Object.keys(next) as (keyof AlphaFilters)[])
-      if (next[k] === undefined || next[k] === '') delete next[k]
+      if (next[k] === undefined || next[k] === '' || next[k] === false) delete next[k]
     onChange(next)
   }
   const [search, setSearch] = useState(value.search ?? '')
@@ -188,6 +190,11 @@ export function AlphaFilterBar({
         onKeyDown={(e) => {
           if (e.key === 'Enter') set({ search: search.trim() || undefined })
         }}
+      />
+      <Checkbox
+        label="Theme datasets"
+        checked={Boolean(value.theme)}
+        onChange={(on) => set({ theme: on || undefined })}
       />
       {active && (
         <Button variant="ghost" size="sm" onClick={() => onChange({})}>

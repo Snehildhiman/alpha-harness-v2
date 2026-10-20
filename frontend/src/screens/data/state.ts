@@ -138,6 +138,7 @@ export function describeFilter(filter: FieldFilterState, region: string): string
     filter.search && `Search \u201c${filter.search}\u201d`,
     filter.region_agnostic && 'Region Agnostic',
     filter.region_exclusive && `${regionLabel(region)} Exclusive`,
+    filter.theme_only && 'Theme datasets',
     filter.category_ids?.length &&
       `${fmt.int(filter.category_ids.length)} ${filter.category_ids.length === 1 ? 'Category' : 'Categories'}`,
     filter.field_types?.length && filter.field_types.join(', '),

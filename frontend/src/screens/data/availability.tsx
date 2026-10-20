@@ -1,7 +1,7 @@
 /** The availability filters: whether a field also exists in other regions. */
 
 import { useQuery } from '@tanstack/react-query'
-import { GlobeIcon, MapPinIcon } from 'lucide-react'
+import { GlobeIcon, MapPinIcon, TargetIcon } from 'lucide-react'
 import { type ReactNode, useEffect } from 'react'
 import { type CatalogFacets, catalog } from '@/api/catalog'
 import type { Scope } from '@/api/types'
@@ -81,7 +81,6 @@ export function AvailabilityFilters({
     if (Object.keys(drop).length) set(drop)
   }, [filter.region_agnostic, filter.region_exclusive, offersAgnostic, offersRegion, set])
 
-  if (!offersAgnostic && !offersRegion) return null
   const region = regionLabel(scope.region)
   return (
     <div role="group" aria-label="Availability" className="flex flex-wrap items-center gap-2">
@@ -114,6 +113,14 @@ export function AvailabilityFilters({
           }
         />
       )}
+      <Toggle
+        on={Boolean(filter.theme_only)}
+        icon={<TargetIcon />}
+        label="Theme datasets"
+        count={counts?.theme_only}
+        title="Only Fields of BRAIN's theme datasets (the ones it badges with a theme multiplier)"
+        onClick={() => set({ theme_only: !filter.theme_only })}
+      />
     </div>
   )
 }

@@ -126,6 +126,9 @@ class FieldFilter(BaseModel):
     #: Only fields found in no other synced region, region ``ALL`` included.
     region_exclusive: bool = False
 
+    #: Only fields of BRAIN's theme datasets (the ones it badges with a theme multiplier).
+    theme_only: bool = False
+
     #: ``smart`` (ranked words) or ``text`` (literal substring).
     search_mode: str = SMART
 
@@ -246,6 +249,16 @@ class FieldFilter(BaseModel):
                 "WHERE instrument_type = ? AND region <> ?)"
             )
             params.extend([scope.instrument_type, scope.region])
+
+        if self.theme_only:
+            # The field's own tag, or its dataset's in the same market.
+            clauses.append(
+                "((themes IS NOT NULL AND themes NOT IN ('', '[]')) OR dataset_id IN ("
+                "SELECT dataset_id FROM data_set s WHERE s.instrument_type = ? "
+                "AND s.region = ? AND s.delay = ? AND s.universe = ? "
+                "AND s.themes IS NOT NULL AND s.themes NOT IN ('', '[]')))"
+            )
+            params.extend(scope.params)
 
         return " AND ".join(clauses), params
 
@@ -550,6 +563,7 @@ class CatalogQueries:
         pressed = {
             "region_agnostic": {"region_agnostic": True, "region_exclusive": False},
             "region_exclusive": {"region_exclusive": True, "region_agnostic": False},
+            "theme_only": {"theme_only": True},
         }
 
         async def count(update: dict[str, bool]) -> int:

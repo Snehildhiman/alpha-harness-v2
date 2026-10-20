@@ -196,6 +196,7 @@ class AvailabilityCounts(BaseModel):
 
     region_agnostic: int
     region_exclusive: int
+    theme_only: int = 0
 
 
 class CatalogFacets(BaseModel):
