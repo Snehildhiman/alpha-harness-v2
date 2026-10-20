@@ -1743,6 +1743,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/separation/themes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Themes
+         * @description The Power Pool theme calendar.
+         */
+        get: operations["get_themes_api_separation_themes_get"];
+        /**
+         * Put Themes
+         * @description Replace the theme calendar; the tabs re-judge on the next read.
+         */
+        put: operations["put_themes_api_separation_themes_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/simulations/active": {
         parameters: {
             query?: never;
@@ -4799,6 +4823,8 @@ export interface components {
              * @default true
              */
             pnlDownload: boolean;
+            /** Powerpoolthemes */
+            powerPoolThemes?: components["schemas"]["ThemeRule"][];
             /** Quickregions */
             quickRegions?: string[];
             /**
@@ -5160,6 +5186,23 @@ export interface components {
             settings?: {
                 [key: string]: unknown;
             };
+        };
+        /** RunningTheme */
+        RunningTheme: {
+            /**
+             * End
+             * Format: date
+             */
+            end: string;
+            /** Name */
+            name: string;
+            /** Rule */
+            rule: string;
+            /**
+             * Start
+             * Format: date
+             */
+            start: string;
         };
         /** SampleAlpha */
         SampleAlpha: {
@@ -5647,6 +5690,7 @@ export interface components {
                     [key: string]: number;
                 };
             };
+            theme: components["schemas"]["RunningTheme"] | null;
         };
         /** SuperPlan */
         SuperPlan: {
@@ -5852,6 +5896,8 @@ export interface components {
             returns: number | null;
             /** Sharpe */
             sharpe: number | null;
+            /** Themenote */
+            themeNote: string | null;
             /** Turnover */
             turnover: number | null;
             /** Universe */
@@ -6225,6 +6271,38 @@ export interface components {
             /** Problem */
             problem?: string | null;
             tree?: components["schemas"]["TreeNode"] | null;
+        };
+        /**
+         * ThemeRule
+         * @description One Power Pool theme: what an Alpha must be, and the dates it runs.
+         */
+        ThemeRule: {
+            /** Categories */
+            categories?: string[];
+            /**
+             * Delay
+             * @default 1
+             */
+            delay: number | null;
+            /**
+             * End
+             * Format: date
+             */
+            end: string;
+            /** Name */
+            name: string;
+            /** Regions */
+            regions?: string[];
+            /**
+             * Singlecategory
+             * @default true
+             */
+            singleCategory: boolean;
+            /**
+             * Start
+             * Format: date
+             */
+            start: string;
         };
         /** ThreadScope */
         ThreadScope: {
@@ -9183,6 +9261,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Summary"];
+                };
+            };
+        };
+    };
+    get_themes_api_separation_themes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThemeRule"][];
+                };
+            };
+        };
+    };
+    put_themes_api_separation_themes_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ThemeRule"][];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThemeRule"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

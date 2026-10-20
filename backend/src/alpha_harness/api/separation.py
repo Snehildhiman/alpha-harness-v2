@@ -9,13 +9,27 @@ changes, so paging and switching tabs cost nothing.
 """
 
 import asyncio
+import json
 from dataclasses import asdict
+from datetime import date, datetime
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Query
 
+from .. import preferences
 from ..schemas import Out
-from ..separation import Judged, Kind, Verdict, in_tab, judge_all, summary
+from ..separation import (
+    Judged,
+    Kind,
+    ThemeCheck,
+    Verdict,
+    in_tab,
+    is_power_pool_row,
+    judge_all,
+    summary,
+)
+from ..themes import ThemeRule, check, current, fields_of
+from ..vault.yields import checks_of
 from .deps import State
 
 router = APIRouter(prefix="/api/separation", tags=["separation"])
@@ -34,14 +48,71 @@ _cache: dict[str, Any] = {"key": None, "judged": []}
 _lock = asyncio.Lock()
 
 
+def _today() -> date:
+    return datetime.now().astimezone().date()
+
+
+async def _running_theme(state: State) -> ThemeRule | None:
+    rules = (await preferences.load(state.db)).power_pool_themes
+    return current(rules, _today())
+
+
+async def _categories(state: State, rows: list[dict[str, Any]], rule: ThemeRule) -> ThemeCheck:
+    """The running theme as a check on one row, with every field's category read from the
+    synced catalog once, for just the fields Power Pool Alphas use."""
+    wanted: set[str] = set()
+    for row in rows:
+        if rule.delay is not None and row.get("delay") != rule.delay:
+            continue
+        if not is_power_pool_row(row, checks_of(row.get("checks"))):
+            continue
+        wanted.update(fields_of(row.get("expression")) or [])
+    by_scope: dict[tuple[str, str, int], str] = {}
+    by_field: dict[str, str] = {}
+    if wanted:
+        found = await state.catalog.query(
+            "SELECT field_id, region, delay, any_value(category_id) AS cat "
+            "FROM data_field WHERE field_id IN (SELECT unnest(?)) AND category_id IS NOT NULL "
+            "GROUP BY field_id, region, delay",
+            [sorted(wanted)],
+        )
+        for f in found:
+            by_scope[(f["field_id"], f["region"], int(f["delay"]))] = f["cat"]
+            by_field.setdefault(f["field_id"], f["cat"])
+
+    def category_of(name: str, region: str, delay: int) -> str | None:
+        # The field's own market first; another market's category is the same dataset's.
+        return by_scope.get((name, region, delay)) or by_field.get(name)
+
+    def theme(row: dict[str, Any]) -> tuple[bool, str]:
+        return check(
+            rule,
+            expression=row.get("expression"),
+            region=row.get("region"),
+            delay=row.get("delay"),
+            category_of=category_of,
+        )
+
+    return theme
+
+
 async def _judged(state: State) -> list[Judged]:
-    """The whole vault, judged; recomputed only when the vault changed."""
-    marker = await state.catalog.query("SELECT count(*) AS n, max(fetched_at) AS t FROM alpha")
-    key = (marker[0]["n"], str(marker[0]["t"])) if marker else None
+    """The whole vault, judged; recomputed only when the vault, the running theme or the
+    synced catalog changed."""
+    marker = await state.catalog.query(
+        "SELECT (SELECT count(*) FROM alpha) AS n, (SELECT max(fetched_at) FROM alpha) AS t, "
+        "(SELECT max(synced_at) FROM data_field) AS c"
+    )
+    rule = await _running_theme(state)
+    key = (
+        tuple(str(v) for v in marker[0].values()) if marker else None,
+        json.dumps(rule.model_dump(mode="json")) if rule else None,
+    )
     async with _lock:
         if _cache["key"] != key:
             rows = await state.catalog.query(f"SELECT {COLUMNS} FROM alpha")  # noqa: S608 - constant
-            _cache["judged"] = await asyncio.to_thread(judge_all, rows)
+            theme = await _categories(state, rows, rule) if rule else None
+            _cache["judged"] = await asyncio.to_thread(judge_all, rows, theme)
             _cache["key"] = key
         return _cache["judged"]
 
@@ -86,6 +157,8 @@ class TabRow(Out):
     regions_passing: list[str]
     regions_tried: list[str]
     children: list[str]
+    #: Power Pool rows: how the running theme reads this Alpha.
+    theme_note: str | None
 
 
 class TabPage(Out):
@@ -93,10 +166,19 @@ class TabPage(Out):
     rows: list[TabRow]
 
 
+class RunningTheme(Out):
+    name: str
+    rule: str
+    start: date
+    end: date
+
+
 class Summary(Out):
     #: tab -> verdict -> count. Current-theme Alphas also count under Power Pool.
     counts: dict[str, dict[str, int]]
     alphas: int
+    #: The theme running today, from the calendar in Settings; ``None`` between themes.
+    theme: RunningTheme | None
 
 
 def _row(item: Judged) -> TabRow:
@@ -122,13 +204,36 @@ def _row(item: Judged) -> TabRow:
         regions_passing=j.regions_passing,
         regions_tried=j.regions_tried,
         children=[str(c.get("alpha_id")) for c in item.children],
+        theme_note=j.theme_note,
     )
 
 
 @router.get("/summary")
 async def get_summary(state: State) -> Summary:
     judged = await _judged(state)
-    return Summary(counts=summary(judged), alphas=len(judged))
+    rule = await _running_theme(state)
+    running = (
+        RunningTheme(name=rule.name, rule=rule.describe(), start=rule.start, end=rule.end)
+        if rule
+        else None
+    )
+    return Summary(counts=summary(judged), alphas=len(judged), theme=running)
+
+
+@router.get("/themes")
+async def get_themes(state: State) -> list[ThemeRule]:
+    """The Power Pool theme calendar."""
+    return (await preferences.load(state.db)).power_pool_themes
+
+
+@router.put("/themes")
+async def put_themes(body: list[ThemeRule], state: State) -> list[ThemeRule]:
+    """Replace the theme calendar; the tabs re-judge on the next read."""
+    current_prefs = await preferences.load(state.db)
+    updated = current_prefs.model_copy(update={"power_pool_themes": body})
+    await preferences.save(state.db, updated)
+    preferences.apply(state, updated)
+    return body
 
 
 @router.get("/alphas")

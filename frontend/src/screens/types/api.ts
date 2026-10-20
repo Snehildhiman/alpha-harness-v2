@@ -30,3 +30,13 @@ export const typeTab = (q: {
     queryKey: ['separation', 'alphas', q],
     queryFn: () => http.get<TabPage>(`/api/separation/alphas${qs(q)}`),
   })
+
+export type ThemeRule = Schemas['ThemeRule']
+
+export const themeCalendar = queryOptions({
+  queryKey: ['separation', 'themes'],
+  queryFn: () => http.get<ThemeRule[]>('/api/separation/themes'),
+})
+
+export const saveThemes = (rules: ThemeRule[]) =>
+  http.put<ThemeRule[]>('/api/separation/themes', rules)

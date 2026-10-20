@@ -13,6 +13,7 @@ from . import updates
 from .brain.schemas import CheckResult
 from .db.models import Preference
 from .schemas import Out
+from .themes import DEFAULT_THEMES, ThemeRule
 
 if TYPE_CHECKING:
     from .db.sqlite import Database
@@ -51,6 +52,11 @@ class Preferences(Out):
     daily_sync_hour: int = Field(default=6, ge=0, le=23)
     #: Days between downloads of the slow region-agnostic market; 0 never runs it by itself.
     ra_sync_days: Literal[0, 1, 2, 3, 7] = 3
+    #: The Power Pool theme calendar, as BRAIN publishes it: the Current Theme tab tests
+    #: Alphas against whichever rule is running today.
+    power_pool_themes: list[ThemeRule] = Field(
+        default_factory=lambda: [r.model_copy() for r in DEFAULT_THEMES], max_length=60
+    )
 
 
 async def load(db: Database) -> Preferences:

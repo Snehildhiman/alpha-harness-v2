@@ -27,6 +27,7 @@ import {
 } from '@/ui/kit'
 import { type Column, DataTable, Pager } from '@/ui/table'
 import { type Kind, type TabRow, type TypeSort, typeSummary, typeTab, type Verdict } from './api'
+import { ThemeCalendar } from './themes'
 
 const LIMIT = 100
 
@@ -141,6 +142,23 @@ const COLUMNS: Column<TabRow>[] = [
   { key: 'why', header: 'What stops it', width: 'minmax(220px,2fr)', cell: (r) => <Why row={r} /> },
 ]
 
+/** Power Pool tabs add how today's theme reads each Alpha. */
+const THEME_COLUMN: Column<TabRow> = {
+  key: 'theme',
+  header: 'Today’s theme',
+  width: 'minmax(200px,1.6fr)',
+  cell: (r) => (
+    <span
+      className={`truncate text-body-compact ${r.kind === 'theme' ? 'text-pnl-positive-text' : 'text-ink-subtle'}`}
+      title={r.themeNote ?? ''}
+    >
+      {r.kind === 'theme' && !r.themeNote?.startsWith('BRAIN')
+        ? `fits · ${r.themeNote ?? ''}`
+        : (r.themeNote ?? '—')}
+    </span>
+  ),
+}
+
 export function TypesScreen() {
   const { tab } = useParams({ from: '/types/$tab' })
   const kind = KIND_OF_TAB[tab]
@@ -156,6 +174,8 @@ export function TypesScreen() {
     placeholderData: keepPreviousData,
   })
   const counts = kind ? summary.data?.counts[kind] : undefined
+  const columns = kind === 'power_pool' || kind === 'theme' ? [...COLUMNS, THEME_COLUMN] : COLUMNS
+  const running = summary.data?.theme
 
   return (
     <Page>
@@ -184,60 +204,87 @@ export function TypesScreen() {
           </Empty>
         </Panel>
       ) : (
-        <Panel
-          title={RULES[kind]}
-          actions={
-            <Segmented
-              label="Sort by"
-              items={SORTS}
-              value={sort}
-              onChange={(s) => {
-                setSort(s)
-                setOffset(0)
-              }}
-            />
-          }
-        >
-          <div className="flex flex-col gap-3">
-            <Segmented
-              label="Show"
-              items={VERDICTS.map((v) => ({
-                value: v.value,
-                label: (
-                  <>
-                    {v.label}
-                    {counts && (
-                      <span className="num ml-1.5 text-ink-subtle">{fmt.int(counts[v.value])}</span>
-                    )}
-                  </>
-                ),
-              }))}
-              value={verdict}
-              onChange={(v) => {
-                setVerdict(v)
-                setOffset(0)
-              }}
-            />
-            {(summary.isError || page.isError) && (
-              <ErrorNotice error={summary.error ?? page.error} title="Could not judge the vault" />
-            )}
-            <DataTable
-              label={`${tab} alphas`}
-              rows={page.data?.rows ?? []}
-              columns={COLUMNS}
-              rowKey={(r) => r.alphaId}
-              onRowClick={(r) => setDetailId(r.children[0] ?? r.alphaId)}
-              loading={page.isPending}
-              empty="No Alphas here yet. Sync your Alphas from the Alphas screen to fill these tabs."
-            />
-            <Pager
-              total={page.data?.total ?? 0}
-              offset={offset}
-              limit={LIMIT}
-              onChange={setOffset}
-            />
-          </div>
-        </Panel>
+        <>
+          {kind === 'theme' && (
+            <Panel>
+              <div className="flex flex-col gap-3">
+                {running ? (
+                  <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+                    <span className="text-title font-medium">{running.name}</span>
+                    <span className="num text-body-compact text-ink-muted">{running.rule}</span>
+                    <span className="text-body-compact text-ink-subtle">
+                      {fmt.date(running.start)} – {fmt.date(running.end)}
+                    </span>
+                  </div>
+                ) : (
+                  <p className="text-body text-ink-subtle">
+                    No theme is running today. Add the current one to the calendar below.
+                  </p>
+                )}
+                <ThemeCalendar />
+              </div>
+            </Panel>
+          )}
+          <Panel
+            title={RULES[kind]}
+            actions={
+              <Segmented
+                label="Sort by"
+                items={SORTS}
+                value={sort}
+                onChange={(s) => {
+                  setSort(s)
+                  setOffset(0)
+                }}
+              />
+            }
+          >
+            <div className="flex flex-col gap-3">
+              <Segmented
+                label="Show"
+                items={VERDICTS.map((v) => ({
+                  value: v.value,
+                  label: (
+                    <>
+                      {v.label}
+                      {counts && (
+                        <span className="num ml-1.5 text-ink-subtle">
+                          {fmt.int(counts[v.value])}
+                        </span>
+                      )}
+                    </>
+                  ),
+                }))}
+                value={verdict}
+                onChange={(v) => {
+                  setVerdict(v)
+                  setOffset(0)
+                }}
+              />
+              {(summary.isError || page.isError) && (
+                <ErrorNotice
+                  error={summary.error ?? page.error}
+                  title="Could not judge the vault"
+                />
+              )}
+              <DataTable
+                label={`${tab} alphas`}
+                rows={page.data?.rows ?? []}
+                columns={columns}
+                rowKey={(r) => r.alphaId}
+                onRowClick={(r) => setDetailId(r.children[0] ?? r.alphaId)}
+                loading={page.isPending}
+                empty="No Alphas here yet. Sync your Alphas from the Alphas screen to fill these tabs."
+              />
+              <Pager
+                total={page.data?.total ?? 0}
+                offset={offset}
+                limit={LIMIT}
+                onChange={setOffset}
+              />
+            </div>
+          </Panel>
+        </>
       )}
       <DetailSheet alphaId={detailId} onClose={() => setDetailId(null)} />
     </Page>

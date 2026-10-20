@@ -20,6 +20,7 @@ Pure functions only: no database, no HTTP. :mod:`.api.separation` feeds them vau
 
 import json
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
@@ -78,6 +79,8 @@ class Judgement:
     #: RA families only: regions whose child passes, and regions tried.
     regions_passing: list[str] = field(default_factory=list)
     regions_tried: list[str] = field(default_factory=list)
+    #: Power Pool Alphas: how the running theme's rule reads this Alpha.
+    theme_note: str | None = None
 
 
 def _name(check: dict[str, Any]) -> str:
@@ -121,18 +124,26 @@ def matches_theme(checks: list[dict[str, Any]]) -> bool:
     return False
 
 
-def kind_of(row: dict[str, Any], checks: list[dict[str, Any]]) -> Kind:
-    """Which tab an Alpha belongs on. RA children are reported as ``RA``; callers group them."""
+def is_power_pool_row(row: dict[str, Any], checks: list[dict[str, Any]]) -> bool:
+    """BRAIN's Power Pool eligibility check, or the classification on a submitted one."""
+    return is_power_pool(checks) or any(
+        POWER_POOL_CLASSIFICATION in c for c in _classifications(row.get("classifications"))
+    )
+
+
+def kind_of(row: dict[str, Any], checks: list[dict[str, Any]], *, in_theme: bool = False) -> Kind:
+    """Which tab an Alpha belongs on. RA children are reported as ``RA``; callers group them.
+
+    ``in_theme``: the running theme's rule, checked locally (:mod:`.themes`), accepts it.
+    BRAIN's own ``MATCHES_THEMES`` counts too, where it has run.
+    """
     sim_type = str(row.get("sim_type") or "REGULAR").upper()
     if sim_type == "SUPER":
         return Kind.SUPER
     if sim_type in ("RA_PARENT", "RA_CHILD", "REGION_AGNOSTIC"):
         return Kind.RA
-    power_pool = is_power_pool(checks) or any(
-        POWER_POOL_CLASSIFICATION in c for c in _classifications(row.get("classifications"))
-    )
-    if power_pool:
-        return Kind.THEME if matches_theme(checks) else Kind.POWER_POOL
+    if is_power_pool_row(row, checks):
+        return Kind.THEME if in_theme or matches_theme(checks) else Kind.POWER_POOL
     return Kind.REGULAR
 
 
@@ -177,10 +188,11 @@ def judge_checks(
         if name in _LABELS:
             continue
         if name == THEME_CHECK:
-            if kind == Kind.THEME:
+            # On the theme tab only BRAIN's outright refusal counts: an unmatched or absent
+            # result is BRAIN not having run it, and the local rule already placed the Alpha.
+            if kind == Kind.THEME and result in REFUSING:
                 gated += 1
-                if not matches_theme([check]):
-                    failed.append(CheckIssue(name, result or "UNMATCHED"))
+                failed.append(CheckIssue(name, result))
             continue
         if name == PROD_CORRELATION and kind in (Kind.POWER_POOL, Kind.THEME):
             continue
@@ -227,16 +239,28 @@ def is_submitted(row: dict[str, Any]) -> bool:
     return bool(status) and str(status).upper() != "UNSUBMITTED"
 
 
-def judge(row: dict[str, Any]) -> Judgement:
+#: Reads a Power Pool row against the running theme: ``(matches, note)``.
+ThemeCheck = Callable[[dict[str, Any]], tuple[bool, str]]
+
+
+def judge(row: dict[str, Any], theme: ThemeCheck | None = None) -> Judgement:
     """Judge one stored, non-RA vault row (or an RA child on its own)."""
     checks = checks_of(row.get("checks"))
-    kind = kind_of(row, checks)
-    return judge_checks(
+    in_theme, note = False, None
+    if theme is not None and is_power_pool_row(row, checks):
+        in_theme, note = theme(row)
+    kind = kind_of(row, checks, in_theme=in_theme)
+    judgement = judge_checks(
         kind,
         checks,
         simulation_mode=row.get("simulation_mode"),
         submitted=is_submitted(row),
     )
+    if kind == Kind.THEME and not in_theme:
+        # Placed by BRAIN's own MATCHES_THEMES; say so, with the local rule's view beside it.
+        note = "BRAIN's theme check passed" + (f" (local rule: {note})" if note else "")
+    judgement.theme_note = note
+    return judgement
 
 
 def family_key(row: dict[str, Any]) -> tuple[Any, ...]:
@@ -307,7 +331,7 @@ class Judged:
     children: list[dict[str, Any]] = field(default_factory=list)
 
 
-def judge_all(rows: list[dict[str, Any]]) -> list[Judged]:
+def judge_all(rows: list[dict[str, Any]], theme: ThemeCheck | None = None) -> list[Judged]:
     """Judge a whole vault. RA children are folded into their parent's row.
 
     A child whose parent is missing from the rows (an import that has not reached it yet)
@@ -323,7 +347,7 @@ def judge_all(rows: list[dict[str, Any]]) -> list[Judged]:
         elif sim_type == "RA_CHILD":
             children[family_key(row)].append(row)
         else:
-            out.append(Judged(row, judge(row)))
+            out.append(Judged(row, judge(row, theme)))
     for key, parent in parents.items():
         family = children.pop(key, [])
         out.append(Judged(parent, judge_family(parent, family), family))
