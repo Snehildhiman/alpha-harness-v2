@@ -83,7 +83,7 @@ lint.per-file-ignores."src/alpha_harness/api/*" = [ "TC" ]
 # `type_annotation_map` is SQLAlchemy's documented declarative idiom.
 lint.per-file-ignores."src/alpha_harness/db/models.py" = [ "RUF012" ]
 # Tests assert by design and build fixtures freely.
-lint.per-file-ignores."tests/*" = [ "S101", "RUF005", "ANN", "PLR2004" ]
+lint.per-file-ignores."tests/*" = [ "ANN", "PLR2004", "RUF005", "S101" ]
 # "›" is the category breadcrumb separator shown in the UI.
 lint.allowed-confusables = [ "›" ]
 # Pydantic and SQLAlchemy resolve annotations at runtime; their imports must stay real.
