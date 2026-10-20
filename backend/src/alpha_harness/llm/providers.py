@@ -38,6 +38,9 @@ class Provider:
     paid: bool = False
     #: What a paid tier bills, in plain words; shown above its key field.
     tier_note: str = ""
+    #: Answered by a subscription's own command-line tool on this computer (:mod:`.cli`).
+    #: Its limits are shared with the user's own use, so its keys need a daily cap too.
+    subscription: bool = False
 
 
 class LLMProvider(Out):
@@ -51,6 +54,8 @@ class LLMProvider(Out):
     tier_note: str
     #: True for a provider that bills the user rather than offering a free tier.
     paid: bool
+    #: Answered by a plan's own CLI tool on this computer; needs a daily cap like ``paid``.
+    subscription: bool = False
 
 
 class LLMProviders(Out):
@@ -134,6 +139,50 @@ PROVIDERS: dict[str, Provider] = {
         onboarding_url="https://ollama.com/download",
         limits_url="https://ollama.com/library",
         key_hint="no key needed: type ollama",
+    ),
+    # --- subscriptions you already pay for, through their makers' own CLI tools -------
+    #
+    # No key: the tool is signed in once by the user and keeps its own credentials. The
+    # "key" typed here only names the connection, and carries the daily cap.
+    "codex-cli": Provider(
+        id="codex-cli",
+        label="ChatGPT plan via Codex CLI",
+        base_url="cli:codex",
+        onboarding_url="https://developers.openai.com/codex/cli",
+        limits_url="https://chatgpt.com/codex/settings/usage",
+        key_hint="no key: type codex",
+        tier_note=(
+            "Runs the official Codex CLI on this computer with your ChatGPT sign-in "
+            "(codex exec). Uses your plan's Codex limits, shared with your own use."
+        ),
+        subscription=True,
+    ),
+    "claude-cli": Provider(
+        id="claude-cli",
+        label="Claude plan via Claude Code",
+        base_url="cli:claude",
+        onboarding_url="https://code.claude.com/docs/en/setup",
+        limits_url="https://claude.ai/settings/usage",
+        key_hint="no key: type claude",
+        tier_note=(
+            "Runs your own Claude Code (claude -p) signed in with your plan. Anthropic sizes "
+            "plan limits for ordinary individual use, so keep the daily cap modest; an "
+            "Anthropic API key (below) is the route meant for heavy automation."
+        ),
+        subscription=True,
+    ),
+    "antigravity-cli": Provider(
+        id="antigravity-cli",
+        label="Google AI plan via Antigravity CLI",
+        base_url="cli:agy",
+        onboarding_url="https://antigravity.google/docs/cli/headless/",
+        limits_url="https://antigravity.google/docs/cli/headless/",
+        key_hint="no key: type agy",
+        tier_note=(
+            "Runs Google's Antigravity CLI (agy -p, which replaced Gemini CLI for Google One "
+            "plans) with your Google sign-in. Uses your plan's limits."
+        ),
+        subscription=True,
     ),
     # --- bring your own, and your own bill ---------------------------------------------
     #

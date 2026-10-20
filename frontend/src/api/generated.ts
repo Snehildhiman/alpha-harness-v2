@@ -4798,6 +4798,11 @@ export interface components {
             onboardingUrl: string;
             /** Paid */
             paid: boolean;
+            /**
+             * Subscription
+             * @default false
+             */
+            subscription: boolean;
             /** Tiernote */
             tierNote: string;
         };

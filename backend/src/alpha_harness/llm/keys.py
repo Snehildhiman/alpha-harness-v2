@@ -143,6 +143,11 @@ class KeyStore:
                 f"Keys for {providers.get(provider).label} bill your own account, so they "
                 "need a daily request cap. Set one and add the key again."
             )
+        if providers.get(provider).subscription and not daily_limit:
+            raise LLMError(
+                f"{providers.get(provider).label} shares your plan's limits with your own use, "
+                "so it needs a daily request cap. Set one and add it again."
+            )
         if daily_limit is not None and daily_limit < 1:
             raise LLMError("A daily cap has to be at least one request.")
         print_ = fingerprint(clean)

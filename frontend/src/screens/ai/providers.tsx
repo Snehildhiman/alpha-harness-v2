@@ -33,8 +33,9 @@ export function Providers() {
     )
   }
 
-  const free = data.providers.filter((p) => !p.paid)
+  const free = data.providers.filter((p) => !p.paid && !p.subscription)
   const paid = data.providers.filter((p) => p.paid)
+  const plans = data.providers.filter((p) => p.subscription)
 
   const card = (p: LLMProvider) => {
     const keyCount = keys.data?.keys.filter((k) => k.provider === p.id).length ?? 0
@@ -53,6 +54,11 @@ export function Providers() {
             {p.paid && (
               <Badge tone="outline" className="w-fit">
                 Billed to you
+              </Badge>
+            )}
+            {p.subscription && (
+              <Badge tone="outline" className="w-fit">
+                Your plan, via its CLI
               </Badge>
             )}
           </div>
@@ -84,6 +90,23 @@ export function Providers() {
   return (
     <>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">{free.map(card)}</div>
+      {plans.length > 0 && (
+        <section className="flex flex-col gap-3 border-hairline border-t pt-5">
+          <div className="flex flex-col gap-1">
+            <h3 className="text-title text-ink">Your Subscriptions (Official CLIs)</h3>
+            <p className="text-body-compact text-pretty text-ink-subtle">
+              Uses a plan you already pay for through its maker's own command-line tool on this
+              computer: Codex CLI for ChatGPT, Claude Code for Claude, Antigravity CLI for Google
+              AI. Install the tool and sign in to it once in a terminal; Alpha Harness only runs it
+              and never sees your sign-in. Type the tool's name as the key, and set a daily cap: the
+              plan's limits are shared with your own chats.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {plans.map(card)}
+          </div>
+        </section>
+      )}
       {/* Its own heading, below the free ones, because the default has to keep reading as
           "no card required" even once these exist. */}
       {paid.length > 0 && (
@@ -123,7 +146,7 @@ function AddKeyDialog({
   const [saves, setSaves] = useState(0)
   const setUp = (models.data?.models ?? []).filter((m) => m.provider === provider?.id)
 
-  const paid = provider?.paid ?? false
+  const paid = (provider?.paid ?? false) || (provider?.subscription ?? false)
   const capped = Number.parseInt(cap, 10)
   // A paid key is refused by the backend without one, so the button should not offer to try.
   const capReady = !paid || (Number.isFinite(capped) && capped >= 1)
@@ -134,7 +157,7 @@ function AddKeyDialog({
         key: key.trim(),
         label: label.trim() || null,
         provider: p.id,
-        daily_limit: p.paid ? capped : null,
+        daily_limit: p.paid || p.subscription ? capped : null,
       }),
     onSuccess: (result, p) => {
       setAdded(result)
@@ -224,13 +247,19 @@ function AddKeyDialog({
               if (key.trim()) add.mutate(provider)
             }}
           >
-            {provider.paid && <Notice tone="warn">{provider.tierNote}</Notice>}
+            {(provider.paid || provider.subscription) && (
+              <Notice tone="warn">{provider.tierNote}</Notice>
+            )}
             <Button
               variant="secondary"
               className="w-fit"
               render={<a href={provider.onboardingUrl} target="_blank" rel="noopener noreferrer" />}
             >
-              {provider.paid ? `Get a ${provider.label} Key` : `Get a free ${provider.label} Key`}
+              {provider.subscription
+                ? 'How to install and sign in'
+                : provider.paid
+                  ? `Get a ${provider.label} Key`
+                  : `Get a free ${provider.label} Key`}
               <ExternalLinkIcon />
             </Button>
             <Field label="API Key">
@@ -252,7 +281,7 @@ function AddKeyDialog({
                 autoComplete="off"
               />
             </Field>
-            {provider.paid && (
+            {paid && (
               <Field
                 label="Daily request cap"
                 hint="Alpha Harness stops at this many requests a day on this key, and starts again when each model's day resets. You can change it later."

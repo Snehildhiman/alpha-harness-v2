@@ -96,6 +96,19 @@ simulated and 20% are picked at random to keep learning.
 LLMs are optional. Free routes: **Google AI Studio** key (free tier), **Ollama** on this
 computer (no key, unlimited, slower), and the other free providers on *LLM Integration*.
 
+**Your subscriptions** (*LLM Integration → Your Subscriptions*), through each maker's own CLI:
+
+| Plan | Install, then sign in once in a terminal | Key to type |
+| --- | --- | --- |
+| ChatGPT Go/Plus | `npm install -g @openai/codex`, then `codex` and sign in with ChatGPT | `codex` |
+| Claude Pro | install Claude Code, then `claude` and sign in | `claude` |
+| Google AI (Gemini) plan | install the Antigravity CLI, then `agy` and sign in | `agy` |
+
+Set a daily cap (the plan's limits are shared with your own use) and add a model with id
+`default` (the tool's own default model) or a model id the tool accepts. Anthropic sizes Claude
+plans for ordinary individual use, so keep Claude's cap modest; an API key is the route
+meant for heavy automation.
+
 ## 6. Changing it yourself
 
 | You want to… | Edit |

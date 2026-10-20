@@ -19,6 +19,8 @@ from openai import DefaultAsyncHttpxClient
 
 from ..schemas import camel_dict
 from .budget import Ledger
+from .cli import TIMEOUT_SECONDS as CLI_TIMEOUT
+from .cli import TOOLS, CliClient
 from .keys import BudgetExhaustedError, KeyStore, LLMError
 from .openai_compat import OpenAICompatible, ProviderError
 from .providers import PROVIDERS
@@ -148,7 +150,9 @@ class LLMService:
 
     # -- plumbing --------------------------------------------------------
 
-    def _client(self, provider: str, secret: str) -> OpenAICompatible:
+    def _client(self, provider: str, secret: str) -> OpenAICompatible | CliClient:
+        if provider in TOOLS:
+            return CliClient(provider)
         # Not providers.get: its fallback to Google would send another provider's key there.
         spec = PROVIDERS.get(provider)
         if spec is None:
@@ -223,7 +227,8 @@ class LLMService:
                             schema=schema,
                             reasoning_effort=effort,
                         ),
-                        timeout=TIMEOUT_SECONDS,
+                        # An agent tool thinks longer and has its own, longer timeout.
+                        timeout=CLI_TIMEOUT + 10 if model.provider in TOOLS else TIMEOUT_SECONDS,
                     )
                 except TimeoutError as exc:
                     await self.keys.mark(key_id, error="Timed out")

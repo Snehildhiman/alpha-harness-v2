@@ -5,6 +5,11 @@ What v2 adds on top of [alpha-harness-improved](https://github.com/residual-lab/
 
 ## 2026-10-21 (from your notes)
 
+- **Your LLM subscriptions** through their makers' official CLIs: ChatGPT (Codex CLI,
+  `codex exec`), Claude (Claude Code, `claude -p`) and Google AI (Antigravity CLI, `agy -p`).
+  The app runs the unmodified tool you signed in to; it never sees the sign-in. Each needs a
+  daily cap.
+
 - **Models no longer guess on bad input**: *Ask before you simulate* first checks the
   expression (it must parse, use your account's operators, read fields that exist in the chosen
   market, put vector fields inside `vec_`, keep Power Pool limits) and says what is wrong.
