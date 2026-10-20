@@ -463,14 +463,24 @@ TransplantKind = Literal["regular", "power_pool"]
 
 
 async def transplant_rows(
-    state: State, limit: int, region: str | None, kind: TransplantKind | None = None
+    state: State,
+    limit: int,
+    region: str | None,
+    kind: TransplantKind | None = None,
+    filters: TabFilter = NO_FILTER,
 ) -> tuple[TransplantPlan, list[tuple[Transplant, TransplantRow]]]:
+    """``filters`` narrow the *source* Alphas (their dataset, figures, settings)."""
     markets, known, ran = await _markets_and_runs(state)
     sources: list[dict[str, Any]] = []
     verdicts: dict[str, tuple[str, float | None]] = {}
-    for item in await judge_vault(state):
+    vault = await judge_vault(state)
+    wanted = filters.dataset or filters.category or filters.theme
+    data = await data_of(state, vault) if wanted else {}
+    for item in vault:
         judged_as = item.judgement.kind
         if judged_as not in _TRANSPLANT_KINDS or item.judgement.verdict not in _TRANSPLANT_PASSING:
+            continue
+        if not filters.keeps(item, data):
             continue
         sources.append(item.row | {"power_pool": judged_as != Kind.REGULAR})
         verdicts[str(item.row.get("alpha_id"))] = (
@@ -548,10 +558,11 @@ async def transplant_plan(
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     region: Annotated[str | None, Query()] = None,
     kind: Annotated[TransplantKind | None, Query()] = None,
+    filters: Annotated[TabFilter, Depends()] = NO_FILTER,
 ) -> TransplantPlan:
     """Passing regular and Power Pool Alphas, each in the downloaded regions it has not run
     in, best first. Simulates nothing."""
-    return (await transplant_rows(state, limit, region or None, kind))[0]
+    return (await transplant_rows(state, limit, region or None, kind, filters))[0]
 
 
 @router.post("/transplants/tasks")
@@ -560,13 +571,14 @@ async def queue_transplants(
     take: Annotated[int, Body(ge=1, le=200)] = 40,
     region: Annotated[str | None, Body()] = None,
     kind: Annotated[TransplantKind | None, Body()] = None,
+    filters: Annotated[TabFilter | None, Body()] = None,
     cores: Annotated[int, Body(ge=1)] = DEFAULT_SLOTS,
 ) -> AddedTask:
     """Simulate the best ``take`` transplants as one task, in Full mode so the correlation
     checks run."""
     if cores > state.engine.slots:
         raise refuse(422, "too_many_cores", f"The engine has {state.engine.slots} slots.")
-    _, rows = await transplant_rows(state, take, region or None, kind)
+    _, rows = await transplant_rows(state, take, region or None, kind, filters or NO_FILTER)
     chosen = [t for t, _ in rows[:take]]
     if not chosen:
         raise refuse(

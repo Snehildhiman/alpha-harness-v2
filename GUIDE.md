@@ -30,7 +30,9 @@ How to run it, what each part does, how it learns, and how to change it yourself
 | Use papers | **Research** | Tick papers, then add an LLM Power Pool or Region Agnostic Lab task: each LLM call carries one paper's idea over to your fields. |
 | See where the crowd is going | **Crowding** | Datasets and fields by how many new alphas and users they gained over 1/7/30 days, from the daily catalog snapshots. Fast growers will push prod correlation up; large, quiet datasets have room. |
 | Learn what to avoid | **Scorecards** | Which operators, pairs, fields, datasets, categories, lookbacks and settings run hot or cold on prod / Power Pool / self-correlation. |
-| Check the models | **Models** | Accuracy on your newest alphas, what drives each prediction, *Screening in the labs* (model picks vs random picks), and a box to predict any expression before simulating. |
+| Check the models | **Models** | Accuracy on your newest alphas, what drives each prediction, *Screening in the labs* (model picks vs random picks), and a box to predict any expression before simulating. The box refuses expressions BRAIN would reject and strikes through numbers from models that only guess. |
+| Improve a passing alpha | **Alpha Types → Improve** (any row) | Opens its variants on Repair ranked by predicted Sharpe (or fitness) among those likely to keep passing. |
+| Narrow a list | Filter bar on **Alpha Types**, **Repair** | Region, dataset, category, universe, neutralization, Sharpe/fitness/turnover bounds, search, theme datasets. |
 | Track competitions | **Competitions** | Your rank in each ongoing competition is read every 6 hours and kept, so each card shows how it moved. Only your own standing is read. |
 | Spend cores well | **Tasks** | *Yield* column per task; *Re-deal cores by yield* (or turn it on in Settings to run every 30 min). |
 

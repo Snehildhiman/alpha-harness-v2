@@ -3,6 +3,32 @@
 What v2 adds on top of [alpha-harness-improved](https://github.com/residual-lab/alpha-harness)
 (MIT, © MiracleInvoker). How to use each part: [GUIDE.md](GUIDE.md).
 
+## 2026-10-21 (from your notes)
+
+- **Models no longer guess on bad input**: *Ask before you simulate* first checks the
+  expression (it must parse, use your account's operators, read fields that exist in the chosen
+  market, put vector fields inside `vec_`, keep Power Pool limits) and says what is wrong.
+  Region, delay, universe and neutralization are BRAIN's own dropdowns. Checks for other
+  regions (GLB AMER for an ASI alpha) are hidden, and numbers from models that only guess are
+  struck through.
+- **Filters** on Alpha Types, Repair near-misses and transplants: region, dataset, data
+  category, universe, neutralization, minimum Sharpe and fitness, maximum turnover, text search,
+  theme datasets. Dataset and category choices show how many alphas use each, so a tab can be
+  split by dataset. *Re-check top N* follows the filters.
+- **Theme datasets**: BRAIN's theme tags (the ×1 badge) are synced with the catalog; a *Theme
+  datasets* toggle in the Data Explorer and a filter on the alpha lists.
+- **Improve any alpha**: every Alpha Types row links to Repair (failing) or Improve (passing:
+  variants ranked by predicted Sharpe or fitness among those likely to keep passing).
+- **RA without an LLM**: choose *All regions* in the Template or Search Lab, or use Repair's
+  transplants and promotions. The Region Agnostic Lab says so.
+- **Ten more block templates** in Basic Template Research, shaped for less crowded signals
+  (volatility-scaled change, steady field, two-field spread, field-price divergence, quiet days,
+  ratio momentum, rank change, peer-relative trend, …).
+- **Models**: crowd growth from the daily snapshots is a new input (used by model sets trained
+  from now on).
+- Simulations stay at BRAIN's daily allowance (5,000); the app cannot raise it, only spend it
+  better (dedup, screening, autopilot).
+
 ## 2026-10-21 (overnight)
 
 **More submittable alphas from what you already have**

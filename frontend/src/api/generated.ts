@@ -3671,6 +3671,7 @@ export interface components {
              * @default 8
              */
             cores: number;
+            filters?: components["schemas"]["TabFilter"] | null;
             /** Kind */
             kind?: ("regular" | "power_pool") | null;
             /** Region */
@@ -10610,6 +10611,17 @@ export interface operations {
                 limit?: number;
                 region?: string | null;
                 kind?: ("regular" | "power_pool") | null;
+                delay?: number | null;
+                universe?: string | null;
+                neutralization?: string | null;
+                dataset?: string | null;
+                category?: string | null;
+                minSharpe?: number | null;
+                minFitness?: number | null;
+                minTurnover?: number | null;
+                maxTurnover?: number | null;
+                search?: string | null;
+                theme?: boolean;
             };
             header?: never;
             path?: never;

@@ -4,11 +4,12 @@
  * passes in two regions is an all-region Alpha.
  */
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { GlobeIcon, PlayIcon } from 'lucide-react'
 import { useState } from 'react'
 import { fmt } from '@/lib/format'
+import { AlphaFilterBar, type AlphaFilters } from '@/ui/alpha-filters'
 import { Button, Empty, ErrorNotice, LINK, Notice, Panel, Segmented } from '@/ui/kit'
 import { type Column, DataTable } from '@/ui/table'
 import {
@@ -90,9 +91,11 @@ export function TransplantsPanel() {
   const [region, setRegion] = useState<string>('all')
   const [kind, setKind] = useState<TransplantKind | 'all'>('all')
   const [take, setTake] = useState(20)
-  const plan = useQuery(
-    transplantPlan(region === 'all' ? null : region, kind === 'all' ? null : kind),
-  )
+  const [filters, setFilters] = useState<AlphaFilters>({})
+  const plan = useQuery({
+    ...transplantPlan(region === 'all' ? null : region, kind === 'all' ? null : kind, filters),
+    placeholderData: keepPreviousData,
+  })
   const queue = useMutation({ mutationFn: queueTransplants })
   const client = useQueryClient()
   const pilot = useQuery(autopilotStatus)
@@ -144,6 +147,7 @@ export function TransplantsPanel() {
                     take,
                     region: region === 'all' ? null : region,
                     kind: kind === 'all' ? null : kind,
+                    filters,
                   })
                 }
               >
@@ -162,6 +166,7 @@ export function TransplantsPanel() {
           against that region’s crowd, and an expression that passes in two regions is an all-region
           Alpha. Each keeps its type and is judged by its own checks.
         </p>
+        <AlphaFilterBar value={filters} onChange={setFilters} />
         {pilot.data && (
           <div className="flex flex-wrap items-center gap-2 text-body-compact text-ink-subtle">
             <span>

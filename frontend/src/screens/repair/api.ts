@@ -41,10 +41,15 @@ export type TransplantRow = Schemas['TransplantRow']
 
 export type TransplantKind = 'regular' | 'power_pool'
 
-export const transplantPlan = (region: string | null, kind: TransplantKind | null = null) =>
+export const transplantPlan = (
+  region: string | null,
+  kind: TransplantKind | null = null,
+  filters: AlphaFilters = {},
+) =>
   queryOptions({
-    queryKey: ['repair', 'transplants', region, kind],
-    queryFn: () => http.get<TransplantPlan>(`/api/repair/transplants${qs({ region, kind })}`),
+    queryKey: ['repair', 'transplants', region, kind, filters],
+    queryFn: () =>
+      http.get<TransplantPlan>(`/api/repair/transplants${qs({ ...filters, region, kind })}`),
     staleTime: 60_000,
   })
 
@@ -52,6 +57,7 @@ export const queueTransplants = (body: {
   take: number
   region: string | null
   kind: TransplantKind | null
+  filters?: AlphaFilters
 }) => http.post<Schemas['AddedTask']>('/api/repair/transplants/tasks', body)
 
 export type PromotionPlan = Schemas['PromotionPlan']
