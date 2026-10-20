@@ -79,6 +79,8 @@ class FieldInfo:
     category: str | None = None
     alpha_count: int | None = None
     user_count: int | None = None
+    #: New Alphas a day over the last month of crowding snapshots, where two exist.
+    alpha_growth: float | None = None
 
 
 @dataclass(slots=True)
@@ -186,6 +188,9 @@ class Vocabulary:
     pairs: list[str] = field(default_factory=list)
     datasets: list[str] = field(default_factory=list)
     data_categories: list[str] = field(default_factory=list)
+    #: Crowd-growth columns, once snapshots exist. A set saved before them has none, so its
+    #: columns (and the model trained on them) stay exactly as they were.
+    growth: bool = False
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -194,6 +199,7 @@ class Vocabulary:
             "pairs": self.pairs,
             "datasets": self.datasets,
             "data_categories": self.data_categories,
+            "growth": self.growth,
         }
 
     @classmethod
@@ -204,6 +210,7 @@ class Vocabulary:
             pairs=list(raw.get("pairs") or []),
             datasets=list(raw.get("datasets") or []),
             data_categories=list(raw.get("data_categories") or []),
+            growth=bool(raw.get("growth")),
         )
 
     def columns(self) -> list[str]:
@@ -223,6 +230,7 @@ class Vocabulary:
             "crowd_alpha_mean",
             "crowd_user_max",
             "crowd_user_mean",
+            *(("crowd_growth_max", "crowd_growth_mean") if self.growth else ()),
             "unknown_fields",
             "category_count",
             "days",
@@ -261,6 +269,7 @@ def fit_vocabulary(
         pairs=_top(pairs, MAX_PAIRS),
         datasets=_top(datasets, MAX_DATASETS),
         data_categories=_top(data_categories, 60),
+        growth=any(i.alpha_growth is not None for i in fields.values()),
     )
 
 
@@ -316,6 +325,13 @@ def matrix(
         if users:
             x[index["crowd_user_max"]] = max(users)
             x[index["crowd_user_mean"]] = _mean(users)
+        if "crowd_growth_max" in index:
+            grown = [
+                math.log1p(max(i.alpha_growth, 0.0)) for i in known if i.alpha_growth is not None
+            ]
+            if grown:
+                x[index["crowd_growth_max"]] = max(grown)
+                x[index["crowd_growth_mean"]] = _mean(grown)
         cats = {i.category for i in known if i.category}
         x[index["category_count"]] = len(cats)
         for name, n in p.operators.items():

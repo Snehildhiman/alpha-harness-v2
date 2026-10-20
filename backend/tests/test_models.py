@@ -130,3 +130,25 @@ def test_a_constant_target_is_skipped_not_trained() -> None:
     report = {r.target: r for r in train_all(rows, fields, min_labels=200).reports}
     assert report["self_corr"].kind == "skipped"
     assert report["check:SELF_CORRELATION"].kind == "skipped"
+
+
+def test_growth_columns_only_for_sets_trained_with_them() -> None:
+    from alpha_harness.models.features import (
+        FieldInfo,
+        Vocabulary,
+        fit_vocabulary,
+        matrix,
+        read_expression,
+    )
+
+    old = Vocabulary.from_json({"operators": ["rank"]})  # saved before growth existed
+    assert "crowd_growth_max" not in old.columns()
+    rows = [{"expression": "rank(close)", "region": "USA"}]
+    parsed = [read_expression("rank(close)")]
+    assert matrix(rows, parsed, {}, old).shape[1] == len(old.columns())
+    fields = {"close": FieldInfo(alpha_count=10, alpha_growth=3.0)}
+    new = fit_vocabulary(rows, parsed, fields)
+    assert new.growth and Vocabulary.from_json(new.to_json()).growth
+    x = matrix(rows, parsed, fields, new)
+    at = new.columns().index("crowd_growth_max")
+    assert abs(float(x[0, at]) - 1.3862944) < 1e-5  # log1p(3)

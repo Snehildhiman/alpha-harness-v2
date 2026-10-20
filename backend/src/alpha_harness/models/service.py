@@ -42,15 +42,36 @@ async def field_infos(catalog: Catalog, expressions: list[str | None]) -> dict[s
         "FROM data_field WHERE field_id IN (SELECT unnest(?)) GROUP BY field_id",
         [sorted(wanted)],
     )
+    growth = {
+        r["field_id"]: float(r["per_day"])
+        for r in await catalog.query(_GROWTH, [sorted(wanted)])
+        if r["per_day"] is not None
+    }
     return {
         r["field_id"]: FieldInfo(
             dataset=r["dataset"],
             category=r["category"],
             alpha_count=r["alphas"],
             user_count=r["users"],
+            alpha_growth=growth.get(r["field_id"]),
         )
         for r in rows
     }
+
+
+#: Each field's fastest market: new Alphas a day between its first and last snapshot of the
+#: past month. Snapshots keep a row only when a count changed, so two rows mean it moved.
+_GROWTH = """
+SELECT field_id, max(per_day) AS per_day FROM (
+    SELECT field_id,
+           (arg_max(alpha_count, snapshot_date) - arg_min(alpha_count, snapshot_date))
+             / greatest(date_diff('day', min(snapshot_date), max(snapshot_date)), 1) AS per_day
+    FROM field_snapshot
+    WHERE field_id IN (SELECT unnest(?)) AND snapshot_date >= current_date - 30
+    GROUP BY field_id, instrument_type, region, delay, universe
+    HAVING count(*) >= 2
+) GROUP BY field_id
+"""
 
 
 #: Seconds between looks for enough new results to retrain on.
