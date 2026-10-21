@@ -74,3 +74,24 @@ def test_papers_are_kept_once_and_briefed_to_the_lab(tmp_path: Any) -> None:
 def test_brief_cuts_long_summaries() -> None:
     paper = ResearchPaper(key="k", source="s", title="T", summary="word " * 1000)
     assert len(brief([paper])) < 1600
+
+
+def test_a_busy_feed_is_asked_again_then_left_for_later(monkeypatch: Any) -> None:
+    import httpx2
+
+    from alpha_harness.research import service
+
+    monkeypatch.setattr(service, "BUSY_WAITS", (0.0,))
+    calls: list[int] = []
+
+    def answer(request: httpx2.Request) -> httpx2.Response:
+        calls.append(1)
+        return httpx2.Response(429) if len(calls) == 1 else httpx2.Response(200, content=ATOM)
+
+    async def body() -> int:
+        async with httpx2.AsyncClient(transport=httpx2.MockTransport(answer)) as client:
+            response = await service._polite_get(client, "https://export.arxiv.org/api/query")
+            return response.status_code
+
+    assert asyncio.run(body()) == 200
+    assert len(calls) == 2

@@ -36,6 +36,28 @@ TIMEOUT = 30.0
 SUMMARY_CHARS = 1500
 
 
+#: Statuses that mean "not now": arXiv answers 429 when it is being asked too often.
+BUSY = frozenset({429, 503})
+#: Waits before asking a busy feed again within one read, honouring Retry-After up to the cap.
+BUSY_WAITS = (5.0, 20.0)
+RETRY_AFTER_CAP = 60.0
+#: How soon a read that met a busy feed is tried again.
+BUSY_RETRY = timedelta(hours=1)
+
+
+async def _polite_get(client: httpx2.AsyncClient, url: str) -> httpx2.Response:
+    """GET, waiting and asking again when the feed says it is busy."""
+    response = await client.get(url)
+    for wait in BUSY_WAITS:
+        if response.status_code not in BUSY:
+            break
+        after = response.headers.get("retry-after", "")
+        delay = min(float(after), RETRY_AFTER_CAP) if after.isdigit() else wait
+        await asyncio.sleep(delay)
+        response = await client.get(url)
+    return response
+
+
 class ResearchService:
     def __init__(self, db: Database) -> None:
         self.db = db
@@ -81,16 +103,28 @@ class ResearchService:
         async with self._lock:
             found: dict[str, int] = {}
             errors: list[str] = []
+            busy = False
             async with httpx2.AsyncClient(
                 timeout=TIMEOUT,
                 follow_redirects=True,
-                headers={"User-Agent": "alpha-harness/0.1 (research reader)"},
+                headers={
+                    # arXiv asks API callers to say who they are.
+                    "User-Agent": "alpha-harness-v2/0.2 (personal research reader; "
+                    "+https://github.com/Snehildhiman/alpha-harness-v2)"
+                },
             ) as client:
                 for index, (name, url) in enumerate(self.sources()):
                     if index:
                         await asyncio.sleep(PAUSE_SECONDS)
                     try:
-                        response = await client.get(url)
+                        response = await _polite_get(client, url)
+                        if response.status_code in BUSY:
+                            busy = True
+                            errors.append(
+                                f"{name} is busy right now (HTTP {response.status_code}); "
+                                "the app tries again within the hour."
+                            )
+                            continue
                         response.raise_for_status()
                         items = parse(response.content, name)
                     except Exception as exc:  # noqa: BLE001 - one bad feed, not all
@@ -98,7 +132,9 @@ class ResearchService:
                         log.warning("research.feed_failed", feed=name, error=str(exc)[:200])
                         continue
                     found[name] = await self.store(items)
-            self.last_read = datetime.now(UTC)
+            now = datetime.now(UTC)
+            # A busy feed is tried again in an hour, not at the next twelve-hourly read.
+            self.last_read = now - EVERY + BUSY_RETRY if busy else now
             self.last_error = "; ".join(errors) or None
             log.info("research.read", new=found)
             return found
