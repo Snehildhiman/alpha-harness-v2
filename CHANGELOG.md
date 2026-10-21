@@ -3,6 +3,18 @@
 What v2 adds on top of [alpha-harness-improved](https://github.com/residual-lab/alpha-harness)
 (MIT, © MiracleInvoker). How to use each part: [GUIDE.md](GUIDE.md).
 
+## 2026-10-21 (evening)
+
+- **Current Theme Lab** (Research Labs, no LLM): simulates only alphas that fit the running
+  theme: its delay, datasets of its categories, one field per alpha, no group operators or
+  grouping fields, Power Pool limits. Starts at once.
+- **Theme rule: no grouping**: group operators and grouping fields (industry, sector...) now
+  break the current theme, on the Current Theme tab too.
+- **arXiv 429**: the app waits and retries, then tries again within the hour; restarts no longer
+  re-read the feeds.
+- **Faster**: `update.bat` + `start.bat` serve the built website at :8000; the vault is judged in
+  the background at startup; the dashboard no longer scores every transplant.
+
 ## 2026-10-21 (morning)
 
 - **What to submit next** (Alpha Types, Submittable and Needs re-check): each candidate's change
