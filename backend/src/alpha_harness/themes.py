@@ -16,7 +16,7 @@ from datetime import date
 
 from pydantic import Field
 
-from .labs.fastexpr import ParseError, data_fields, parse
+from .labs.fastexpr import GROUPING, ParseError, data_fields, parse, walk
 from .schemas import Out
 
 #: How a typo in a published rule is read: the calendar has printed "fundamnetal".
@@ -42,6 +42,9 @@ class ThemeRule(Out):
     single_category: bool = True
     #: Empty: any region.
     regions: list[str] = Field(default_factory=list)
+    #: No group operators (``group_rank``, ``group_neutralize``...) and no grouping fields
+    #: (``industry``, ``sector``...): the October 2026 themes allow neither.
+    no_grouping: bool = True
 
     def describe(self) -> str:
         parts = []
@@ -53,6 +56,8 @@ class ThemeRule(Out):
             parts.append("single datacategory")
         if self.regions:
             parts.append("region in [" + ", ".join(self.regions) + "]")
+        if self.no_grouping:
+            parts.append("no group operators or grouping fields")
         return " & ".join(parts) or "any Alpha"
 
 
@@ -92,6 +97,20 @@ def fields_of(expression: str | None) -> list[str] | None:
         return None
 
 
+def grouping_in(expression: str) -> str | None:
+    """Why an expression breaks a no-grouping theme (a group operator, a grouping field)."""
+    try:
+        tree = parse(expression)
+    except ParseError, RecursionError:
+        return "expression could not be read"
+    for _, node in walk(tree):
+        if node.kind == "call" and node.value.startswith("group_"):
+            return f"uses {node.value}; the theme allows no group operators"
+        if node.kind == "name" and node.value in GROUPING:
+            return f"uses {node.value}; the theme allows no grouping fields"
+    return None
+
+
 #: ``(field id, region, delay) -> category id``, ``None`` when the catalog has not got it.
 CategoryOf = Callable[[str, str, int], str | None]
 
@@ -112,6 +131,8 @@ def check(
     fields = fields_of(expression)
     if fields is None:
         return False, "expression could not be read"
+    if rule.no_grouping and (reason := grouping_in(str(expression))):
+        return False, reason
     if not fields:
         return False, "no data fields"
     categories: dict[str, str] = {}

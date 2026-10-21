@@ -11,7 +11,15 @@ import { saveThemes, type ThemeRule, themeCalendar } from './api'
 
 const blank = (): ThemeRule => {
   const today = new Date().toISOString().slice(0, 10)
-  return { name: '', start: today, end: today, delay: 1, categories: [], singleCategory: true }
+  return {
+    name: '',
+    start: today,
+    end: today,
+    delay: 1,
+    categories: [],
+    singleCategory: true,
+    noGrouping: true,
+  }
 }
 
 function RuleRow({
@@ -25,7 +33,7 @@ function RuleRow({
 }) {
   const [categories, setCategories] = useState((rule.categories ?? []).join(', '))
   return (
-    <div className="grid grid-cols-1 items-end gap-3 rounded-md border border-hairline p-3 lg:grid-cols-[2fr_1fr_1fr_80px_2fr_auto_auto]">
+    <div className="grid grid-cols-1 items-end gap-3 rounded-md border border-hairline p-3 lg:grid-cols-[2fr_1fr_1fr_80px_2fr_auto_auto_auto]">
       <Field label="Name">
         <Input value={rule.name} onChange={(e) => onChange({ ...rule, name: e.target.value })} />
       </Field>
@@ -76,6 +84,14 @@ function RuleRow({
           aria-label="Single data category"
         />
         Single category
+      </div>
+      <div className="flex h-8 items-center gap-2 text-body-compact text-ink-muted">
+        <Switch
+          checked={rule.noGrouping ?? true}
+          onChange={(on) => onChange({ ...rule, noGrouping: on })}
+          aria-label="No group operators or grouping fields"
+        />
+        No grouping
       </div>
       <Button variant="ghost" size="icon-sm" aria-label="Remove this theme" onClick={onRemove}>
         <Trash2Icon />

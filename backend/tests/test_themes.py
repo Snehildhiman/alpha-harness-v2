@@ -30,13 +30,28 @@ def fits(expression: str, delay: int = 1) -> tuple[bool, str]:
 
 
 def test_single_category_from_the_allowed_set_matches() -> None:
-    ok, note = fits("group_rank(ts_mean(est_eps / est_rev, 20), subindustry)")
+    ok, note = fits("rank(ts_mean(est_eps / est_rev, 20))")
     assert ok
     assert note == "analyst only"
 
 
-def test_grouping_fields_do_not_count_as_a_category() -> None:
-    assert fits("group_neutralize(rank(est_eps), industry)")[0]
+def test_group_operators_and_grouping_fields_break_a_no_grouping_theme() -> None:
+    ok, note = fits("group_rank(ts_mean(est_eps, 20), subindustry)")
+    assert not ok and "group_rank" in note
+    ok, note = fits("ts_mean(bucket(rank(est_eps)), 5) + industry")
+    assert not ok and "industry" in note
+
+
+def test_grouping_fields_do_not_count_as_a_category_where_allowed() -> None:
+    rule = ANALYST.model_copy(update={"no_grouping": False})
+    found = check(
+        rule,
+        expression="group_neutralize(rank(est_eps), industry)",
+        region="USA",
+        delay=1,
+        category_of=cat,
+    )
+    assert found[0]
 
 
 def test_mixing_categories_or_using_others_fails_with_a_reason() -> None:

@@ -7459,6 +7459,11 @@ export interface components {
             end: string;
             /** Name */
             name: string;
+            /**
+             * Nogrouping
+             * @default true
+             */
+            noGrouping: boolean;
             /** Regions */
             regions?: string[];
             /**
