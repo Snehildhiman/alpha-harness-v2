@@ -84,7 +84,7 @@ def test_a_busy_feed_is_asked_again_then_left_for_later(monkeypatch: Any) -> Non
     monkeypatch.setattr(service, "BUSY_WAITS", (0.0,))
     calls: list[int] = []
 
-    def answer(request: httpx2.Request) -> httpx2.Response:
+    def answer(_request: httpx2.Request) -> httpx2.Response:
         calls.append(1)
         return httpx2.Response(429) if len(calls) == 1 else httpx2.Response(200, content=ATOM)
 
