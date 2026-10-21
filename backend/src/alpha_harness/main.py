@@ -54,6 +54,7 @@ from .api import (
     tasks,
     template_basic_lab,
     template_lab,
+    theme_lab,
     today,
     tools,
     update,
@@ -202,6 +203,7 @@ def create_app() -> FastAPI:
     app.include_router(today.router)
     app.include_router(tools.router)
     app.include_router(search_lab.router)
+    app.include_router(theme_lab.router)
     app.include_router(lab_tasks.router)
     app.include_router(power_pool_lab.router)
     app.include_router(region_agnostic_lab.router)

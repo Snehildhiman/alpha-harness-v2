@@ -9,12 +9,14 @@ import {
   LayersIcon,
   type LucideIcon,
   SearchIcon,
+  TargetIcon,
   ZapIcon,
 } from 'lucide-react'
 import { LAB_TABS } from '@/shell/nav'
 import { Page, PageHeader } from '@/ui/kit'
 
 const ICONS: Record<(typeof LAB_TABS)[number]['tab'], LucideIcon> = {
+  theme: TargetIcon,
   search: SearchIcon,
   template: BracesIcon,
   evolution: DnaIcon,
@@ -25,6 +27,8 @@ const ICONS: Record<(typeof LAB_TABS)[number]['tab'], LucideIcon> = {
 
 /** What each one searches, since a name alone does not say which to start with. */
 const ABOUT: Record<(typeof LAB_TABS)[number]['tab'], string> = {
+  theme:
+    'No LLM. Simulates only Alphas that fit the running Power Pool theme: its delay, its data categories, one category, no group operators or grouping fields.',
   search:
     'No LLM. Writes one- and two-operator Alphas from the datasets you pick, screened by the models. Choose All regions for region-agnostic Alphas.',
   template:

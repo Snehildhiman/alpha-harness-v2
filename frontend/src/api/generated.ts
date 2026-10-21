@@ -2654,6 +2654,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/theme-lab/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Options
+         * @description The running theme and, per downloaded region, the datasets it allows.
+         */
+        get: operations["options_api_theme_lab_options_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/theme-lab/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview
+         * @description What a task would search, held to the theme. Free; queues nothing.
+         */
+        post: operations["preview_api_theme_lab_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/theme-lab/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Task
+         * @description Add the theme search to Tasks and start it.
+         */
+        post: operations["add_task_api_theme_lab_tasks_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/today": {
         parameters: {
             query?: never;
@@ -7440,6 +7500,80 @@ export interface components {
             problem?: string | null;
             tree?: components["schemas"]["TreeNode"] | null;
         };
+        /** ThemeDataset */
+        ThemeDataset: {
+            /** Alphas */
+            alphas: number | null;
+            /** Category */
+            category: string;
+            /** Datasetid */
+            datasetId: string;
+            /** Fields */
+            fields: number | null;
+            /** Name */
+            name: string | null;
+            /** Themed */
+            themed: boolean;
+        };
+        /** ThemeLabOptions */
+        ThemeLabOptions: {
+            /** Delay */
+            delay: number | null;
+            /** Markets */
+            markets: components["schemas"]["ThemeMarket"][];
+            /** Rule */
+            rule: string | null;
+            theme: components["schemas"]["ThemeRule"] | null;
+        };
+        /** ThemeLabPreview */
+        ThemeLabPreview: {
+            fields: components["schemas"]["FieldCounts"] | null;
+            /** Problems */
+            problems: string[];
+            /** Sample */
+            sample: components["schemas"]["SampleAlpha"][];
+            /** Theme */
+            theme: string | null;
+            /** Universes */
+            universes: string[];
+            /** Warnings */
+            warnings: string[];
+        };
+        /** ThemeLabRequest */
+        ThemeLabRequest: {
+            /**
+             * Cores
+             * @default 8
+             */
+            cores: number;
+            /** Dataset Ids */
+            dataset_ids?: string[];
+            /**
+             * Decay
+             * @default 0
+             */
+            decay: number;
+            /** Neutralizations */
+            neutralizations?: string[];
+            /** Region */
+            region: string;
+            /**
+             * Simulations
+             * @default 0
+             */
+            simulations: number;
+            /** Universe */
+            universe?: string | null;
+            /** Vector Operators */
+            vector_operators?: string[];
+        };
+        /** ThemeMarket */
+        ThemeMarket: {
+            /** Datasets */
+            datasets: components["schemas"]["ThemeDataset"][];
+            /** Region */
+            region: string;
+        };
         /**
          * ThemeRule
          * @description One Power Pool theme: what an Alpha must be, and the dates it runs.
@@ -11957,6 +12091,92 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TemplateTree"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    options_api_theme_lab_options_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThemeLabOptions"];
+                };
+            };
+        };
+    };
+    preview_api_theme_lab_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ThemeLabRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThemeLabPreview"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_task_api_theme_lab_tasks_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ThemeLabRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AddedTask"];
                 };
             };
             /** @description Validation Error */

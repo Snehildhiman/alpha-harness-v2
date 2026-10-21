@@ -52,6 +52,11 @@ const searchLab = createRoute({
   path: 'search',
   component: lazyRouteComponent(() => import('@/screens/research-labs/search'), 'SearchLabScreen'),
 })
+const themeLab = createRoute({
+  getParentRoute: () => labs,
+  path: 'theme',
+  component: lazyRouteComponent(() => import('@/screens/research-labs/theme'), 'ThemeLabScreen'),
+})
 const templateLab = createRoute({
   getParentRoute: () => labs,
   path: 'template',
@@ -299,6 +304,7 @@ const routeTree = root.addChildren([
   labs.addChildren([
     labsIndex,
     searchLab,
+    themeLab,
     templateLab,
     templateBasicLab,
     evolutionLab,

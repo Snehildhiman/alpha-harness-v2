@@ -47,6 +47,7 @@ export const AI_TABS = [
  *  than under the sidebar entry: four children under one item is most of the sidebar, and
  *  the screen already introduces them properly. */
 export const LAB_TABS = [
+  { tab: 'theme', label: 'Current Theme Lab', to: '/labs/theme' },
   { tab: 'search', label: 'Search Lab', to: '/labs/search' },
   { tab: 'template', label: 'Template Lab', to: '/labs/template' },
   { tab: 'evolution', label: 'Evolution Lab', to: '/labs/evolution' },

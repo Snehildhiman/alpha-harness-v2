@@ -56,7 +56,7 @@ async def options(state: State) -> Options:
     )
 
 
-async def _plan(body: SearchRequest, state: Any) -> dict[str, Any]:
+async def plan_search(body: SearchRequest, state: Any) -> dict[str, Any]:
     """Everything a task would search, checked, without queueing anything."""
     market = await market_for(body, state)
     problems, pool = market["problems"], market["pool"]
@@ -104,7 +104,7 @@ async def _plan(body: SearchRequest, state: Any) -> dict[str, Any]:
 @router.post("/preview")
 async def preview(body: SearchRequest, state: State) -> Preview:
     """What a task would search. Free; queues nothing."""
-    return Preview.model_validate(await _plan(body, state))
+    return Preview.model_validate(await plan_search(body, state))
 
 
 @router.post("/tasks", status_code=201)
@@ -112,7 +112,7 @@ async def add_task(body: SearchRequest, state: State) -> AddedTask:
     """Add the search to Tasks, not started. Running it is the Tasks route's job."""
     if body.simulations < 1:
         raise refuse(422, "no_simulations", NO_SIMULATIONS)
-    plan = await _plan(body, state)
+    plan = await plan_search(body, state)
     if plan["problems"]:
         raise refuse(422, "search_blocked", plan["problems"][0])
     now = utcnow()
