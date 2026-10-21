@@ -1937,7 +1937,7 @@ export interface paths {
         /**
          * Transplant Plan
          * @description Passing regular and Power Pool Alphas, each in the downloaded regions it has not run
-         *     in, best first. Simulates nothing.
+         *     in, best first. Simulates nothing. ``count``: only how many, without scoring them.
          */
         get: operations["transplant_plan_api_repair_transplants_get"];
         put?: never;
@@ -10866,6 +10866,7 @@ export interface operations {
                 limit?: number;
                 region?: string | null;
                 kind?: ("regular" | "power_pool") | null;
+                count?: boolean;
                 delay?: number | null;
                 universe?: string | null;
                 neutralization?: string | null;

@@ -51,7 +51,11 @@ cd ..\frontend;  pnpm install
 
 ## Run
 
-Two terminals:
+**Easiest (Windows):** double-click **`update.bat`** once (and after every update), then
+**`start.bat`**. The app opens at http://localhost:8000 in one window. This serves the built
+website, which loads much faster than the development server.
+
+Development mode (two terminals, the website reloads as you edit code):
 
 ```powershell
 # Terminal 1
@@ -63,7 +67,7 @@ cd backend;  uv run uvicorn alpha_harness.main:app --port 8000
 cd frontend;  pnpm dev
 ```
 
-Open http://localhost:5173 and sign in with your BRAIN account.
+Then open http://localhost:5173 and sign in with your BRAIN account.
 
 For long runs: keep the laptop plugged in, power mode **Best performance**, and closing the lid
 set to **Do nothing** when plugged in.

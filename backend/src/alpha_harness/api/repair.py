@@ -471,6 +471,8 @@ async def transplant_rows(
     region: str | None,
     kind: TransplantKind | None = None,
     filters: TabFilter = NO_FILTER,
+    *,
+    count_only: bool = False,
 ) -> tuple[TransplantPlan, list[tuple[Transplant, TransplantRow]]]:
     """``filters`` narrow the *source* Alphas (their dataset, figures, settings)."""
     markets, known, ran = await _markets_and_runs(state)
@@ -497,7 +499,7 @@ async def transplant_rows(
         found = [t for t in found if t.region == region]
     if kind is not None:
         found = [t for t in found if t.power_pool == (kind == "power_pool")]
-    pool = found[:TRANSPLANT_POOL]
+    pool = [] if count_only else found[:TRANSPLANT_POOL]
     ranked = await state.predictors.current() is not None
     scores: list[Score | None] = [None] * len(pool)
     if ranked and pool:
@@ -573,10 +575,12 @@ async def transplant_plan(
     region: Annotated[str | None, Query()] = None,
     kind: Annotated[TransplantKind | None, Query()] = None,
     filters: Annotated[TabFilter, Depends()] = NO_FILTER,
+    count: Annotated[bool, Query()] = False,
 ) -> TransplantPlan:
     """Passing regular and Power Pool Alphas, each in the downloaded regions it has not run
-    in, best first. Simulates nothing."""
-    return (await transplant_rows(state, limit, region or None, kind, filters))[0]
+    in, best first. Simulates nothing. ``count``: only how many, without scoring them."""
+    rows = await transplant_rows(state, limit, region or None, kind, filters, count_only=count)
+    return rows[0]
 
 
 @router.post("/transplants/tasks")

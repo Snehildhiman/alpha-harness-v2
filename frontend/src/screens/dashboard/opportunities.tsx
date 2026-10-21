@@ -5,8 +5,9 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
+import { http } from '@/api/http'
 import { fmt } from '@/lib/format'
-import { nearMisses, transplantPlan } from '@/screens/repair/api'
+import { nearMisses, type TransplantPlan } from '@/screens/repair/api'
 import { typeSummary } from '@/screens/types/api'
 import { TYPE_TABS } from '@/shell/nav'
 import { Button, ErrorNotice, Panel, Skeleton } from '@/ui/kit'
@@ -22,7 +23,12 @@ const KIND: Record<(typeof TYPE_TABS)[number]['tab'], string> = {
 export function Opportunities() {
   const summary = useQuery(typeSummary)
   const near = useQuery(nearMisses(null))
-  const transplants = useQuery(transplantPlan(null))
+  // A count only: scoring every transplant is the Repair screen's job, not the Dashboard's.
+  const transplants = useQuery({
+    queryKey: ['repair', 'transplants', 'count'],
+    queryFn: () => http.get<TransplantPlan>('/api/repair/transplants?count=true&limit=1'),
+    staleTime: 5 * 60_000,
+  })
   const counts = summary.data?.counts ?? {}
   return (
     <Panel

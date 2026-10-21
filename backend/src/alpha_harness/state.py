@@ -147,6 +147,17 @@ class AppState:
 
     # -- lifecycle -------------------------------------------------------
 
+    async def _warm(self) -> None:
+        """Judge the vault once in the background, so the first Alpha Types or Dashboard
+        visit reads a cached judgement instead of waiting for it."""
+        from .api.separation import judge_vault
+
+        await asyncio.sleep(3)
+        try:
+            await judge_vault(self)
+        except Exception:
+            log.warning("startup.warm_failed", exc_info=True)
+
     async def startup(self) -> None:
         # The catalog's single-writer lock is this process's claim on the data directory, so it
         # comes first: a second backend must fail here, before it backs up or migrates.
@@ -196,6 +207,7 @@ class AppState:
         await self.optimizer.start()
         self._session_watch = asyncio.create_task(self._watch_session(), name="session-watch")
         await self.daily_sync.start()
+        spawn(self._warm(), name="warm-caches")
         await self.research.start()
         await self.governor.start()
         await self.standings.start()

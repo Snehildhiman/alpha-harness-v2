@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 
 import httpx2
 import structlog
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from ..db.models import ResearchPaper
 from .feeds import ARXIV_URL, Item, parse
@@ -74,6 +74,13 @@ class ResearchService:
         self.feeds = feeds
 
     async def start(self) -> None:
+        # The last read survives a restart, so restarting the app does not ask arXiv again
+        # (a few restarts in a row are how a feed starts answering 429).
+        if self.last_read is None:
+            async with self.db.session() as session:
+                newest = await session.scalar(select(func.max(ResearchPaper.fetched_at)))
+            if newest is not None:
+                self.last_read = newest if newest.tzinfo else newest.replace(tzinfo=UTC)
         if self._task is None:
             self._task = asyncio.create_task(self._run(), name="research-feeds")
 
