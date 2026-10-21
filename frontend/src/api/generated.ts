@@ -7000,6 +7000,11 @@ export interface components {
             dataset?: string | null;
             /** Delay */
             delay?: number | null;
+            /**
+             * Fitstheme
+             * @default false
+             */
+            fitsTheme: boolean;
             /** Maxturnover */
             maxTurnover?: number | null;
             /** Minfitness */
@@ -7079,6 +7084,8 @@ export interface components {
             sharpe: number | null;
             /** Themenote */
             themeNote: string | null;
+            /** Themes */
+            themes?: string[];
             /** Turnover */
             turnover: number | null;
             /** Universe */
@@ -7591,6 +7598,8 @@ export interface components {
              * Format: date
              */
             end: string;
+            /** Multiplier */
+            multiplier?: number | null;
             /** Name */
             name: string;
             /**
@@ -7598,6 +7607,11 @@ export interface components {
              * @default true
              */
             noGrouping: boolean;
+            /**
+             * Powerpool
+             * @default true
+             */
+            powerPool: boolean;
             /** Regions */
             regions?: string[];
             /**
@@ -7610,6 +7624,10 @@ export interface components {
              * Format: date
              */
             start: string;
+            /** Turnovermax */
+            turnoverMax?: number | null;
+            /** Turnovermin */
+            turnoverMin?: number | null;
         };
         /** ThreadScope */
         ThreadScope: {
@@ -10672,6 +10690,7 @@ export interface operations {
                 maxTurnover?: number | null;
                 search?: string | null;
                 theme?: boolean;
+                fitsTheme?: boolean;
             };
             header?: never;
             path?: never;
@@ -10878,6 +10897,7 @@ export interface operations {
                 maxTurnover?: number | null;
                 search?: string | null;
                 theme?: boolean;
+                fitsTheme?: boolean;
             };
             header?: never;
             path?: never;
@@ -11209,6 +11229,7 @@ export interface operations {
                 maxTurnover?: number | null;
                 search?: string | null;
                 theme?: boolean;
+                fitsTheme?: boolean;
             };
             header?: never;
             path?: never;
@@ -11285,6 +11306,7 @@ export interface operations {
                 maxTurnover?: number | null;
                 search?: string | null;
                 theme?: boolean;
+                fitsTheme?: boolean;
                 region?: string | null;
             };
             header?: never;

@@ -36,7 +36,7 @@ from ..separation import (
     judge_all,
     summary,
 )
-from ..themes import ThemeRule, check, current, fields_of
+from ..themes import ThemeRule, check, current, fields_of, running
 from ..tools import submit_rank
 from ..vault.store import SERIES_VERSION
 from ..vault.yields import checks_of
@@ -271,6 +271,8 @@ class Issue(Out):
 
 
 class TabRow(Out):
+    #: Regular themes running today that this Alpha fits, with their multiplier.
+    themes: list[str] = Field(default_factory=list)
     #: The type's correlation the models expect from this simulated Alpha, from its
     #: expression and what BRAIN reported (Sharpe, turnover, margin, long/short counts), at
     #: least its prod floor. ``None`` before the models are trained.
@@ -452,6 +454,8 @@ class TabFilter(BaseModel):
     search: str | None = None
     #: Reads at least one field of a BRAIN theme dataset.
     theme: bool = False
+    #: Fits one of the regular themes running today (e.g. GLB/D1 turnover 15-30%).
+    fits_theme: bool = Field(default=False, alias="fitsTheme")
     #: Only read from a request body (a re-check); the tab takes ``region`` on its own.
     region: str | None = None
 
@@ -610,6 +614,9 @@ async def tab(
         )
         and filters.keeps(item, data)
     ]
+    regular_rules = await regular_themes(state) if tab in _PROD_KINDS else []
+    if filters.fits_theme:
+        picked = [i for i in picked if fitting(i, regular_rules)]
     descending = sort != "turnover"
 
     def order(item: Judged) -> tuple[bool, Any]:
@@ -628,9 +635,37 @@ async def tab(
     floors = await crowd_floors(state, judged) if tab in _PROD_KINDS else {}
     rows = [_row(i, floors) for i in page]
     expected = await expected_corr(state, page, tab, floors)
-    for row in rows:
+    for row, item in zip(rows, page, strict=True):
         row.expected_corr = expected.get(row.alpha_id)
+        row.themes = fitting(item, regular_rules)
     return TabPage(total=len(picked), rows=rows)
+
+
+async def regular_themes(state: State) -> list[ThemeRule]:
+    """The themes for regular Alphas running today, such as a turnover range."""
+    rules = (await preferences.load(state.db)).power_pool_themes
+    return [r for r in running(rules, _today()) if not r.power_pool]
+
+
+def fitting(item: Judged, rules: list[ThemeRule]) -> list[str]:
+    """Names of the regular themes this Alpha (an RA family: any child) fits, with their
+    multiplier."""
+    out: list[str] = []
+    rows = item.children or [item.row]
+    for rule in rules:
+        for row in rows:
+            ok, _ = check(
+                rule,
+                expression=row.get("expression") or item.row.get("expression"),
+                region=row.get("region"),
+                delay=row.get("delay"),
+                category_of=lambda *_: None,
+                turnover=row.get("turnover"),
+            )
+            if ok:
+                out.append(f"{rule.name} x{rule.multiplier:g}" if rule.multiplier else rule.name)
+                break
+    return out
 
 
 class RecheckStarted(Out):

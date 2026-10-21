@@ -42,9 +42,18 @@ class ThemeRule(Out):
     single_category: bool = True
     #: Empty: any region.
     regions: list[str] = Field(default_factory=list)
-    #: No group operators (``group_rank``, ``group_neutralize``...) and no grouping fields
-    #: (``industry``, ``sector``...): the October 2026 themes allow neither.
+    #: No PV1 group data fields (``industry``, ``sector``, ``subindustry``...): BRAIN counts
+    #: them as Price Volume, so a theme whose categories exclude PV excludes them too. A
+    #: group operator over anything else is still allowed.
     no_grouping: bool = True
+    #: A Power Pool theme (judged on the Current Theme tab) or one for regular Alphas, such as
+    #: a turnover-range theme with its own multiplier.
+    power_pool: bool = True
+    #: Turnover bounds as fractions (0.15 = 15%); ``None``: no bound.
+    turnover_min: float | None = None
+    turnover_max: float | None = None
+    #: The pyramid multiplier BRAIN announced, shown beside the rule.
+    multiplier: float | None = None
 
     def describe(self) -> str:
         parts = []
@@ -57,7 +66,11 @@ class ThemeRule(Out):
         if self.regions:
             parts.append("region in [" + ", ".join(self.regions) + "]")
         if self.no_grouping:
-            parts.append("no group operators or grouping fields")
+            parts.append("no PV1 group fields")
+        if self.turnover_min is not None or self.turnover_max is not None:
+            low = f"{self.turnover_min:.0%}" if self.turnover_min is not None else "0%"
+            high = f"{self.turnover_max:.0%}" if self.turnover_max is not None else "any"
+            parts.append(f"turnover {low}-{high}")
         return " & ".join(parts) or "any Alpha"
 
 
@@ -67,24 +80,50 @@ DEFAULT_THEMES = [
     ThemeRule(
         name="D1 Power Pool Oct`26 (pv, fundamental)",
         start=date(2026, 9, 28),
-        end=date(2026, 10, 13),
+        end=date(2026, 10, 11),
         delay=1,
         categories=["pv", "fundamental"],
+        no_grouping=False,
     ),
+    # As BRAIN announced it: Delay 1, one data category of Analyst, Model or News, and no PV1
+    # group data fields (they are Price Volume). Multiplier 1x.
     ThemeRule(
-        name="D1 Power Pool Oct`26 (analyst, model, news)",
-        start=date(2026, 10, 14),
-        end=date(2026, 10, 31),
+        name="D1 Power Pool Oct`26 2",
+        start=date(2026, 10, 12),
+        end=date(2026, 10, 25),
         delay=1,
         categories=["analyst", "model", "news"],
+        multiplier=1.0,
+    ),
+    # For regular Alphas: GLB delay 1 with turnover between 15% and 30%, at 2.5x.
+    ThemeRule(
+        name="GLB/D1 Turnover 15-30%",
+        start=date(2026, 10, 12),
+        end=date(2026, 11, 8),
+        delay=1,
+        regions=["GLB"],
+        categories=[],
+        single_category=False,
+        no_grouping=False,
+        power_pool=False,
+        turnover_min=0.15,
+        turnover_max=0.30,
+        multiplier=2.5,
     ),
 ]
 
 
 def current(rules: list[ThemeRule], today: date) -> ThemeRule | None:
-    """The rule running on ``today``; the latest-starting one if several overlap."""
-    running = [r for r in rules if r.start <= today <= r.end]
+    """The Power Pool rule running on ``today``; the latest-starting one if several overlap."""
+    running = [r for r in rules if r.power_pool and r.start <= today <= r.end]
     return max(running, key=lambda r: r.start) if running else None
+
+
+def running(rules: list[ThemeRule], today: date) -> list[ThemeRule]:
+    """Every rule running on ``today``, Power Pool and regular, latest-starting first."""
+    return sorted(
+        (r for r in rules if r.start <= today <= r.end), key=lambda r: r.start, reverse=True
+    )
 
 
 def fields_of(expression: str | None) -> list[str] | None:
@@ -98,16 +137,14 @@ def fields_of(expression: str | None) -> list[str] | None:
 
 
 def grouping_in(expression: str) -> str | None:
-    """Why an expression breaks a no-grouping theme (a group operator, a grouping field)."""
+    """Why an expression breaks a no-PV1-group-fields theme: the grouping field it reads."""
     try:
         tree = parse(expression)
     except ParseError, RecursionError:
         return "expression could not be read"
     for _, node in walk(tree):
-        if node.kind == "call" and node.value.startswith("group_"):
-            return f"uses {node.value}; the theme allows no group operators"
         if node.kind == "name" and node.value in GROUPING:
-            return f"uses {node.value}; the theme allows no grouping fields"
+            return f"uses {node.value}, a PV1 group field the theme does not allow"
     return None
 
 
@@ -122,12 +159,22 @@ def check(
     region: str | None,
     delay: int | None,
     category_of: CategoryOf,
+    turnover: float | None = None,
 ) -> tuple[bool, str]:
     """Whether an Alpha fits ``rule``, and a short reason when it does not."""
     if rule.delay is not None and delay != rule.delay:
         return False, f"delay {delay}, theme needs {rule.delay}"
     if rule.regions and region not in rule.regions:
         return False, f"region {region} not in theme"
+    if rule.turnover_min is not None or rule.turnover_max is not None:
+        if turnover is None:
+            return False, "turnover unknown"
+        if rule.turnover_min is not None and turnover < rule.turnover_min:
+            return False, f"turnover {turnover:.0%}, theme needs {rule.turnover_min:.0%}+"
+        if rule.turnover_max is not None and turnover > rule.turnover_max:
+            return False, f"turnover {turnover:.0%}, theme allows up to {rule.turnover_max:.0%}"
+        if not rule.categories and not rule.no_grouping:
+            return True, "turnover in range"
     fields = fields_of(expression)
     if fields is None:
         return False, "expression could not be read"

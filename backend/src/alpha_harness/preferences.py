@@ -6,7 +6,7 @@ out of the box.
 
 from typing import TYPE_CHECKING, Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from sqlalchemy import select
 
 from . import updates
@@ -14,6 +14,9 @@ from .brain.schemas import CheckResult
 from .db.models import Preference
 from .schemas import Out
 from .themes import DEFAULT_THEMES, ThemeRule
+
+#: The October entry the first calendar guessed before BRAIN's announcement.
+LEGACY_THEME = "D1 Power Pool Oct`26 (analyst, model, news)"
 
 if TYPE_CHECKING:
     from .db.sqlite import Database
@@ -87,6 +90,19 @@ class Preferences(Out):
     power_pool_themes: list[ThemeRule] = Field(
         default_factory=lambda: [r.model_copy() for r in DEFAULT_THEMES], max_length=60
     )
+
+    @field_validator("power_pool_themes")
+    @classmethod
+    def _announced(cls, rules: list[ThemeRule]) -> list[ThemeRule]:
+        """A calendar saved with the first, guessed October entry gets BRAIN's announced
+        rules instead (the dates and the PV1 rule were wrong), and the regular turnover
+        theme if it is missing. A user's own entries are kept as they are."""
+        names = {r.name for r in rules}
+        if LEGACY_THEME not in names:
+            return rules
+        kept = [r for r in rules if r.name != LEGACY_THEME]
+        have = {r.name for r in kept}
+        return kept + [r.model_copy() for r in DEFAULT_THEMES if r.name not in have]
 
 
 async def load(db: Database) -> Preferences:

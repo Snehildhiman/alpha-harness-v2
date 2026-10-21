@@ -1,8 +1,9 @@
 """Current Theme Lab: simulate only Alphas that fit the running Power Pool theme. No LLM.
 
 It is the Search Lab held to the theme's rule: the theme's delay, only datasets of the
-categories it allows, one field per Alpha (so one category), no group operators and no
-grouping fields when the theme forbids them, and within the Power Pool limits (every shape
+categories it allows, one field per Alpha (so one category), no PV1 group fields
+(industry, sector...) when the theme forbids them, so the group shapes, which group by
+them, are left out, and within the Power Pool limits (every shape
 the search writes reads one field through at most three operators). The space holds only
 what the rule allows, so nothing that breaks the theme is spent on.
 """
@@ -175,7 +176,7 @@ async def _plan(body: ThemeLabRequest, state: State) -> tuple[dict[str, Any], Th
         space["group"] = []
         space["groups"] = []
         if not space["families"]:
-            plan["problems"].append("Without group operators none of your operators fit a shape.")
+            plan["problems"].append("Without the group shapes none of your operators fit a shape.")
     if space is not None and not plan["problems"]:
         # Drawn again from the space as narrowed, so the sample shows what will be sent.
         run = SearchParams(region=body.region, delay=rule.delay or 0, decay=body.decay, space=space)

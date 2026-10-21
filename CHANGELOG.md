@@ -8,8 +8,11 @@ What v2 adds on top of [alpha-harness-improved](https://github.com/residual-lab/
 - **Current Theme Lab** (Research Labs, no LLM): simulates only alphas that fit the running
   theme: its delay, datasets of its categories, one field per alpha, no group operators or
   grouping fields, Power Pool limits. Starts at once.
-- **Theme rule: no grouping**: group operators and grouping fields (industry, sector...) now
-  break the current theme, on the Current Theme tab too.
+- **Themes as BRAIN announced them**: *D1 Power Pool Oct`26 2* (12–25 Oct: delay 1, one
+  category of analyst, model or news, no PV1 group fields such as industry or sector; group
+  operators over other data are fine) and the regular *GLB/D1 Turnover 15-30%* theme (12 Oct –
+  8 Nov, x2.5): Regular and RA rows show *Fits theme*, with a *Fits a running theme* filter.
+  The calendar takes regions, turnover bounds, multiplier and Power Pool or regular.
 - **arXiv 429**: the app waits and retries, then tries again within the hour; restarts no longer
   re-read the feeds.
 - **Faster**: `update.bat` + `start.bat` serve the built website at :8000; the vault is judged in

@@ -28,7 +28,7 @@ const ICONS: Record<(typeof LAB_TABS)[number]['tab'], LucideIcon> = {
 /** What each one searches, since a name alone does not say which to start with. */
 const ABOUT: Record<(typeof LAB_TABS)[number]['tab'], string> = {
   theme:
-    'No LLM. Simulates only Alphas that fit the running Power Pool theme: its delay, its data categories, one category, no group operators or grouping fields.',
+    'No LLM. Simulates only Alphas that fit the running Power Pool theme: its delay, its data categories, one category, no PV1 group fields (industry, sector...).',
   search:
     'No LLM. Writes one- and two-operator Alphas from the datasets you pick, screened by the models. Choose All regions for region-agnostic Alphas.',
   template:

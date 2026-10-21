@@ -1,7 +1,7 @@
 /**
  * Current Theme Lab: simulates only Alphas that fit the running Power Pool theme, without an
  * LLM. The Search Lab held to the theme's rule: its delay, only datasets of the categories it
- * allows, one field per Alpha, no group operators or grouping fields when the theme forbids
+ * allows, one field per Alpha, no PV1 group fields (industry, sector...) when the theme forbids
  * them, inside the Power Pool limits.
  */
 
@@ -107,7 +107,7 @@ export function ThemeLabScreen() {
     <Page>
       <PageHeader
         title="Current Theme Lab"
-        description="Simulates only Alphas that fit the running Power Pool theme, no LLM needed: the theme's delay, only datasets of its categories, one field per Alpha, no group operators or grouping fields, inside the Power Pool limits."
+        description="Simulates only Alphas that fit the running Power Pool theme, no LLM needed: the theme's delay, only datasets of its categories, one field per Alpha, no PV1 group fields (industry, sector...), inside the Power Pool limits."
         actions={
           <Button
             variant="primary"

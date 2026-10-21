@@ -35,11 +35,31 @@ def test_single_category_from_the_allowed_set_matches() -> None:
     assert note == "analyst only"
 
 
-def test_group_operators_and_grouping_fields_break_a_no_grouping_theme() -> None:
+def test_pv1_group_fields_break_the_theme_but_group_operators_alone_do_not() -> None:
     ok, note = fits("group_rank(ts_mean(est_eps, 20), subindustry)")
-    assert not ok and "group_rank" in note
-    ok, note = fits("ts_mean(bucket(rank(est_eps)), 5) + industry")
+    assert not ok and "subindustry" in note and "PV1" in note
+    ok, note = fits("ts_mean(rank(est_eps), 5) + industry")
     assert not ok and "industry" in note
+    # Grouped by a bucket of an analyst field, not a PV1 group field: allowed.
+    assert fits("group_rank(est_eps, bucket(rank(est_rev), range='0,1,0.1'))")[0]
+
+
+def test_a_turnover_theme_for_regular_alphas() -> None:
+    from alpha_harness.themes import running
+
+    glb = next(r for r in DEFAULT_THEMES if "Turnover" in r.name)
+    assert not glb.power_pool and glb.multiplier == 2.5
+    args = {"expression": "rank(close)", "region": "GLB", "delay": 1, "category_of": cat}
+    assert check(glb, turnover=0.2, **args)[0]  # type: ignore[arg-type]
+    assert not check(glb, turnover=0.4, **args)[0]  # type: ignore[arg-type]
+    assert not check(glb, turnover=0.2, **(args | {"region": "USA"}))[0]  # type: ignore[arg-type]
+    names = [r.name for r in running(DEFAULT_THEMES, date(2026, 10, 21))]
+    assert names == ["D1 Power Pool Oct`26 2", "GLB/D1 Turnover 15-30%"] or set(names) == {
+        "D1 Power Pool Oct`26 2",
+        "GLB/D1 Turnover 15-30%",
+    }
+    pp = current(DEFAULT_THEMES, date(2026, 10, 21))
+    assert pp is not None and pp.name == "D1 Power Pool Oct`26 2"
 
 
 def test_grouping_fields_do_not_count_as_a_category_where_allowed() -> None:
@@ -75,7 +95,7 @@ def test_running_theme_follows_the_calendar() -> None:
     oct20 = current(DEFAULT_THEMES, date(2026, 10, 20))
     assert oct20 is not None
     assert oct20.categories == ["analyst", "model", "news"]
-    assert current(DEFAULT_THEMES, date(2026, 11, 2)) is None
+    assert current(DEFAULT_THEMES, date(2026, 10, 28)) is None
     assert normalise("fundamnetal") == "fundamental"
 
 

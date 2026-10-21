@@ -22,6 +22,8 @@ export interface AlphaFilters {
   search?: string | undefined
   /** Reads a field of one of BRAIN's theme datasets. */
   theme?: boolean | undefined
+  /** Fits a regular theme running today (e.g. a turnover range). */
+  fitsTheme?: boolean | undefined
   // Index signature so it can go straight into a query string.
   [key: string]: string | number | boolean | undefined
 }
@@ -111,12 +113,15 @@ export function AlphaFilterBar({
   onChange,
   facets,
   figures = true,
+  themeFit = false,
 }: {
   value: AlphaFilters
   onChange: (value: AlphaFilters) => void
   facets?: Facets | undefined
   /** Offer Sharpe / fitness / turnover bounds. */
   figures?: boolean
+  /** Offer "fits a regular theme running today". */
+  themeFit?: boolean
 }) {
   const set = (patch: Partial<AlphaFilters>) => {
     const next: AlphaFilters = { ...value, ...patch }
@@ -196,6 +201,13 @@ export function AlphaFilterBar({
         checked={Boolean(value.theme)}
         onChange={(on) => set({ theme: on || undefined })}
       />
+      {themeFit && (
+        <Checkbox
+          label="Fits a running theme"
+          checked={Boolean(value.fitsTheme)}
+          onChange={(on) => set({ fitsTheme: on || undefined })}
+        />
+      )}
       {active && (
         <Button variant="ghost" size="sm" onClick={() => onChange({})}>
           <XIcon aria-hidden />

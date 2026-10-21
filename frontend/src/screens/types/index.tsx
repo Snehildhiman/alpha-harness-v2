@@ -142,6 +142,24 @@ const EXPECTED_COLUMN: Column<TabRow> = {
     ),
 }
 
+/** Regular themes running today that the Alpha fits (e.g. GLB/D1 turnover 15-30% x2.5). */
+const THEMES_COLUMN: Column<TabRow> = {
+  key: 'themes',
+  header: 'Fits theme',
+  width: '150px',
+  cell: (r) =>
+    r.themes?.length ? (
+      <span
+        className="truncate text-body-compact text-pnl-positive-text"
+        title={r.themes.join(', ')}
+      >
+        {r.themes.join(', ')}
+      </span>
+    ) : (
+      <span className="text-ink-subtle">—</span>
+    ),
+}
+
 /** Repair a failing Alpha, or improve one that passes: its variants on the Repair screen. */
 const ACTION_COLUMN: Column<TabRow> = {
   key: 'action',
@@ -286,7 +304,7 @@ export function TypesScreen() {
   const columns =
     kind === 'power_pool' || kind === 'theme'
       ? [...COLUMNS, EXPECTED_COLUMN, THEME_COLUMN, ACTION_COLUMN]
-      : [...COLUMNS, EXPECTED_COLUMN, FLOOR_COLUMN, ACTION_COLUMN]
+      : [...COLUMNS, EXPECTED_COLUMN, FLOOR_COLUMN, THEMES_COLUMN, ACTION_COLUMN]
   const running = summary.data?.theme
 
   return (
@@ -380,6 +398,7 @@ export function TypesScreen() {
               />
               <AlphaFilterBar
                 value={filters}
+                themeFit={kind !== 'power_pool' && kind !== 'theme'}
                 facets={facets.data}
                 onChange={(f) => {
                   setFilters(f)
