@@ -18,6 +18,7 @@ import {
   Badge,
   Button,
   Checkbox,
+  Chips,
   Empty,
   ErrorNotice,
   Field,
@@ -36,6 +37,7 @@ type Options = Schemas['ThemeLabOptions']
 type Preview = Schemas['ThemeLabPreview']
 
 interface Body {
+  vectorOperators: string[]
   region: string
   datasetIds: string[]
   neutralizations: string[]
@@ -45,6 +47,7 @@ interface Body {
 }
 
 const wire = (b: Body) => ({
+  vector_operators: b.vectorOperators,
   region: b.region,
   dataset_ids: b.datasetIds,
   neutralizations: b.neutralizations,
@@ -68,6 +71,17 @@ export function ThemeLabScreen() {
   const [decay, setDecay] = useState(0)
   const [cores, setCores] = useState(4)
   const [simulations, setSimulations] = useState(500)
+  // Vector fields (several values a day) need a vec_ operator to become one number; most
+  // analyst and model data is vector, so vec_avg is on from the start.
+  const lab = useQuery({
+    queryKey: ['search-lab', 'options'],
+    queryFn: () => http.get<Schemas['Options']>('/api/search-lab/options'),
+  })
+  const vectorAvailable = lab.data?.vector ?? []
+  const [vectorPicked, setVectorPicked] = useState<string[] | null>(null)
+  const vectorOperators =
+    vectorPicked ??
+    (vectorAvailable.includes('vec_avg') ? ['vec_avg'] : vectorAvailable.slice(0, 1))
   const delay = options.data?.delay ?? 1
   const scope = {
     instrumentType: 'EQUITY',
@@ -85,6 +99,7 @@ export function ThemeLabScreen() {
   const all = (market?.datasets ?? []).map((d) => d.datasetId)
   const chosen = picked ?? all
   const body: Body = {
+    vectorOperators,
     region: market?.region ?? '',
     datasetIds: chosen,
     neutralizations,
@@ -188,6 +203,19 @@ export function ThemeLabScreen() {
                   value={neutralizations}
                   onChange={setNeutralizations}
                 />
+                {vectorAvailable.length > 0 && (
+                  <Field
+                    label="Vector operators"
+                    hint="Turn a vector field (several values a day) into one number. Most analyst and model data is vector, so leave at least one on."
+                  >
+                    <Chips
+                      label="Vector operators"
+                      items={vectorAvailable.map((op) => ({ value: op, label: op }))}
+                      value={vectorOperators}
+                      onChange={setVectorPicked}
+                    />
+                  </Field>
+                )}
                 <div className="flex flex-wrap items-end gap-4">
                   <Field label="Decay">
                     <Segmented
