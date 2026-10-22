@@ -3,6 +3,17 @@
 What v2 adds on top of [alpha-harness-improved](https://github.com/residual-lab/alpha-harness)
 (MIT, © MiracleInvoker). How to use each part: [GUIDE.md](GUIDE.md).
 
+## 2026-10-23 (fixes from the refusals list)
+
+- **Fixed "Incompatible unit … Unit[Group:1]"**: fields that are labels (a cluster, sector or
+  country code; some are listed as MATRIX) were used as numbers. Every lab now leaves them out
+  of its fields, the region-agnostic and Power Pool labs offer a dataset's own labels as groups
+  (group_rank(…, its cluster): a rarely written idea), and an alpha that uses a label anywhere
+  but as a group is refused before it is sent, saying why.
+- **A simulation BRAIN failed twice for half an hour** (often a SuperAlpha combo it cannot run)
+  is not sent a third time.
+- The refusals list explains both.
+
 ## 2026-10-23 (speed)
 
 - **Simulations: no idle gaps between batches.** A finished simulation now wakes the engine (a

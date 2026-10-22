@@ -8,6 +8,7 @@ waiting trial until cores are free. Calls never happen inside ``advance``.
 
 import json
 import random
+import re
 import time
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
@@ -177,6 +178,39 @@ def _best(
     return held, info
 
 
+#: Names BRAIN gives labels rather than numbers: a cluster, sector or country code. Some are
+#: listed as MATRIX, but BRAIN refuses them anywhere a number goes ("Unit[Group:1]").
+_LABEL = re.compile(
+    r"(cluster|(^|_)(grp|sector|industry|subindustry|country|exchange)(_\d+)?$)", re.IGNORECASE
+)
+#: A dataset's own grouping fields offered beside BRAIN's four, most complete first.
+OWN_GROUPS = 8
+
+
+def group_like(field_id: str, row: dict[str, Any] | None = None) -> bool:
+    """Whether a field is a label to group by, not a number to rank."""
+    if field_id in GROUPING:
+        return True
+    if row is not None and str(row.get("field_type") or "").upper() == "GROUP":
+        return True
+    return search.label_like(field_id)
+
+
+def _groups(info: dict[str, dict[str, Any]], mine: set[str] | None) -> tuple[str, ...]:
+    """BRAIN's grouping fields, then the chosen datasets' own labels (``mine``: their ids)."""
+    own = sorted(
+        (
+            f
+            for f, r in info.items()
+            if f not in GROUPING
+            and group_like(f, r)
+            and (mine is None or str(r.get("dataset_id")) in mine)
+        ),
+        key=lambda f: -(info[f].get("coverage") or 0),
+    )[:OWN_GROUPS]
+    return (*(g for g in GROUPING if g in info), *own)
+
+
 def _field(r: dict[str, Any], *, chosen: bool = False) -> Field:
     base = Field(
         str(r["field_id"]),
@@ -207,7 +241,7 @@ async def chosen_context(
     marks = ", ".join("?" for _ in field_ids)
     rows = await _rows(catalog, region, delay, universes, f"field_id IN ({marks})", field_ids)
     held, info = _best(rows, universes)
-    wanted = [f for f in dict.fromkeys(field_ids) if f in info and f not in GROUPING]
+    wanted = [f for f in dict.fromkeys(field_ids) if f in info and not group_like(f, info[f])]
     if not wanted:
         return None
     own = frozenset(wanted)
@@ -222,7 +256,8 @@ async def chosen_context(
     names = {str(m["dataset_id"]): str(m["name"] or m["dataset_id"]) for m in meta}
     # Only the chosen fields and the basics are known names, so an Alpha reaching for any
     # other field of these datasets is thrown away rather than simulated.
-    known = {f: r for f, r in info.items() if f in own or f in DATA_FIELDS or f in GROUPING}
+    groups = _groups(info, set(ids))
+    known = {f: r for f, r in info.items() if f in own or f in DATA_FIELDS or f in groups}
     return Context(
         id=CHOSEN,
         name=f"{len(wanted)} chosen fields",
@@ -230,7 +265,7 @@ async def chosen_context(
         description="",
         fields=tuple(_field(info[f], chosen=True) for f in wanted),
         basics=tuple(_field(info[f]) for f in DATA_FIELDS if f in info and f not in own),
-        groups=tuple(g for g in GROUPING if g in info),
+        groups=groups,
         types={f: str(r["field_type"]) for f, r in known.items()},
         own=own,
         names=frozenset(known),
@@ -287,7 +322,7 @@ async def ra_context(
     if whole:
         mine = set(chosen)
         wanted = sorted(
-            (f for f, r in info.items() if str(r["dataset_id"]) in mine and f not in GROUPING),
+            (f for f, r in info.items() if str(r["dataset_id"]) in mine and not group_like(f, r)),
             # Most regions, then the least crowded, then the most complete.
             key=lambda f: (
                 -len(held[f]),
@@ -297,7 +332,7 @@ async def ra_context(
             ),
         )
     else:
-        wanted = [f for f in dict.fromkeys(field_ids) if f in info and f not in GROUPING]
+        wanted = [f for f in dict.fromkeys(field_ids) if f in info and not group_like(f, info[f])]
     if not wanted:
         return None
     own = frozenset(wanted)
@@ -310,7 +345,9 @@ async def ra_context(
         [delay, *ids],
     )
     names = {str(m["dataset_id"]): str(m["name"] or m["dataset_id"]) for m in meta}
-    known = {f: r for f, r in info.items() if f in own or f in DATA_FIELDS or f in GROUPING}
+    # Grouping by a label needs it in the regions the Alpha runs in, as any field does.
+    groups = _groups(info, set(ids))
+    known = {f: r for f, r in info.items() if f in own or f in DATA_FIELDS or f in groups}
 
     def where(f: str) -> str:
         return ", ".join(r for r in regions if r in held[f])
@@ -325,7 +362,7 @@ async def ra_context(
             for f in wanted
         ),
         basics=tuple(_field(info[f]) for f in DATA_FIELDS if f in info and f not in own),
-        groups=tuple(g for g in GROUPING if g in info),
+        groups=groups,
         types={f: str(r["field_type"]) for f, r in known.items()},
         own=own,
         names=frozenset(known),
@@ -368,7 +405,8 @@ async def context_for(
             shown.update(str(r["field_id"]) for r in page.get("results") or [])
         own &= shown
     fields = sorted(
-        (_field(info[f]) for f in own if f not in GROUPING), key=lambda x: -(x.coverage or 0)
+        (_field(info[f]) for f in own if not group_like(f, info[f])),
+        key=lambda x: -(x.coverage or 0),
     )
     m = meta[0] if meta else {}
     return Context(
@@ -380,9 +418,9 @@ async def context_for(
         description=str(m.get("description") or "")[:800],
         fields=tuple(fields),
         basics=tuple(_field(info[f]) for f in DATA_FIELDS if f in info and f not in own),
-        groups=tuple(g for g in GROUPING if g in info),
+        groups=_groups(info, {dataset}),
         types={f: str(r["field_type"]) for f, r in info.items()},
-        own=frozenset(own),
+        own=frozenset(f for f in own if not group_like(f, info[f])),
         names=frozenset(info),
         held={f: frozenset(u) for f, u in held.items()},
     )
@@ -408,10 +446,25 @@ def check(
     data = sorted(used - set(GROUPING))
     if power_pool and len(data) > MAX_FIELDS:
         raise Rejected(f"{len(data)} data fields ({', '.join(data)}); Power Pool allows 3.")
-    if not used & (ctx.own - set(GROUPING)):
-        raise Rejected(
-            "Uses none of the chosen fields." if ctx.chosen else f"Uses no field of {ctx.id}."
-        )
+    for path, node in walk(tree):
+        if (
+            node.kind == "name"
+            and node.value in ctx.names
+            and node.value not in GROUPING
+            and (ctx.types.get(node.value) == "GROUP" or search.label_like(node.value))
+        ):
+            parent = node_at(tree, path[:-1]) if path else None
+            as_group = (
+                parent is not None
+                and parent.kind == "call"
+                and parent.value.startswith("group_")
+                and parent.args[-1:] == (node,)
+            ) or (parent is not None and any(v is node for _, v in parent.kwargs))
+            if not as_group:
+                raise Rejected(
+                    f"{node.value} is a label (a group), not a number: use it only as the "
+                    "group of a group_ operator."
+                )
     for path, node in walk(tree):
         if node.kind == "name" and ctx.types.get(node.value) == "VECTOR":
             parent = node_at(tree, path[:-1]) if path else None
@@ -419,6 +472,10 @@ def check(
                 raise Rejected(
                     f"{node.value} is a VECTOR field: put it straight inside a vec_ operator."
                 )
+    if not used & (ctx.own - set(GROUPING)):
+        raise Rejected(
+            "Uses none of the chosen fields." if ctx.chosen else f"Uses no field of {ctx.id}."
+        )
     return render(tree), used
 
 

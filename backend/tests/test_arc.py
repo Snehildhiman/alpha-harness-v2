@@ -6,7 +6,7 @@ from alpha_harness.labs import ra_shapes
 from alpha_harness.labs.params import RegionAgnosticParams
 from alpha_harness.labs.power_pool import child_state, draw_regions, promotable
 
-from .test_no_llm_and_universes import NAMES, _ctx
+from .test_no_llm_and_universes import NAMES, OPS, _ctx
 
 
 def _checks(sharpe: float, fitness: float = 1.2, prod: str = "PASS") -> list[dict[str, object]]:
@@ -162,3 +162,33 @@ def test_only_ticked_templates_are_written() -> None:
     listed = {s["name"] for s in ra_shapes.listing()}
     assert {s.name for s in ra_shapes.SHAPES} <= listed
     assert listed >= ra_shapes.SUGGESTED
+
+
+def test_labels_are_groups_not_numbers() -> None:
+    from dataclasses import replace
+
+    import pytest
+
+    from alpha_harness.labs import search
+    from alpha_harness.labs.fastexpr import operator_table
+    from alpha_harness.labs.power_pool import Rejected, check, group_like
+
+    assert search.label_like("oth455_partner_n2v_p10_q200_w5_pca_fact2_cluster_5")
+    assert search.label_like("fnd_country")
+    assert not search.label_like("eps_growth")
+    assert group_like("industry")
+
+    label = "oth455_cluster_5"
+    ctx = _ctx()
+    ctx = replace(
+        ctx,
+        names=ctx.names | {label},
+        types=dict(ctx.types) | {label: "MATRIX"},
+        held=dict(ctx.held) | {label: frozenset({"USA", "EUR"})},
+        groups=(*ctx.groups, label),
+    )
+    table = operator_table(OPS)
+    with pytest.raises(Rejected, match="label"):
+        check(f"rank(ts_backfill({label}, 21))", ctx, table, power_pool=False)
+    expression, _ = check(f"group_rank(ts_rank(eps, 21), {label})", ctx, table, power_pool=False)
+    assert label in expression

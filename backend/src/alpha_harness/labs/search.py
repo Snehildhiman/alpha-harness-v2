@@ -230,6 +230,17 @@ def suggest(trial: Any, space: dict[str, Any], choices: dict[str, list[str]]) ->
     return params
 
 
+#: Names BRAIN gives labels rather than numbers: a cluster, sector or country code. Some are
+#: listed as MATRIX, but BRAIN refuses them anywhere a number goes ("Unit[Group:1]").
+LABEL = re.compile(
+    r"(cluster|(^|_)(grp|sector|industry|subindustry|country|exchange)(_\d+)?$)", re.IGNORECASE
+)
+
+
+def label_like(field_id: str) -> bool:
+    return LABEL.search(field_id) is not None
+
+
 #: A name in an expression: an operator or a field.
 NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
@@ -365,7 +376,10 @@ async def field_pool(
     fields: dict[str, str] = {}
     for held in found.values():
         for field_id, field_type in held.items():
-            fields.setdefault(field_id, field_type)
+            # A label listed as a matrix (a cluster or country code) is refused by BRAIN
+            # anywhere a number goes, so it is never searched as one.
+            if not label_like(field_id):
+                fields.setdefault(field_id, field_type)
     skipped = 0
     if not allow_vector:
         skipped = sum(1 for t in fields.values() if t == "VECTOR")

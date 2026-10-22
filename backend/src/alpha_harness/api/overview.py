@@ -552,6 +552,16 @@ _DETAIL = re.compile(r"\"[^\"]*\"|'[^']*'|`[^`]*`|\b\d+(?:\.\d+)?\b")
 #: Plain advice for the refusals seen most, matched on BRAIN's words.
 _ADVICE: tuple[tuple[str, str], ...] = (
     (
+        "unit[group",
+        "A label (a cluster, sector or country code) used as a number. The labs now use such "
+        "fields only as the group of a group_ operator, and refuse them anywhere else.",
+    ),
+    (
+        "no longer waited on",
+        "BRAIN failed on this one simulation for half an hour. Retried once; if it fails the "
+        "same way twice, the app stops sending it (often a SuperAlpha combo BRAIN cannot run).",
+    ),
+    (
         "unknown variable",
         "A field this account cannot read, or one missing from that region or universe. "
         "Sync the catalog, and leave out the dataset if it keeps happening.",

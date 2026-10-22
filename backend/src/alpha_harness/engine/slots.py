@@ -140,6 +140,12 @@ _PASSING = (
 )
 
 
+#: What the tracker writes for a simulation BRAIN failed to answer for half an hour; twice
+#: for the same request means the request itself breaks BRAIN (a SuperAlpha combo, often).
+LOST_WORDS = "no longer waited on"
+LOST_TWICE = 2
+
+
 def errored_for_good(message: str) -> bool:
     """Whether BRAIN's error says the request itself is wrong, so it would fail again."""
     text = message.lower()
@@ -262,6 +268,7 @@ class BatchEngine:
         )
         hashes = [request_hash(self._moded(r)) for r in requests]
         done: set[str] = set()
+        lost: dict[str, int] = {}
         async with self.db.session() as session:
             for chunk in itertools.batched(set(hashes), ENQUEUE_CHUNK, strict=False):
                 done.update(
@@ -278,7 +285,8 @@ class BatchEngine:
                         )
                     )
                 ).tuples():
-                    if message and errored_for_good(message):
+                    lost[digest] = lost.get(digest, 0) + bool(message and LOST_WORDS in message)
+                    if message and (errored_for_good(message) or lost[digest] >= LOST_TWICE):
                         done.add(digest)
         return [a is not None or h in done for a, h in zip(stored, hashes, strict=True)]
 
@@ -324,6 +332,7 @@ class BatchEngine:
             #: Hash -> BRAIN's message the last time it refused this exact request for a
             #: reason that does not pass (an unknown field, an operator not allowed).
             refused: dict[str, str] = {}
+            lost: dict[str, int] = {}
             #: Hash -> an active row's id, or the row this call is adding for it.
             in_flight: dict[str, int | SimulationRecord] = {}
             # Looked up in bulk — a harvest enqueues thousands, and two reads per request
@@ -353,7 +362,8 @@ class BatchEngine:
                         )
                     )
                 ).tuples():
-                    if message and errored_for_good(message):
+                    lost[digest] = lost.get(digest, 0) + bool(message and LOST_WORDS in message)
+                    if message and (errored_for_good(message) or lost[digest] >= LOST_TWICE):
                         refused.setdefault(digest, message)
             for new, old in legacy.items():
                 if new not in known and old in known:
