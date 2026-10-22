@@ -86,6 +86,9 @@ class SimulationTracker:
         self.db = db
         self.endpoints = endpoints
         self._on_change = on_change
+        #: Called on every change: a finished simulation frees a slot and returns a result,
+        #: so the engine and the labs are woken rather than left to their next tick.
+        self.wakers: list[Callable[[], None]] = []
         #: Asked when a poll is refused for the session, so an expired one is renewed
         #: instead of every running simulation backing off forever.
         self._on_unauthorized = on_unauthorized
@@ -639,6 +642,8 @@ class SimulationTracker:
 
     async def notify(self) -> None:
         """Push what is pending or running now; the batch engine announces through this too."""
+        for wake in self.wakers:
+            wake()
         try:
             await self._on_change([serialise(r) for r in await self.active()])
         except Exception:

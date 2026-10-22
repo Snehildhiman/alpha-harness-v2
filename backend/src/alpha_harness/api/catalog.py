@@ -11,9 +11,12 @@ from ..catalog.markets import markets as list_markets
 from ..catalog.pyramids import pyramid_grid
 from ..catalog.queries import FieldFilter, Tuple4
 from ..catalog.sync import SyncTarget
-from ..recent import Recent
+from ..recent import Recent, StillReading
 from ..schemas import Out, SyncAllRun
 from .deps import State, refuse
+
+#: Longest a first visit waits on BRAIN before it is told to try again.
+WAIT = 8.0
 
 router = APIRouter(prefix="/api/catalog", tags=["catalog"])
 
@@ -314,7 +317,10 @@ async def pyramids(state: State) -> PyramidGrid:
     async def read() -> PyramidGrid:
         return PyramidGrid.model_validate(await pyramid_grid(state.endpoints, state.catalog))
 
-    return await _pyramids.get(who, read)
+    try:
+        return await _pyramids.get(who, read, wait=WAIT)
+    except StillReading as exc:
+        raise refuse(503, "still_reading", "Reading pyramids from BRAIN.") from exc
 
 
 #: Multipliers and counts move slowly; BRAIN is asked at most every ten minutes.

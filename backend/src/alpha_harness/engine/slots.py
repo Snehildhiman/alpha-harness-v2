@@ -79,6 +79,8 @@ DEFAULT_SLOTS = 8
 
 #: How often the engine looks for work.
 TICK_SECONDS = 2.0
+#: Least time between two scheduling rounds, however often the engine is woken.
+MIN_GAP = 0.3
 
 #: Rounds between sleep-block checks (~30 s): pending work changes slowly.
 AWAKE_TICKS = 15
@@ -196,6 +198,7 @@ class BatchEngine:
         self._last_pause: tuple[datetime, datetime] | None = None
         #: When queued work with no task was last swept up. Zero so the first tick sweeps.
         self._last_orphan_sweep = 0.0
+        self._wake = asyncio.Event()
 
     # -- lifecycle -------------------------------------------------------
 
@@ -426,6 +429,8 @@ class BatchEngine:
                 )
 
         log.info("engine.enqueued", task=task, queued=len(queued), skipped=len(skipped))
+        if queued:
+            self.wake()
         await self.tracker.notify()
         return {"queued": queued, "skipped": skipped, "outcomes": outcomes}
 
@@ -607,6 +612,10 @@ class BatchEngine:
 
     # -- the loop --------------------------------------------------------
 
+    def wake(self) -> None:
+        """Run the next scheduling round now: a slot came free or work was queued."""
+        self._wake.set()
+
     async def _run(self) -> None:
         rounds = 0
         while True:
@@ -620,7 +629,11 @@ class BatchEngine:
             # Only the wait is timed: a slow round is not a sleep, a two-second nap that took
             # a minute is.
             before = time.time()
-            await asyncio.sleep(TICK_SECONDS)
+            # Woken early when a slot frees or work arrives, never sooner than MIN_GAP.
+            await asyncio.sleep(MIN_GAP)
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(self._wake.wait(), TICK_SECONDS - MIN_GAP)
+            self._wake.clear()
             if time.time() - before > SLEEP_GAP:
                 self._last_pause = (datetime.fromtimestamp(before, UTC), datetime.now(UTC))
                 log.warning("engine.slept", seconds=round(time.time() - before))

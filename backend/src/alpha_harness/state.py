@@ -147,6 +147,9 @@ class AppState:
         )
         self.optimizer.llm = self.llm
         self.optimizer.predictors = self.predictors
+        # A finished simulation wakes the engine (a slot is free) and the labs (a result to
+        # plan from) at once, rather than at their next tick.
+        self.tracker.wakers += [self.engine.wake, self.optimizer.wake]
         self.governor = Governor(self.optimizer, self.catalog)
         self.autopilot = Autopilot(self, signed_in=lambda: self.auth.session.authenticated)
         self.standings = Standings(

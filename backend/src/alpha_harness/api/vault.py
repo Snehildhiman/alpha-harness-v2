@@ -8,6 +8,7 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 
 from ..brain.filters import AlphaQuery
+from ..recent import Memo
 from ..schemas import Out
 from ..vault import yields
 from ..vault.yields import PLATFORM_ALPHA_URL, checks_of
@@ -197,6 +198,21 @@ async def submittable(
     Each entry carries the platform's own check results, the numbers behind them, and a
     link to the alpha on BRAIN — which is where it gets submitted. This application never does.
     """
+    # Answered again from the last count while the vault is unchanged: a full count reads
+    # every Alpha's checks and takes seconds.
+    stamp = await state.catalog.query(
+        "SELECT count(*) AS n, max(fetched_at) AS f, max(checks_at) AS c FROM alpha"
+    )
+    key = (
+        tuple(stamp[0].values()) if stamp else (),
+        region,
+        delay,
+        universe,
+        instrument_type,
+        limit,
+    )
+    if (hit := _submittable.get(key)) is not None:
+        return hit
     found = await yields.submittable(
         state.db,
         state.alphas,
@@ -208,7 +224,13 @@ async def submittable(
     )
     # Without a series a candidate cannot be de-correlated against the others.
     state.backfill.schedule_returns(found.pop("pnlMissing"))
-    return SubmittableResponse.model_validate(found)
+    answer = SubmittableResponse.model_validate(found)
+    _submittable.put(key, answer)
+    return answer
+
+
+#: Submittable counts by vault state, kept two minutes.
+_submittable = Memo(ttl=120)
 
 
 # --- the simulations table ------------------------------------------------

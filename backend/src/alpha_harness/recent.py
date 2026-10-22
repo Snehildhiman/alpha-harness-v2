@@ -8,6 +8,7 @@ is fetched in the background for the next visit. Only the first visit waits.
 
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import TYPE_CHECKING, Any
 
@@ -16,10 +17,13 @@ import structlog
 from .tasks import spawn
 
 if TYPE_CHECKING:
-    import asyncio
     from collections.abc import Awaitable, Callable
 
 log = structlog.get_logger(__name__)
+
+
+class StillReading(Exception):
+    """The first answer is still being read; ask again shortly."""
 
 
 class Recent:
@@ -28,12 +32,26 @@ class Recent:
         self._values: dict[str, tuple[float, Any]] = {}
         self._refreshing: dict[str, asyncio.Task[Any]] = {}
 
-    async def get(self, key: str, make: Callable[[], Awaitable[Any]]) -> Any:
+    async def get(
+        self, key: str, make: Callable[[], Awaitable[Any]], *, wait: float | None = None
+    ) -> Any:
+        """The last answer, at once. The first ever is waited for, at most ``wait`` seconds:
+        past that :class:`StillReading` is raised while the read goes on in the background,
+        so a slow BRAIN never holds one of the browser's connections for long."""
         found = self._values.get(key)
         if found is None:
-            value = await make()
-            self._values[key] = (time.monotonic(), value)
-            return value
+            busy = self._refreshing.get(key)
+            if busy is None or busy.done():
+                busy = self._refreshing[key] = spawn(self._refresh(key, make), name=f"recent-{key}")
+            try:
+                await asyncio.wait_for(asyncio.shield(busy), wait)
+            except TimeoutError as exc:
+                raise StillReading(key) from exc
+            if key not in self._values:
+                # The read failed: say so the usual way, by trying once more in the open.
+                value = await make()
+                self._values[key] = (time.monotonic(), value)
+            return self._values[key][1]
         at, value = found
         busy = key in self._refreshing and not self._refreshing[key].done()
         if time.monotonic() - at > self.ttl and not busy:

@@ -60,6 +60,8 @@ log = structlog.get_logger(__name__)
 
 #: How often a running study looks for finished trials.
 POLL_SECONDS = 5.0
+#: Least time between two rounds, however often results arrive.
+MIN_GAP = 1.0
 
 #: Statistics the local Alpha store keeps, so objectives on them need no second BRAIN read.
 VAULT_STATS = frozenset(
@@ -114,6 +116,7 @@ class Optimizer:
         #: The trained models (``AppState.predictors``), set once the app state exists.
         self.predictors: Any = None
         self._task: asyncio.Task[None] | None = None
+        self._wake = asyncio.Event()
 
     # -- lifecycle -------------------------------------------------------
 
@@ -130,13 +133,21 @@ class Optimizer:
             self._task = None
         log.info("optimize.stopped")
 
+    def wake(self) -> None:
+        """Advance the tasks now: a result came back, so a task may have cores to refill."""
+        self._wake.set()
+
     async def _run(self) -> None:
         while True:
             try:
                 await self.tick()
             except Exception:
                 log.exception("optimize.tick_failed")
-            await asyncio.sleep(POLL_SECONDS)
+            # Woken early when a simulation finishes, never sooner than MIN_GAP.
+            await asyncio.sleep(MIN_GAP)
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(self._wake.wait(), POLL_SECONDS - MIN_GAP)
+            self._wake.clear()
 
     async def tick(self) -> dict[int, dict[str, int]]:
         """Start waiting tasks that fit, then advance every running study by one round."""

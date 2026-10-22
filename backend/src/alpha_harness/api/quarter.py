@@ -12,11 +12,14 @@ import structlog
 from fastapi import APIRouter
 
 from ..catalog.pyramids import LIT_AT, next_quarter_start, quarter_start
-from ..recent import Recent
+from ..recent import Recent, StillReading
 from ..schemas import Out
-from .deps import State
+from .deps import State, refuse
 
 log = structlog.get_logger(__name__)
+
+#: Longest a first visit waits on BRAIN before it is told to try again.
+WAIT = 8.0
 
 router = APIRouter(prefix="/api/quarter", tags=["quarter"])
 
@@ -46,7 +49,12 @@ async def standing(state: State) -> QuarterStanding:
     once it is ten minutes old."""
     who = state.auth.session.user_id or "-"
     today = datetime.now(UTC).date()
-    return await _recent.get(f"{who}:{quarter_start(today)}", lambda: _standing(state))
+    try:
+        return await _recent.get(
+            f"{who}:{quarter_start(today)}", lambda: _standing(state), wait=WAIT
+        )
+    except StillReading as exc:
+        raise refuse(503, "still_reading", "Reading this quarter from BRAIN.") from exc
 
 
 async def _standing(state: State) -> QuarterStanding:

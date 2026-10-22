@@ -3,6 +3,17 @@
 What v2 adds on top of [alpha-harness-improved](https://github.com/residual-lab/alpha-harness)
 (MIT, © MiracleInvoker). How to use each part: [GUIDE.md](GUIDE.md).
 
+## 2026-10-23 (speed)
+
+- **Simulations: no idle gaps between batches.** A finished simulation now wakes the engine (a
+  slot is free) and the labs (a result to plan from) at once; queued work wakes the engine.
+  Before, a freed slot could wait up to about 10 seconds for three timers in a row.
+- **Faster screens**: *Submittable* answers a repeat visit at once while the vault is
+  unchanged (4 s before); a first read from BRAIN (quarter, pyramids) waits at most 8 seconds,
+  then the screen retries while the read finishes in the background.
+- **Fixed**: live updates refused when the app ran on a port other than 8000; every screen
+  checked in a browser opens without an error.
+
 ## 2026-10-23 (choose templates)
 
 - **Templates in the Region Agnostic Lab**: with the built-in writer, every template is listed
