@@ -55,7 +55,63 @@ SHAPES: tuple[Shape, ...] = (
     Shape("price_divergence", "-rank(ts_corr({b}, close, {e}))"),
     Shape("volume_divergence", "-rank(ts_corr({b}, volume, {e}))"),
     Shape("quantile_change", "rank(ts_quantile({b}, {e}) - ts_quantile({b}, {d}))"),
+    # Hypotheses with their horizon fixed, from how each kind of data is known to work.
+    Shape("short_reversal", "-rank(ts_delta({b}, 5))"),
+    Shape("slow_level", "rank(ts_mean({b}, 252))"),
+    Shape("year_change", "rank(ts_delta({b}, 252) / ts_std_dev({b}, 252))"),
+    Shape("revision_trend", "group_rank(ts_delta({b}, 21) / ts_std_dev({b}, 126), {g})"),
 )
+
+#: The hypotheses that suit each kind of data, by words in its dataset's id: analyst figures
+#: drift after revisions, scores built by models are signals already, fundamentals move slowly,
+#: price-volume and order imbalance mean-revert over days, holdings and news change in steps.
+#: A field's preferred shapes are drawn three times as often; the rest stay possible.
+HYPOTHESES: tuple[tuple[tuple[str, ...], frozenset[str]], ...] = (
+    (
+        ("analyst", "estimate", "consensus", "starmine", "ibes", "earnings"),
+        frozenset({"vol_scaled_change", "revision_trend", "trend", "zscore_change", "peer_trend"}),
+    ),
+    (
+        ("model", "ai_", "factor", "pattern", "chart", "quant", "predict", "score", "signal"),
+        frozenset({"rank", "ts_rank", "decayed", "peer_neutral", "rank_change", "steady"}),
+    ),
+    (
+        ("fundamental", "fnd", "balance", "income", "cashflow", "valuation"),
+        frozenset({"slow_level", "year_change", "trend", "peer_trend", "ratio_momentum"}),
+    ),
+    (
+        ("pv", "intraday", "imbalance", "price", "volume", "option", "short"),
+        frozenset({"short_reversal", "reversion", "av_diff", "volume_divergence", "decayed"}),
+    ),
+    (
+        ("institution", "ownership", "holding", "insider"),
+        frozenset({"zscore_change", "rank_change", "year_change", "peer_trend"}),
+    ),
+    (
+        ("news", "sentiment", "social", "media"),
+        frozenset({"decayed", "reversion", "zscore_change", "steady"}),
+    ),
+    (
+        ("riskfree", "macro", "rates", "seasonal", "other"),
+        frozenset({"trend", "steady", "peer_neutral", "ratio_momentum", "year_change"}),
+    ),
+)
+#: How much more often a field's own hypotheses are drawn.
+FAVOUR = 3.0
+#: Share of expressions wrapped to move them away from the crowd: neutralized within an
+#: industry (what every region's peers share) or smoothed so they trade less.
+DECORRELATE = 0.35
+
+
+def favoured(dataset: str) -> frozenset[str]:
+    """The shapes that suit a dataset, from words in its id; none when nothing matches."""
+    text = dataset.lower()
+    found: set[str] = set()
+    for words, shapes in HYPOTHESES:
+        if any(w in text for w in words):
+            found |= shapes
+    return frozenset(found)
+
 
 _CALL = re.compile(r"([a-z_][a-z0-9_]*)\(")
 _PRICE = ("close", "volume")
@@ -101,11 +157,19 @@ def write(
     Every expression names its shape, so the task can learn which shapes pay.
     """
     shapes = usable(operators, ctx.names)
-    fields = [f.id for f in ctx.fields]
+    # Most regions first (two passing are what BRAIN needs), then the least crowded: a field
+    # few Alphas use is where prod correlation stays low.
+    ordered = sorted(
+        ctx.fields,
+        key=lambda f: (-len(ctx.held.get(f.id, ())), f.alphas if f.alphas is not None else 0),
+    )
+    fields = [f.id for f in ordered]
+    dataset_of = {f.id: f.dataset for f in ordered}
     if not shapes or not fields:
         return [], 0
     vector = [v for v in VECTOR_OPS if v in operators]
     weights = [1.0 + max(0.0, (scores or {}).get(s.name, 0.0)) for s in shapes]
+    wrap = [w for w in ("group_neutralize", "ts_decay_linear") if w in operators]
     n = len(fields)
     out: list[dict[str, str]] = []
     written: set[str] = set()
@@ -116,8 +180,12 @@ def write(
         b = _base(field, ctx, vector, rng)
         if b is None:
             continue
+        likes = favoured(dataset_of.get(field) or "")
+        mine = [
+            w * (FAVOUR if s.name in likes else 1.0) for s, w in zip(shapes, weights, strict=True)
+        ]
         for _ in range(2):
-            shape = rng.choices(shapes, weights=weights)[0]
+            shape = rng.choices(shapes, weights=mine)[0]
             text = shape.text
             if "{c}" in text:
                 # A partner from the same regions, so the spread can run where this field runs.
@@ -140,6 +208,12 @@ def write(
             expression = text.format(
                 b=b, c=c, d=d, e=e, g=rng.choice(ctx.groups) if ctx.groups else ""
             )
+            if wrap and rng.random() < DECORRELATE:
+                how = rng.choice(wrap)
+                if how == "group_neutralize" and ctx.groups:
+                    expression = f"group_neutralize({expression}, {rng.choice(ctx.groups)})"
+                elif how == "ts_decay_linear":
+                    expression = f"ts_decay_linear({expression}, {rng.choice((5, 10, 21))})"
             if expression in written:
                 continue
             written.add(expression)

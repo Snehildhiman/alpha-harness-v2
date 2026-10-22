@@ -3,6 +3,28 @@
 What v2 adds on top of [alpha-harness-improved](https://github.com/residual-lab/alpha-harness)
 (MIT, © MiracleInvoker). How to use each part: [GUIDE.md](GUIDE.md).
 
+## 2026-10-23 (ARC)
+
+- **Region Agnostic Lab promotes by itself**: each candidate still runs cheaply as an ordinary
+  Alpha in every chosen region. When two regions pass every check but correlation (or one
+  passes and another is within 7%), the same task runs it once as a real region-agnostic
+  Alpha, the RA Parent ARC counts. It skips one whose passing regions all fail prod
+  correlation already, since BRAIN needs one passing child under the limit. *Two pass* or
+  *Never* are the other choices.
+- **Judged as BRAIN judges RA children**: ASI runs with Max Trade on; the lab asks for delay 1,
+  the only delay RA allows.
+- **ARC datasets**: one click loads the datasets the community reports work for ARC (the
+  1 October 2026 webinar and consultants' posts: pv1, fundamental17/23, other335, model38/110/
+  138, analyst69, imbalance5, predictive_starmine, intraday_pv_feats, institutions6,
+  analyst_factor_signals and more) that are in your All Regions catalog, or the 10 least
+  crowded datasets (fewest Alphas per field).
+- **Hypothesis first, away from the crowd**: the built-in shapes favour what suits each kind of
+  data (analyst revisions, slow fundamentals, short reversal for price-volume and imbalance,
+  smoothed model scores, step changes in holdings), take the least crowded multi-region fields
+  first, and neutralize within an industry or smooth about a third of them. Four new
+  hypothesis shapes (short reversal, slow level, year change, revision trend). The LLM prompt
+  says the same, and that two passing regions are enough.
+
 ## 2026-10-23
 
 - **Tasks and the other screens no longer wait for minutes while tasks run.** Each running

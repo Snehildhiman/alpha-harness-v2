@@ -141,6 +141,10 @@ class RegionAgnosticParams(PowerPoolParams):
     #: ``size`` ``RANDOM`` only: each size's universe per region, downloaded ones only. Each
     #: Alpha then runs at one size drawn at random, the same in every region.
     size_universes: dict[str, dict[str, str]] = Field(default_factory=dict)
+    #: ``near`` (default): an expression is run once as a real region-agnostic Alpha when two
+    #: regions pass every check but correlation, or one passes and another is within 7%.
+    #: ``strict``: only when two pass. ``off``: never; Repair's promotions remain.
+    promote: str = "near"
 
 
 class SettingsParams(TaskParams):

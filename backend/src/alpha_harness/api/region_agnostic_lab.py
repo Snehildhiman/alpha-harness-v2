@@ -61,6 +61,9 @@ class RegionAgnosticRequest(BaseModel):
     research_ids: list[int] = Field(default_factory=list, max_length=50)
     #: ``shapes``: no LLM; the built-in shapes write the Alphas (:mod:`..labs.ra_shapes`).
     writer: Literal["llm", "shapes"] = "llm"
+    #: When an expression earns a real region-agnostic simulation
+    #: (:func:`..labs.power_pool.promotable`).
+    promote: Literal["near", "strict", "off"] = "near"
 
 
 class RegionChoice(Out):
@@ -164,6 +167,11 @@ async def _plan(body: RegionAgnosticRequest, state: Any) -> dict[str, Any]:
             "and rarely writes usable expressions. Choose a chat or reasoning model."
         )
 
+    if body.delay != 1:
+        problems.append(
+            "BRAIN runs region-agnostic Alphas at delay 1 only, so only delay 1 Alphas can be "
+            "promoted or submitted as RA. Choose delay 1."
+        )
     offered = {r["region"]: r for r in await _regions(state, body.delay)}
     regions = [r for r in dict.fromkeys(body.regions) if r in offered]
     if len(regions) < power_pool.MIN_REGIONS:
@@ -229,6 +237,7 @@ async def _plan(body: RegionAgnosticRequest, state: Any) -> dict[str, Any]:
         size_universes=size_universes,
         research_ids=body.research_ids,
         writer=body.writer,
+        promote=body.promote,
     )
     sample: list[str] = []
     fields = 0
@@ -315,6 +324,87 @@ async def _plan(body: RegionAgnosticRequest, state: Any) -> dict[str, Any]:
         "promptName": prompt_name,
         "system": system,
     }
+
+
+#: Datasets the community reports work for ARC and region-agnostic Alphas: the
+#: 1 October 2026 webinar and consultants' forum posts. Starting points, not promises.
+ARC_PICKS: tuple[str, ...] = (
+    "other335",
+    "model38",
+    "imbalance5",
+    "dl_riskfree_returns",
+    "analyst69",
+    "model110",
+    "predictive_starmine",
+    "model138",
+    "intraday_pv_feats",
+    "pv1",
+    "fundamental17",
+    "fundamental23",
+    "analyst_factor_signals",
+    "institutions6",
+    "chart_cnn_alpha",
+    "analyst_earnings_ibes",
+    "ai_factor_transfer",
+    "quant_factor_lib",
+    "pattern_scores",
+    "ai_news_scores",
+    "global_seasonal_model",
+    "analyst_consensus",
+)
+
+
+class PickedDataset(Out):
+    dataset_id: str
+    name: str | None
+    category: str | None
+    fields: int | None
+    #: How many Alphas use it: lower leaves more room under prod correlation.
+    alphas: int | None
+    #: Alphas per field: the crowd's weight on each of its fields.
+    crowding: float | None
+
+
+class DatasetPicks(Out):
+    #: Of :data:`ARC_PICKS`, the ones in your downloaded All Regions market.
+    community: list[PickedDataset]
+    #: Picks not in the catalog (not downloaded, or not offered to this account).
+    missing: list[str]
+    #: Datasets of the All Regions market with the fewest Alphas per field: room left.
+    least_crowded: list[PickedDataset]
+
+
+@router.get("/picks")
+async def picks(state: State) -> DatasetPicks:
+    """Datasets to start ARC Alphas from: the community's picks and the least crowded."""
+    rows = await state.catalog.query(
+        "SELECT dataset_id, any_value(name) AS name, any_value(category_id) AS category, "
+        "max(field_count) AS fields, max(alpha_count) AS alphas FROM data_set "
+        "WHERE region = ? AND delay = 1 AND instrument_type = 'EQUITY' GROUP BY dataset_id",
+        [REGION_AGNOSTIC_REGION],
+    )
+
+    def item(r: dict[str, Any]) -> PickedDataset:
+        fields, alphas = r["fields"], r["alphas"]
+        return PickedDataset(
+            dataset_id=str(r["dataset_id"]),
+            name=r["name"],
+            category=r["category"],
+            fields=fields,
+            alphas=alphas,
+            crowding=(alphas / fields) if fields and alphas is not None else None,
+        )
+
+    by_id = {str(r["dataset_id"]): r for r in rows}
+    roomy = sorted(
+        (r for r in rows if (r["fields"] or 0) >= 5 and r["alphas"] is not None),
+        key=lambda r: r["alphas"] / max(1, r["fields"]),
+    )
+    return DatasetPicks(
+        community=[item(by_id[d]) for d in ARC_PICKS if d in by_id],
+        missing=[d for d in ARC_PICKS if d not in by_id],
+        least_crowded=[item(r) for r in roomy[:20]],
+    )
 
 
 @router.post("/preview")

@@ -78,6 +78,8 @@ interface RegionAgnosticDraft {
   neutralizations: string[]
   /** Who writes the Alphas: the built-in shapes need no LLM. */
   writer?: 'llm' | 'shapes'
+  /** When an expression earns a real region-agnostic simulation. */
+  promote?: 'near' | 'strict' | 'off'
 }
 
 const useDraft = create<RegionAgnosticDraft>()(
@@ -171,6 +173,7 @@ export function RegionAgnosticLabScreen() {
     simulations: draft.simulations ?? 0,
     research_ids: shapes ? [] : researchIds,
     writer,
+    promote: draft.promote ?? 'near',
   }
   const { preview, current } = useLabPreview('region-agnostic-lab', body, regionAgnosticLab.preview)
   const plan = preview.data
@@ -188,6 +191,14 @@ export function RegionAgnosticLabScreen() {
         title="Region Agnostic Lab"
         description="Region-agnostic fields, written into Alphas by the built-in shapes (no LLM) or by an LLM, and run as ordinary simulations in every region that carries them: the same settings but the region, ten to a core. Results come back grouped by Alpha, a row per region."
         actions={<AddTaskButtons add={add} disabled={!ready} />}
+      />
+      <ArcPanel
+        chosen={draft.datasetIds}
+        promote={draft.promote ?? 'near'}
+        delay={draft.delay}
+        onDatasets={(ids) => set({ datasetIds: ids, fields: [], fieldFilter: null })}
+        onPromote={(promote) => set({ promote })}
+        onDelay={() => set({ delay: 1, universe: '' })}
       />
       <Panel title="Writer">
         <div className="flex flex-col gap-3">
@@ -392,5 +403,134 @@ export function RegionAgnosticLabScreen() {
         </div>
       </Panel>
     </Page>
+  )
+}
+
+/** ARC: datasets to start from, and when an expression earns a real region-agnostic run. */
+function ArcPanel({
+  chosen,
+  promote,
+  delay,
+  onDatasets,
+  onPromote,
+  onDelay,
+}: {
+  chosen: string[]
+  promote: 'near' | 'strict' | 'off'
+  delay: number
+  onDatasets: (ids: string[]) => void
+  onPromote: (promote: 'near' | 'strict' | 'off') => void
+  onDelay: () => void
+}) {
+  const picks = useQuery({
+    queryKey: ['region-agnostic-lab', 'picks'],
+    queryFn: regionAgnosticLab.picks,
+  })
+  const data = picks.data
+  const community = data?.community ?? []
+  const roomy = data?.leastCrowded ?? []
+  return (
+    <Panel
+      title="ARC: region-agnostic Alphas that pass in two regions"
+      description="Each Alpha runs as an ordinary simulation in every chosen region first, which is cheap. When two regions pass every check but correlation (or one passes and another is within 7%), the lab runs it once as a real region-agnostic Alpha, the RA Parent ARC counts, unless every passing region already fails prod correlation. BRAIN needs one passing region under the prod limit."
+    >
+      <div className="flex flex-col gap-4">
+        {delay !== 1 && (
+          <Notice
+            tone="error"
+            title="Region-agnostic Alphas run at delay 1 only"
+            action={
+              <Button size="sm" onClick={onDelay}>
+                Use delay 1
+              </Button>
+            }
+          />
+        )}
+        <Fieldset
+          legend="Run as region-agnostic"
+          hint="Near tries more candidates (each RA run costs a simulation per region); Two pass only promotes sure ones."
+        >
+          <Segmented
+            label="Run as region-agnostic"
+            items={[
+              { value: 'near' as const, label: 'Two pass, or one passes and one is near' },
+              { value: 'strict' as const, label: 'Two pass' },
+              { value: 'off' as const, label: 'Never (use Repair → Promote)' },
+            ]}
+            value={promote}
+            onChange={onPromote}
+          />
+        </Fieldset>
+        <Fieldset
+          legend="Datasets the community reports work for ARC"
+          hint="From the 1 October 2026 webinar and consultants' posts: pv1, fundamental17/23, other335, model38/110/138, analyst69, imbalance5, predictive_starmine, intraday_pv_feats, institutions6 and more. A starting point; the hypothesis matters more."
+        >
+          {picks.isError && <ErrorNotice error={picks.error} title="Could not read the datasets" />}
+          {data && community.length === 0 && (
+            <span className="text-body-compact text-ink-subtle">
+              None of them is in your downloaded All Regions market yet. Sync the All Regions market
+              (region ALL, delay 1) in Sync with BRAIN.
+            </span>
+          )}
+          {community.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="primary"
+                  onClick={() => onDatasets(community.map((d) => d.datasetId))}
+                >
+                  Use these {community.length}
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() =>
+                    onDatasets([...new Set([...chosen, ...community.map((d) => d.datasetId)])])
+                  }
+                >
+                  Add to my datasets
+                </Button>
+              </div>
+              <span className="text-body-compact text-ink-muted">
+                {community
+                  .map(
+                    (d) =>
+                      `${d.datasetId}${d.crowding != null ? ` (${fmt.int(d.crowding)}/field)` : ''}`,
+                  )
+                  .join(' · ')}
+              </span>
+              {(data?.missing.length ?? 0) > 0 && (
+                <span className="text-caption text-ink-subtle">
+                  Not in your catalog: {data?.missing.join(', ')}
+                </span>
+              )}
+            </div>
+          )}
+        </Fieldset>
+        {roomy.length > 0 && (
+          <Fieldset
+            legend="Least crowded datasets in every region"
+            hint="Fewest Alphas per field: where prod correlation has the most room."
+          >
+            <div className="flex flex-col gap-2">
+              <div>
+                <Button
+                  size="sm"
+                  onClick={() => onDatasets(roomy.slice(0, 10).map((d) => d.datasetId))}
+                >
+                  Use the 10 least crowded
+                </Button>
+              </div>
+              <span className="text-body-compact text-ink-muted">
+                {roomy
+                  .slice(0, 20)
+                  .map((d) => `${d.datasetId} (${fmt.int(d.crowding)}/field)`)
+                  .join(' · ')}
+              </span>
+            </div>
+          </Fieldset>
+        )}
+      </div>
+    </Panel>
   )
 }

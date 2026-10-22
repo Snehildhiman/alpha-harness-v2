@@ -7,6 +7,7 @@ type Schemas = components['schemas']
 
 export type RegionAgnosticOptions = Schemas['RegionAgnosticOptions']
 export type RegionAgnosticPreview = Schemas['RegionAgnosticPreview']
+export type DatasetPicks = Schemas['DatasetPicks']
 
 export interface RegionAgnosticRequest {
   delay: number
@@ -28,11 +29,14 @@ export interface RegionAgnosticRequest {
   research_ids: number[]
   /** `shapes`: no LLM, the built-in shapes write the Alphas. */
   writer: 'llm' | 'shapes'
+  /** When an expression earns a real region-agnostic simulation. */
+  promote: 'near' | 'strict' | 'off'
 }
 
 const B = '/api/region-agnostic-lab'
 
 export const regionAgnosticLab = {
+  picks: () => http.get<DatasetPicks>(`${B}/picks`),
   options: (delay: number) => http.get<RegionAgnosticOptions>(`${B}/options${qs({ delay })}`),
   /** Free: no LLM call, no simulation. */
   preview: (body: RegionAgnosticRequest) => http.post<RegionAgnosticPreview>(`${B}/preview`, body),

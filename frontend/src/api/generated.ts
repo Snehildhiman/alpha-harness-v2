@@ -2006,6 +2006,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/region-agnostic-lab/picks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Picks
+         * @description Datasets to start ARC Alphas from: the community's picks and the least crowded.
+         */
+        get: operations["picks_api_region_agnostic_lab_picks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/region-agnostic-lab/preview": {
         parameters: {
             query?: never;
@@ -4588,6 +4608,15 @@ export interface components {
             /** Subcategory Id */
             subcategory_id: string | null;
         };
+        /** DatasetPicks */
+        DatasetPicks: {
+            /** Community */
+            community: components["schemas"]["PickedDataset"][];
+            /** Leastcrowded */
+            leastCrowded: components["schemas"]["PickedDataset"][];
+            /** Missing */
+            missing: string[];
+        };
         /** DatasetRow */
         DatasetRow: {
             /** Alpha Count */
@@ -5775,6 +5804,21 @@ export interface components {
             /** Submitted */
             submitted: boolean;
         };
+        /** PickedDataset */
+        PickedDataset: {
+            /** Alphas */
+            alphas: number | null;
+            /** Category */
+            category: string | null;
+            /** Crowding */
+            crowding: number | null;
+            /** Datasetid */
+            datasetId: string;
+            /** Fields */
+            fields: number | null;
+            /** Name */
+            name: string | null;
+        };
         /** PlanRequest */
         PlanRequest: {
             /** Taskids */
@@ -6570,6 +6614,12 @@ export interface components {
             model?: string | null;
             /** Neutralizations */
             neutralizations?: string[];
+            /**
+             * Promote
+             * @default near
+             * @enum {string}
+             */
+            promote: "near" | "strict" | "off";
             /** Prompt Id */
             prompt_id?: number | null;
             /** Rank By */
@@ -11471,6 +11521,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    picks_api_region_agnostic_lab_picks_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatasetPicks"];
                 };
             };
         };

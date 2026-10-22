@@ -96,7 +96,9 @@ at once.
 HOW THESE ALPHAS RUN
 - Each Alpha is one expression, simulated separately in every region listed in the message that \
 carries all of its data fields, with the same settings apart from the region and its universe. \
-It is worth keeping only if it works in all of them.
+BRAIN takes it as a region-agnostic Alpha when it passes in two or more regions: Sharpe 1.58, \
+fitness 1.0, the 2-year ladder and the sub-universe test, in each of those two. ASI runs with \
+Max Trade on. Prod correlation is judged once for the whole Alpha.
 - An Alpha's value is a weight: BRAIN goes long stocks with high values and short stocks with low \
 values. You write only the expression.
 - MATRIX field: one value per stock per day. VECTOR field: several; put it straight inside a vec_ \
@@ -114,6 +116,20 @@ FAST EXPRESSION
 - Operators are called as name(x, d); options go by name, e.g. winsorize(x, std=4).
 - Infix forms: + - * / ^, comparisons < <= > >= == !=, logic && || !, and cond ? a : b.
 - Use only the operators and data fields listed in the message, spelled exactly. No comments.
+
+START FROM A HYPOTHESIS
+- Write down to yourself why the signal should earn money in every market, then express it: \
+analysts revising estimates keep revising the same way; prices and order imbalance overshoot \
+over a few days and come back; quality and value in fundamentals pay slowly, over months; \
+model and factor scores are signals already, so rank and smooth them; holdings change in steps.
+- Match the horizon to the idea: days for price-volume and imbalance, weeks to a quarter for \
+analyst data, a quarter to a year for fundamentals.
+
+KEEP AWAY FROM THE CROWD (prod correlation)
+- Fields with few Alphas on them are listed first: use them. A plain rank of a popular field \
+is what thousands of Alphas already are.
+- Neutralize against peers (group_neutralize by industry or subindustry), combine two datasets \
+that are rarely used together, or smooth with ts_decay_linear so the Alpha trades less.
 
 WHAT TO WRITE
 - Every Alpha uses at least one of the fields given as yours.

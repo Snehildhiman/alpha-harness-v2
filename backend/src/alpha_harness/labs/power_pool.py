@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 import structlog
 from sqlalchemy import func, or_, select
 
-from ..brain.schemas import REGION_AGNOSTIC_REGION, SimulationSettings
+from ..brain.schemas import FULL_MODE, REGION_AGNOSTIC_REGION, SimulationSettings
 from ..catalog.queries import CatalogQueries, FieldFilter, Tuple4
 from ..db.models import Study, StudyStatus, Trial, TrialState, utcnow
 from ..llm import library
@@ -23,6 +23,7 @@ from ..llm.keys import BudgetExhaustedError, LLMError
 from ..llm.prompts import POWER_POOL_LAB, REGION_AGNOSTIC_LAB
 from ..llm.text import FENCE
 from ..tasks import spawn
+from ..vault.yields import checks_of
 from . import families, ra_shapes, scheduler, search
 from .fastexpr import (
     GROUPING,
@@ -38,7 +39,7 @@ from .fastexpr import (
     walk,
 )
 from .objectives import FAILURE
-from .params import PowerPoolParams, RegionAgnosticParams, params_of
+from .params import REGION_AGNOSTIC_SAMPLER, PowerPoolParams, RegionAgnosticParams, params_of
 
 if TYPE_CHECKING:  # pragma: no cover
     import asyncio
@@ -64,6 +65,8 @@ RA_UNIVERSES: dict[str, dict[str, str]] = {
 }
 PER_CALL = 20
 FIELDS_PER_CALL = 200
+#: The region whose RA child BRAIN always runs with Max Trade on.
+ASI = "ASI"
 #: Price and volume basics every market has, offered beside the chosen datasets' own fields.
 DATA_FIELDS = ("close", "open", "high", "low", "vwap", "volume", "adv20", "returns", "cap")
 PROPOSED = "Written by the LLM; waiting for cores."
@@ -285,7 +288,13 @@ async def ra_context(
         mine = set(chosen)
         wanted = sorted(
             (f for f, r in info.items() if str(r["dataset_id"]) in mine and f not in GROUPING),
-            key=lambda f: (-len(held[f]), -(info[f]["coverage"] or 0), f),
+            # Most regions, then the least crowded, then the most complete.
+            key=lambda f: (
+                -len(held[f]),
+                info[f]["alpha_count"] or 0,
+                -(info[f]["coverage"] or 0),
+                f,
+            ),
         )
     else:
         wanted = [f for f in dict.fromkeys(field_ids) if f in info and f not in GROUPING]
@@ -322,7 +331,7 @@ async def ra_context(
         names=frozenset(known),
         held={f: frozenset(held[f]) for f in known},
         chosen=True,
-        rank_by=rank_by if not whole else "regions carrying it, most first",
+        rank_by=rank_by if not whole else "regions carrying it, most first; then fewest Alphas",
         datasets=tuple((d, names.get(d, d)) for d in ids),
     )
 
@@ -463,6 +472,9 @@ def draw_regions(
             neutralization=neutralization,
             decay=decay,
             truncation=search.TRUNCATION,
+            # BRAIN runs an RA Alpha's ASI child with Max Trade on whatever is set, so the
+            # ASI run here is judged the way that child will be.
+            max_trade="ON" if region == ASI else None,
         ).model_dump(by_alias=True, exclude_none=True)
         for region in regions
     ]
@@ -691,7 +703,167 @@ def user_prompt(
 # --- the running task ----------------------------------------------------------
 
 
+#: How close a failed check may be to count as near: value at 93% of a lower limit.
+NEAR = 0.93
+#: Seconds between looks for groups to promote, per task.
+PROMOTE_EVERY = 90.0
+_promote_at: dict[int, float] = {}
+
+
+def child_state(checks: list[dict[str, Any]]) -> str:
+    """``pass``, ``near`` or ``fail`` for one region's run, judged as an RA child is: every
+    check but correlation (prod correlation is judged once, at the parent)."""
+    failed = [
+        c
+        for c in checks
+        if str(c.get("result") or "").upper() == "FAIL"
+        and "CORRELATION" not in str(c.get("name") or "").upper()
+    ]
+    if not failed:
+        return "pass" if checks else "fail"
+    for c in failed:
+        value, limit = c.get("value"), c.get("limit")
+        if not isinstance(value, int | float) or not isinstance(limit, int | float) or not limit:
+            return "fail"
+        name = str(c.get("name") or "").upper()
+        ratio = value / limit if not name.startswith("HIGH") else limit / value if value else 0
+        if ratio < NEAR:
+            return "fail"
+    return "near"
+
+
+def prod_failed(checks: list[dict[str, Any]]) -> bool:
+    return any(
+        str(c.get("name") or "").upper() == "PROD_CORRELATION"
+        and str(c.get("result") or "").upper() == "FAIL"
+        for c in checks
+    )
+
+
+def promotable(children: dict[str, list[dict[str, Any]]], rule: str) -> bool:
+    """Whether a group's regional runs earn a real region-agnostic simulation."""
+    if rule == "off":
+        return False
+    states = {region: child_state(checks) for region, checks in children.items()}
+    passing = [r for r, st in states.items() if st == "pass"]
+    near = [r for r, st in states.items() if st == "near"]
+    good = passing if rule == "strict" else passing + near
+    if len(passing) < (2 if rule == "strict" else 1) or len(good) < MIN_REGIONS:
+        return False
+    # BRAIN takes the parent only if one child that passes clears prod correlation.
+    return not all(prod_failed(children[r]) for r in good)
+
+
+async def _promote(optimizer: Optimizer, row: Study) -> int:
+    """Queue, once, a real region-agnostic simulation of each group that earned one."""
+    run = params_of(row, RegionAgnosticParams)
+    if run.promote == "off" or time.monotonic() < _promote_at.get(row.id, 0.0):
+        return 0
+    _promote_at[row.id] = time.monotonic() + PROMOTE_EVERY
+    done = set(run.llm.get("promoted") or [])
+    group = func.json_extract(Trial.params, "$.group")
+    async with optimizer.db.session() as session:
+        rows = (
+            await session.execute(
+                select(
+                    group, Trial.alpha_id, Trial.expression, scheduler.raw_json(Trial.settings)
+                ).where(
+                    Trial.study_id == row.id,
+                    Trial.state == TrialState.COMPLETE,
+                    Trial.alpha_id.is_not(None),
+                    group.is_not(None),
+                )
+            )
+        ).all()
+    by_group: dict[int, list[tuple[str, str, dict[str, Any]]]] = {}
+    for g, alpha_id, expression, settings in rows:
+        if int(g) in done:
+            continue
+        loaded = json.loads(settings) if isinstance(settings, str) else (settings or {})
+        if loaded.get("region") == REGION_AGNOSTIC_REGION:
+            done.add(int(g))
+            continue
+        by_group.setdefault(int(g), []).append((str(alpha_id), str(expression), loaded))
+    if not by_group:
+        return 0
+    stored = await optimizer.alphas.by_ids([a for runs in by_group.values() for a, _, _ in runs])
+    chosen: list[tuple[int, str, dict[str, Any], list[str]]] = []
+    for g, runs in by_group.items():
+        children = {
+            str(s.get("region")): checks_of(stored[a].get("checks"))
+            for a, _, s in runs
+            if a in stored
+        }
+        if len(children) >= MIN_REGIONS and promotable(children, run.promote):
+            chosen.append((g, runs[0][1], runs[0][2], sorted(children)))
+    if not chosen:
+        return 0
+    universe = await _ra_universe(optimizer, run)
+    async with optimizer.lock(row.id), optimizer.db.session() as session:
+        stored_row = await session.get(Study, row.id)
+        if stored_row is None:
+            return 0
+        number = int(
+            await session.scalar(select(func.max(Trial.number)).where(Trial.study_id == row.id))
+            or 0
+        )
+        for g, expression, settings, regions in chosen:
+            number += 1
+            ra = SimulationSettings(
+                region=REGION_AGNOSTIC_REGION,
+                delay=run.delay,
+                universe=universe,
+                neutralization=str(settings.get("neutralization") or "SUBINDUSTRY"),
+                decay=int(settings.get("decay") or 0),
+                truncation=float(settings.get("truncation") or search.TRUNCATION),
+                simulation_mode=FULL_MODE,
+            ).model_dump(by_alias=True, exclude_none=True)
+            session.add(
+                Trial(
+                    study_id=row.id,
+                    number=number,
+                    params={
+                        "dataset": CHOSEN,
+                        "group": g,
+                        "region": "ALL",
+                        "promotedFrom": regions,
+                    },
+                    distributions={},
+                    expression=expression,
+                    settings=ra,
+                    state=TrialState.PRUNED,
+                    message=PROPOSED,
+                )
+            )
+            done.add(g)
+        params = params_of(stored_row, RegionAgnosticParams)
+        params.llm = dict(params.llm) | {"promoted": sorted(done)[-5000:]}
+        stored_row.sampler_params = params.dump()
+    log.info("region_agnostic.promoted", study_id=row.id, alphas=len(chosen))
+    return len(chosen)
+
+
+async def _ra_universe(optimizer: Optimizer, run: RegionAgnosticParams) -> str:
+    """The region-agnostic market's universe for the task's size, as the catalog names it."""
+    found = [
+        str(r["universe"])
+        for r in await optimizer.alphas.catalog.query(
+            "SELECT DISTINCT universe FROM data_field WHERE region = ? AND delay = ?",
+            [REGION_AGNOSTIC_REGION, run.delay],
+        )
+    ]
+    for wanted in (run.size, run.universe or "", "LARGE"):
+        if wanted in found:
+            return wanted
+    return run.universe or (found[0] if found else "LARGE")
+
+
 async def refill(optimizer: Optimizer, row: Study, want: int, waiting: bool) -> int:
+    if row.sampler == REGION_AGNOSTIC_SAMPLER:
+        try:
+            await _promote(optimizer, row)
+        except Exception:
+            log.warning("region_agnostic.promote_failed", study_id=row.id, exc_info=True)
     async with optimizer.db.session() as session:
         # Only the written Alphas still waiting to be sent, not the whole task.
         ready = list(
