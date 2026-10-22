@@ -51,3 +51,27 @@ class Recent:
             self._values.clear()
         else:
             self._values.pop(key, None)
+
+
+class Memo:
+    """A few answers kept for ``ttl`` seconds, by any hashable key; the oldest go first.
+
+    For screens that recompute the same answer from the same judged vault: the key carries
+    the vault's identity, so a re-judged vault is a new key and never a stale answer.
+    """
+
+    def __init__(self, ttl: float, size: int = 32) -> None:
+        self.ttl = ttl
+        self.size = size
+        self._values: dict[Any, tuple[float, Any]] = {}
+
+    def get(self, key: Any) -> Any:
+        found = self._values.get(key)
+        if found is None or time.monotonic() - found[0] > self.ttl:
+            return None
+        return found[1]
+
+    def put(self, key: Any, value: Any) -> None:
+        self._values[key] = (time.monotonic(), value)
+        while len(self._values) > self.size:
+            self._values.pop(next(iter(self._values)))

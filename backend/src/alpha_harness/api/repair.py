@@ -19,6 +19,7 @@ from ..engine.slots import DEFAULT_SLOTS
 from ..labs import super_alpha
 from ..labs.launch import AddedTask, account_operators, add_study
 from ..labs.params import CORRELATION_BREAKER, SUPER_LAB, BreakerParams, SuperParams
+from ..recent import Memo
 from ..repair import super_repair
 from ..repair.generate import Reshape, Variant, variants
 from ..repair.rank import Score, at_least, near_miss, score
@@ -40,6 +41,9 @@ from .separation import (
 )
 
 router = APIRouter(prefix="/api/repair", tags=["repair"])
+
+#: Transplant plans for the vault as judged: a visit again within a minute costs nothing.
+memo = Memo(ttl=60)
 
 #: Tabs that hold repairable Alphas. RA families have their own pipeline.
 REPAIRABLE = (Kind.REGULAR, Kind.RA, Kind.POWER_POOL, Kind.THEME, Kind.SUPER)
@@ -523,6 +527,8 @@ async def queue(
 
 #: Transplants scored per request; the models score these in one batch.
 TRANSPLANT_POOL = 4000
+#: Transplants looked up as already tried, strongest sources first.
+TRIED_CAP = 20_000
 #: Types a transplant keeps: a regular Alpha stays regular, a Power Pool (or theme) one stays
 #: Power Pool, each judged by its own correlation in the new region.
 _TRANSPLANT_KINDS = frozenset({Kind.REGULAR, Kind.POWER_POOL, Kind.THEME})
@@ -637,10 +643,12 @@ async def transplant_rows(
         found = [t for t in found if t.region == region]
     if kind is not None:
         found = [t for t in found if t.power_pool == (kind == "power_pool")]
+    if found:
+        # Already simulated or refused with these settings: neither offered nor counted.
+        head = found[:TRIED_CAP]
+        tried = await state.engine.tried([_transplant_request(t) for t in head])
+        found = [t for t, done in zip(head, tried, strict=True) if not done] + found[TRIED_CAP:]
     pool = [] if count_only else found[:TRANSPLANT_POOL]
-    if pool:
-        tried = await state.engine.tried([_transplant_request(t) for t in pool])
-        pool = [t for t, done in zip(pool, tried, strict=True) if not done]
     ranked = await state.predictors.current() is not None
     scores: list[Score | None] = [None] * len(pool)
     if ranked and pool:
@@ -728,7 +736,13 @@ async def transplant_plan(
 ) -> TransplantPlan:
     """Passing regular and Power Pool Alphas, each in the downloaded regions it has not run
     in, best first. Simulates nothing. ``count``: only how many, without scoring them."""
+    vault = await judge_vault(state)
+    key = (id(vault), limit, region, kind, filters.model_dump_json(), count)
+    if (hit := memo.get(key)) is not None:
+        return hit[1]
     rows = await transplant_rows(state, limit, region or None, kind, filters, count_only=count)
+    # Held with the vault it came from, so that vault's id is never reused while it lives.
+    memo.put(key, (vault, rows[0]))
     return rows[0]
 
 

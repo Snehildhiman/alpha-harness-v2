@@ -19,6 +19,7 @@ import { useRefetchOn } from '@/lib/ws'
 import { ErrorNotice, Page, Panel, Progress, Skeleton, TEXT_TONE, type Tone } from '@/ui/kit'
 import { GettingStarted } from './getting-started'
 import { Opportunities } from './opportunities'
+import { SubmitReminders } from './reminders'
 import { SinceYesterday } from './since'
 import { WorkInFlight } from './work'
 
@@ -131,6 +132,7 @@ export function DashboardScreen() {
         />
       </div>
 
+      <SubmitReminders />
       <SinceYesterday />
       <Opportunities />
       <WorkInFlight />

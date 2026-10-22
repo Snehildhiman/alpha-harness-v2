@@ -39,8 +39,14 @@ export const evolutionLab = {
   /** Free; queues nothing. */
   preview: (body: EvolutionRequest) => http.post<EvolutionPreview>(`${B}/preview`, body),
   /** Chooses seeds in the background. Downloads daily PnL where missing; never simulates. */
-  autoSeeds: (body: { region: string; delay: number; universe: string; count: number }) =>
-    http.post<Schemas['AutoSeedsStarted']>(`${B}/seeds/auto`, body),
+  autoSeeds: (body: {
+    region: string
+    delay: number
+    universe: string
+    count: number
+    /** Also from the region's other universes, where their fields are here. */
+    any_universe?: boolean
+  }) => http.post<Schemas['AutoSeedsStarted']>(`${B}/seeds/auto`, body),
   autoSeedsJob: (jobId: string) =>
     http.get<AutoSeedsJob>(`${B}/seeds/auto/${encodeURIComponent(jobId)}`),
   /** Adds the breeding to Tasks, not started. Spends nothing until it is run there. */

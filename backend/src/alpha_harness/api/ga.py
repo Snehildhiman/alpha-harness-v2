@@ -69,6 +69,8 @@ class AutoSeedsRequest(BaseModel):
     delay: int = Field(ge=0, le=1)
     universe: str
     count: int = Field(default=50, ge=2, le=MAX_SEEDS)
+    #: Also from the region's other universes, where every field they read is here.
+    any_universe: bool = False
 
 
 class EvolutionMarket(Out):
@@ -336,7 +338,9 @@ async def auto_seeds(body: AutoSeedsRequest, state: State) -> AutoSeedsStarted:
 
     async def run() -> None:
         try:
-            found = await ga.auto_seeds(state, market, *wanted, body.count, report)
+            found = await ga.auto_seeds(
+                state, market, *wanted, body.count, report, any_universe=body.any_universe
+            )
             job["result"] = {
                 "seeds": [ga.seed_row(r) for r in found["rows"]],
                 "wanted": body.count,

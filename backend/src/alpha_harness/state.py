@@ -14,7 +14,7 @@ from datetime import timedelta
 import structlog
 from sqlalchemy import select
 
-from . import preferences, updates
+from . import backup, preferences, updates
 from .account import AuthService, PlatformMetadata
 from .autopilot import Autopilot
 from .brain.client import BrainClient
@@ -80,6 +80,8 @@ class AppState:
             on_change=lambda payload: self.hub.broadcast(TOPIC_TASKS, payload)
         )
         self.sealer = Sealer(self.settings.key_path)
+        # A restore stages the app's database; it goes in before anything opens the file.
+        backup.apply_pending(self.settings)
         self.db = Database(self.settings.sqlite_path)
         self.catalog = Catalog(self.settings.duckdb_path)
 
@@ -222,6 +224,7 @@ class AppState:
         await self.governor.start()
         await self.standings.start()
         await self.autopilot.start()
+        spawn(backup.schedule(self), name="backup-schedule")
         await self.predictors.start()
         log.info("startup.complete", data_dir=str(self.settings.data_dir))
 

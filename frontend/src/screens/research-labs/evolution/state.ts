@@ -8,6 +8,8 @@ export interface EvolutionDraft {
   region: string
   delay: number
   universe: string
+  /** Auto Select also looks in the region's other universes. */
+  seedsAnyUniverse?: boolean
   /** Other universes children also run in, one drawn at random per child. */
   childUniverses?: string[]
   seedIds: string[]

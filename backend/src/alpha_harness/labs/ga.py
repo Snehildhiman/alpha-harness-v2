@@ -689,6 +689,7 @@ def seed_problem(
     row: dict[str, Any] | None, region: str, delay: int, universe: str, market: Market | None
 ) -> str | None:
     """Why a stored Alpha cannot be a seed in this market, or ``None``."""
+    del universe  # Kept for callers: a seed from any universe may breed here (see below).
     if row is None or not row.get("expression"):
         return "Not stored here. Sync from BRAIN first."
     if is_submitted(row):
@@ -707,8 +708,10 @@ def seed_problem(
         return f"A {kind} Alpha cannot be a seed: its expression is not a regular expression."
     elif region == REGION_AGNOSTIC_REGION:
         return "One region's Alpha breeds in its own market. Here, seed from region-agnostic ones."
-    if (row.get("region"), row.get("delay"), row.get("universe")) != (region, delay, universe):
-        return f"It ran in {row.get('region')} D{row.get('delay')} {row.get('universe')}."
+    # Another universe or region is fine when every field it reads is in this market (the
+    # check below); only the delay must match, since it changes what each day's data means.
+    if row.get("delay") != delay:
+        return f"It ran at delay {row.get('delay')}; this market is delay {delay}."
     if row.get("fitness") is None:
         return "It has no Fitness yet."
     return unreadable(row["expression"], market) if market else None
@@ -743,17 +746,22 @@ async def auto_seeds(
     universe: str,
     want: int,
     report: Callable[[int, int], Awaitable[None]],
+    *,
+    any_universe: bool = False,
 ) -> dict[str, Any]:
     """The best, mutually uncorrelated unsubmitted Alphas of a market, and why the rest were
-    not chosen. Downloads daily PnL where missing; simulates nothing."""
+    not chosen. Downloads daily PnL where missing; simulates nothing.
+
+    ``any_universe``: from every universe of the region, kept only where each field they
+    read is in this market."""
     found = await state.catalog.query(
         f"""
         SELECT a.* FROM alpha a
         WHERE coalesce(a.instrument_type, 'EQUITY') = 'EQUITY'
-          AND a.region = ? AND a.delay = ? AND a.universe = ?
+          AND a.region = ? AND a.delay = ? AND (? OR a.universe = ?)
           AND NOT {SUBMITTED} AND {SEEDABLE} AND a.expression IS NOT NULL
         """,  # noqa: S608
-        [region, delay, universe],
+        [region, delay, any_universe, universe],
     )
     # Region-agnostic parents stand as their families, which is where their Sharpe is.
     stood = await state.alphas.with_families({str(r["alpha_id"]): r for r in found})

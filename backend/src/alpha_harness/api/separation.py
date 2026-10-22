@@ -23,6 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from .. import preferences
 from ..crowding import crowdmap
 from ..crowding.crowdmap import Floor
+from ..recent import Memo
 from ..schemas import Out
 from ..separation import (
     RA_MIN_REGIONS,
@@ -810,6 +811,27 @@ async def next_to_submit(
     """Submittable (and re-check) Alphas of one tab, ranked by how much each lifts the
     combined book's after-cost IR. Spends nothing."""
     judged = await judge_vault(state)
+    key = (id(judged), tab, cost_bps, limit, filters.model_dump_json())
+    if (hit := _next_memo.get(key)) is not None:
+        return hit[1]
+    plan = await _next_plan(state, judged, tab, cost_bps, limit, filters)
+    # Held with the vault it came from, so that vault's id is never reused while it lives.
+    _next_memo.put(key, (judged, plan))
+    return plan
+
+
+#: Plans for the vault as judged: a visit again within a minute costs nothing.
+_next_memo = Memo(ttl=60)
+
+
+async def _next_plan(
+    state: State,
+    judged: list[Judged],
+    tab: Kind,
+    cost_bps: float,
+    limit: int,
+    filters: TabFilter,
+) -> NextPlan:
     wanted = filters.dataset or filters.category or filters.theme
     data = await data_of(state, judged) if wanted else {}
 

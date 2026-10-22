@@ -3,6 +3,26 @@
 What v2 adds on top of [alpha-harness-improved](https://github.com/residual-lab/alpha-harness)
 (MIT, © MiracleInvoker). How to use each part: [GUIDE.md](GUIDE.md).
 
+## 2026-10-22 (night)
+
+- **Restore** (Health and Backup → a backup → Restore): every alpha, PnL day and crowd snapshot
+  in the backup that is missing here is added back; nothing newer is replaced or deleted.
+  Optionally its models, and its tasks, settings and prompts (swapped in at the next start, the
+  current ones kept aside). *Add a backup file* takes a zip from another computer.
+- **Automatic backup**: weekly by default (daily or off on the Health screen).
+- **Why BRAIN refused simulations** (Health): refusals of the last 1, 7 or 30 days grouped by
+  BRAIN's message, most common first, marked *Fix* when they would repeat, with what to do,
+  an example expression and the tasks that wrote them.
+- **Which templates pay** (Research Labs): every template, Search Lab shape, Region Agnostic
+  shape and SuperAlpha recipe by its pass rate and mean Sharpe, once it has 5 results.
+- **Submission reminder** (dashboard): alphas that passed *Check now* 2+ days ago and are still
+  not submitted, with links to check again and to BRAIN.
+- **Fixed**: the dashboard's transplant count leaves out transplants already simulated or
+  refused; *What to submit next* and Transplants answer a repeat visit at once (kept for a
+  minute while the vault is unchanged); Evolution seeds may come from any universe or region
+  at the same delay when every field they read is in the breeding market, and Auto Select can
+  look in the region's other universes.
+
 ## 2026-10-22 (evening)
 
 - **Never the same failure twice**: a simulation BRAIN refused for good (an unknown field, an

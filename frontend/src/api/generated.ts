@@ -1555,11 +1555,29 @@ export interface paths {
         put?: never;
         /**
          * Make Backup
-         * @description Zip the vault (every Alpha and its daily PnL), the crowd history, the models and the
-         *     app's database. The catalog's fields are left out (a sync rebuilds them), and so is the
-         *     key to saved credentials.
+         * @description Zip the vault, the crowd history, the models and the app's database.
          */
         post: operations["make_backup_api_overview_backups_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/overview/backups/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload Backup
+         * @description Take a backup made on another computer (the zip as the body), to restore here.
+         */
+        post: operations["upload_backup_api_overview_backups_upload_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1575,6 +1593,47 @@ export interface paths {
         };
         /** Download Backup */
         get: operations["download_backup_api_overview_backups__name__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/overview/backups/{name}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Backup
+         * @description Merge a backup back in: what is missing here is added, nothing newer is replaced.
+         *     ``models`` restores its models too; ``database`` its tasks and settings, at next start.
+         */
+        post: operations["restore_backup_api_overview_backups__name__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/overview/errors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Errors
+         * @description Why BRAIN refused simulations lately, grouped by reason, most common first.
+         */
+        get: operations["errors_api_overview_errors_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1624,6 +1683,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/overview/reminders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reminders
+         * @description Alphas that passed *Check now* two or more days ago and are still not submitted.
+         */
+        get: operations["reminders_api_overview_reminders_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/overview/since": {
         parameters: {
             query?: never;
@@ -1636,6 +1715,26 @@ export interface paths {
          * @description What the last ``hours`` brought, by Alpha type. Reads only what is stored.
          */
         get: operations["since_api_overview_since_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/overview/templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Templates
+         * @description Each template, shape or recipe by how often its Alphas pass, best first.
+         */
+        get: operations["templates_api_overview_templates_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3622,6 +3721,11 @@ export interface components {
         /** AutoSeedsRequest */
         AutoSeedsRequest: {
             /**
+             * Any Universe
+             * @default false
+             */
+            any_universe: boolean;
+            /**
              * Count
              * @default 50
              */
@@ -3959,6 +4063,19 @@ export interface components {
             tab: components["schemas"]["Kind"];
             /** @default recheck */
             verdict: components["schemas"]["Verdict"];
+        };
+        /** Body_restore_backup_api_overview_backups__name__restore_post */
+        Body_restore_backup_api_overview_backups__name__restore_post: {
+            /**
+             * Database
+             * @default false
+             */
+            database: boolean;
+            /**
+             * Models
+             * @default false
+             */
+            models: boolean;
         };
         /** Body_star_api_research_papers__paper_id__star_put */
         Body_star_api_research_papers__paper_id__star_put: {
@@ -4564,6 +4681,34 @@ export interface components {
             slotsFree: number;
             /** Slotsused */
             slotsUsed: number;
+        };
+        /** ErrorGroup */
+        ErrorGroup: {
+            /** Advice */
+            advice: string | null;
+            /** Count */
+            count: number;
+            /** Example */
+            example: string;
+            /** Expression */
+            expression: string | null;
+            /** Forgood */
+            forGood: boolean;
+            /** Lastat */
+            lastAt: string;
+            /** Reason */
+            reason: string;
+            /** Tasks */
+            tasks: string[];
+        };
+        /** ErrorSummary */
+        ErrorSummary: {
+            /** Days */
+            days: number;
+            /** Groups */
+            groups: components["schemas"]["ErrorGroup"][];
+            /** Total */
+            total: number;
         };
         /**
          * EvolutionMarket
@@ -5936,6 +6081,12 @@ export interface components {
         /** Preferences */
         Preferences: {
             /**
+             * Autobackupdays
+             * @default 7
+             * @enum {integer}
+             */
+            autoBackupDays: 0 | 1 | 7;
+            /**
              * Autobalancecores
              * @default false
              */
@@ -6466,6 +6617,23 @@ export interface components {
             /** Universes */
             universes: string[];
         };
+        /** Reminder */
+        Reminder: {
+            /** Alphaid */
+            alphaId: string;
+            /** Checkedat */
+            checkedAt: string;
+            /** Days */
+            days: number;
+            /** Kind */
+            kind: string;
+            /** Link */
+            link: string;
+            /** Region */
+            region: string | null;
+            /** Sharpe */
+            sharpe: number | null;
+        };
         /** RepairPlan */
         RepairPlan: {
             /** Alphaid */
@@ -6527,6 +6695,17 @@ export interface components {
             settings?: {
                 [key: string]: unknown;
             };
+        };
+        /** Restored */
+        Restored: {
+            /** Added */
+            added: {
+                [key: string]: number;
+            };
+            /** Database */
+            database: boolean;
+            /** Models */
+            models: boolean;
         };
         /** RunningTheme */
         RunningTheme: {
@@ -7702,6 +7881,21 @@ export interface components {
         TemplateRemoved: {
             /** Removed */
             removed: number;
+        };
+        /** TemplateScore */
+        TemplateScore: {
+            /** Lab */
+            lab: string;
+            /** Meansharpe */
+            meanSharpe: number | null;
+            /** Name */
+            name: string;
+            /** Passrate */
+            passRate: number;
+            /** Passed */
+            passed: number;
+            /** Simulated */
+            simulated: number;
         };
         /**
          * TemplateStats
@@ -10591,6 +10785,26 @@ export interface operations {
             };
         };
     };
+    upload_backup_api_overview_backups_upload_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Backup"];
+                };
+            };
+        };
+    };
     download_backup_api_overview_backups__name__get: {
         parameters: {
             query?: never;
@@ -10609,6 +10823,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_backup_api_overview_backups__name__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["Body_restore_backup_api_overview_backups__name__restore_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Restored"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    errors_api_overview_errors_get: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorSummary"];
                 };
             };
             /** @description Validation Error */
@@ -10675,6 +10955,26 @@ export interface operations {
             };
         };
     };
+    reminders_api_overview_reminders_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Reminder"][];
+                };
+            };
+        };
+    };
     since_api_overview_since_get: {
         parameters: {
             query?: {
@@ -10702,6 +11002,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    templates_api_overview_templates_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemplateScore"][];
                 };
             };
         };

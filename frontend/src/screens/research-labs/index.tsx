@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { LAB_TABS } from '@/shell/nav'
 import { Page, PageHeader } from '@/ui/kit'
+import { TemplateLeaderboard } from './leaderboard'
 
 const ICONS: Record<(typeof LAB_TABS)[number]['tab'], LucideIcon> = {
   theme: TargetIcon,
@@ -98,6 +99,7 @@ export function ResearchLabsScreen() {
           </Link>
         ))}
       </div>
+      <TemplateLeaderboard />
     </Page>
   )
 }

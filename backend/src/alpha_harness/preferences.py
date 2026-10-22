@@ -76,6 +76,8 @@ class Preferences(Out):
     #: simulations. Off: transplants run only when you queue them.
     autopilot: bool = False
     autopilot_daily: int = Field(default=100, ge=10, le=2000)
+    #: A backup when the last is this many days old; 0 turns the schedule off.
+    auto_backup_days: Literal[0, 1, 7] = 7
     #: Lowest chance of passing every check a transplant needs to be queued.
     autopilot_min_chance: float = Field(default=0.4, ge=0.1, le=0.9)
     autopilot_cores: int = Field(default=2, ge=1, le=8)

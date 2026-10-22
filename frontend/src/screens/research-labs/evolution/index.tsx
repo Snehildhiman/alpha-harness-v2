@@ -25,6 +25,7 @@ import { NeutralizationPicker } from '@/screens/research-labs/neutralization'
 import { CoresSetting, SimulationsSetting } from '@/screens/research-labs/task-settings'
 import {
   Button,
+  Checkbox,
   Chips,
   Disclosure,
   Empty,
@@ -133,6 +134,7 @@ export function EvolutionLabScreen() {
         delay: draft.delay,
         universe: draft.universe,
         count: wanted,
+        any_universe: draft.seedsAnyUniverse ?? false,
       }),
     onSuccess: (r) => set({ autoJobId: r.jobId }),
   })
@@ -279,6 +281,11 @@ export function EvolutionLabScreen() {
                   {!busy && <WandSparklesIcon />}
                   Auto Select
                 </Button>
+                <Checkbox
+                  label="From any universe of the region"
+                  checked={draft.seedsAnyUniverse ?? false}
+                  onChange={(next) => set({ seedsAnyUniverse: next })}
+                />
               </>
             )}
           </>
