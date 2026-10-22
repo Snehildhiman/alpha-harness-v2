@@ -665,7 +665,7 @@ function AutopilotUniverse({
   value: string
   onChange: (universe: string) => void
 }) {
-  const plan = useQuery(promotionPlan)
+  const plan = useQuery(promotionPlan())
   const universes = [...new Set(Object.values(plan.data?.universes ?? {}).flat())].sort()
   if (!universes.length) {
     return (

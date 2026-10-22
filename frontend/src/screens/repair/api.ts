@@ -63,14 +63,22 @@ export const queueTransplants = (body: {
 export type PromotionPlan = Schemas['PromotionPlan']
 export type PromotionRow = Schemas['PromotionRow']
 
-export const promotionPlan = queryOptions({
-  queryKey: ['repair', 'promotions'],
-  queryFn: () => http.get<PromotionPlan>('/api/repair/promotions'),
-  staleTime: 60_000,
-})
+/** `regions`: passing in two regions already. `glb`: passing or submitted Global alphas. */
+export type PromotionSource = 'regions' | 'glb'
 
-export const queuePromotions = (body: { universe: string; delay: number; take: number }) =>
-  http.post<Schemas['AddedTask']>('/api/repair/promotions/tasks', body)
+export const promotionPlan = (source: PromotionSource = 'regions') =>
+  queryOptions({
+    queryKey: ['repair', 'promotions', source],
+    queryFn: () => http.get<PromotionPlan>(`/api/repair/promotions?source=${source}`),
+    staleTime: 60_000,
+  })
+
+export const queuePromotions = (body: {
+  universe: string
+  delay: number
+  take: number
+  source?: PromotionSource
+}) => http.post<Schemas['AddedTask']>('/api/repair/promotions/tasks', body)
 
 export type AutopilotStatus = Schemas['AutopilotStatus']
 

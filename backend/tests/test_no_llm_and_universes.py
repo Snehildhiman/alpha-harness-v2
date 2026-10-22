@@ -97,7 +97,7 @@ def test_shapes_write_checked_region_agnostic_alphas() -> None:
 
 def test_shapes_skip_operators_the_account_lacks() -> None:
     usable = ra_shapes.usable({"rank", "ts_backfill"}, frozenset({"close"}))
-    assert [s.name for s in usable] == ["rank", "spread"]
+    assert [s.name for s in usable] == ["rank", "spread", "amount_ratio"]
     assert ra_shapes.usable({"rank"}, frozenset()) == ()
 
 

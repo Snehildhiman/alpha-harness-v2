@@ -2134,7 +2134,8 @@ export interface paths {
         /**
          * Promotion Plan
          * @description Expressions that pass as regular Alphas in two or more region-agnostic markets and
-         *     have never run as a region-agnostic Alpha. Simulates nothing.
+         *     have never run as a region-agnostic Alpha (``source=glb``: Global Alphas). Simulates
+         *     nothing.
          */
         get: operations["promotion_plan_api_repair_promotions_get"];
         put?: never;
@@ -4056,6 +4057,12 @@ export interface components {
              * @default 1
              */
             delay: number;
+            /**
+             * Source
+             * @default regions
+             * @enum {string}
+             */
+            source: "regions" | "glb";
             /**
              * Start
              * @default true
@@ -11724,6 +11731,7 @@ export interface operations {
         parameters: {
             query?: {
                 delay?: number | null;
+                source?: "regions" | "glb";
             };
             header?: never;
             path?: never;

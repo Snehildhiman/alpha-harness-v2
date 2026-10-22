@@ -6,7 +6,7 @@ from alpha_harness.labs import ra_shapes
 from alpha_harness.labs.params import RegionAgnosticParams
 from alpha_harness.labs.power_pool import child_state, draw_regions, promotable
 
-from .test_no_llm_and_universes import _ctx
+from .test_no_llm_and_universes import NAMES, _ctx
 
 
 def _checks(sharpe: float, fitness: float = 1.2, prod: str = "PASS") -> list[dict[str, object]]:
@@ -69,6 +69,33 @@ def test_asi_runs_with_max_trade() -> None:
 def test_hypotheses_follow_the_dataset() -> None:
     assert "short_reversal" in ra_shapes.favoured("imbalance5")
     assert "revision_trend" in ra_shapes.favoured("analyst69")
-    assert "slow_level" in ra_shapes.favoured("fundamental17")
+    assert "amount_ratio" in ra_shapes.favoured("fundamental17")
     assert "decayed" in ra_shapes.favoured("model38")
     assert ra_shapes.favoured("xyz") == frozenset()
+
+
+def test_currency_needs_a_cure() -> None:
+    from alpha_harness.labs import currency
+
+    amount = currency.is_amount
+    assert currency.problem("rank(sales)", amount)
+    assert currency.problem("x = ts_backfill(sales, 21); rank(x)", amount)
+    assert currency.problem("-rank(ts_delta(close, 5))", amount)
+    assert currency.problem("close", amount)
+    assert currency.problem("rank(sales / assets)", amount) is None
+    assert currency.problem("rank(ts_zscore(sales, 63))", amount) is None
+    assert currency.problem("ts_rank(close, 20)", amount) is None
+    assert currency.problem("rank(returns)", amount) is None
+    assert not currency.is_amount("gross_margin_ratio", "gross margin ratio")
+
+
+def test_shapes_never_rank_an_amount_raw() -> None:
+    from alpha_harness.labs import currency
+
+    ctx = _ctx()
+    written, _ = ra_shapes.write(
+        ctx, NAMES | {"ts_rank", "group_neutralize"}, random.Random(5), count=40, offset=0
+    )
+    amount = currency.amounts_in([*ctx.fields, *ctx.basics])
+    assert written
+    assert all(currency.problem(w["expression"], amount) is None for w in written)

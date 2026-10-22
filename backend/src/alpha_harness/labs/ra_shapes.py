@@ -19,7 +19,7 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from . import search
+from . import currency, search
 
 if TYPE_CHECKING:
     import random
@@ -60,6 +60,9 @@ SHAPES: tuple[Shape, ...] = (
     Shape("slow_level", "rank(ts_mean({b}, 252))"),
     Shape("year_change", "rank(ts_delta({b}, 252) / ts_std_dev({b}, 252))"),
     Shape("revision_trend", "group_rank(ts_delta({b}, 21) / ts_std_dev({b}, 126), {g})"),
+    # One amount over another: the currency cancels (the webinar's first cure).
+    Shape("amount_ratio", "rank({b} / {c})"),
+    Shape("amount_ratio_trend", "ts_rank({b} / {c}, {e})"),
 )
 
 #: The hypotheses that suit each kind of data, by words in its dataset's id: analyst figures
@@ -77,7 +80,7 @@ HYPOTHESES: tuple[tuple[tuple[str, ...], frozenset[str]], ...] = (
     ),
     (
         ("fundamental", "fnd", "balance", "income", "cashflow", "valuation"),
-        frozenset({"slow_level", "year_change", "trend", "peer_trend", "ratio_momentum"}),
+        frozenset({"amount_ratio", "amount_ratio_trend", "year_change", "trend", "peer_trend"}),
     ),
     (
         ("pv", "intraday", "imbalance", "price", "volume", "option", "short"),
@@ -170,6 +173,7 @@ def write(
     vector = [v for v in VECTOR_OPS if v in operators]
     weights = [1.0 + max(0.0, (scores or {}).get(s.name, 0.0)) for s in shapes]
     wrap = [w for w in ("group_neutralize", "ts_decay_linear") if w in operators]
+    amount = currency.amounts_in([*ctx.fields, *ctx.basics])
     n = len(fields)
     out: list[dict[str, str]] = []
     written: set[str] = set()
@@ -214,7 +218,8 @@ def write(
                     expression = f"group_neutralize({expression}, {rng.choice(ctx.groups)})"
                 elif how == "ts_decay_linear":
                     expression = f"ts_decay_linear({expression}, {rng.choice((5, 10, 21))})"
-            if expression in written:
+            if expression in written or currency.problem(expression, amount):
+                # Ranking an amount across currencies: BRAIN's regions would not agree.
                 continue
             written.add(expression)
             out.append({"expression": expression, "shape": shape.name})

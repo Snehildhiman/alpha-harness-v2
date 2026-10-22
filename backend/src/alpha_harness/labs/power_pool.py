@@ -24,7 +24,7 @@ from ..llm.prompts import POWER_POOL_LAB, REGION_AGNOSTIC_LAB
 from ..llm.text import FENCE
 from ..tasks import spawn
 from ..vault.yields import checks_of
-from . import families, ra_shapes, scheduler, search
+from . import currency, families, ra_shapes, scheduler, search
 from .fastexpr import (
     GROUPING,
     MAX_FIELDS,
@@ -1041,6 +1041,7 @@ async def _write(optimizer: Optimizer, study_id: int) -> None:
         table = operator_table(operators)
         dead = await families.dead(catalog)
         per_family: dict[str, int] = {}
+        amount = currency.amounts_in([*ctx.fields, *ctx.basics])
         rng = random.Random()
         async with optimizer.lock(study_id), optimizer.db.session() as session:
             stored = await session.get(Study, study_id)
@@ -1059,6 +1060,8 @@ async def _write(optimizer: Optimizer, study_id: int) -> None:
                     expression, used = check(text, ctx, table, power_pool=ra is None)
                     if expression in seen:
                         raise Rejected("Already written in this task.")
+                    if ra is not None and (why := currency.problem(expression, amount)):
+                        raise Rejected(why)
                     shape = families.skeleton(expression)
                     if per_family.get(shape, 0) >= families.PER_ROUND:
                         raise Rejected("A near-copy of another Alpha in this batch.")

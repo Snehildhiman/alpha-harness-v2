@@ -23,7 +23,15 @@ from ..recent import Memo
 from ..repair import super_repair
 from ..repair.generate import Reshape, Variant, variants
 from ..repair.rank import Score, at_least, near_miss, score
-from ..repair.transplant import Markets, Promotion, Transplant, promotions, ran_in, transplants
+from ..repair.transplant import (
+    Markets,
+    Promotion,
+    Transplant,
+    from_global,
+    promotions,
+    ran_in,
+    transplants,
+)
 from ..schemas import Out
 from ..separation import RA_MIN_REGIONS, Judged, Kind, Verdict
 from ..tools import correlation_breaker, settings_sampler
@@ -830,14 +838,22 @@ class PromotionPlan(Out):
     universes: dict[int, list[str]]
 
 
-async def promotion_rows(state: State, delay: int | None) -> tuple[PromotionPlan, list[Promotion]]:
+PromotionSource = Literal["regions", "glb"]
+
+
+async def promotion_rows(
+    state: State, delay: int | None, source: PromotionSource = "regions"
+) -> tuple[PromotionPlan, list[Promotion]]:
+    """``regions``: expressions passing in two regions already. ``glb``: passing or submitted
+    Global Alphas, the webinar's easiest start for ARC."""
     _, _, ran = await _markets_and_runs(state)
     passing = [
         item.row
         for item in await judge_vault(state)
         if item.judgement.kind == Kind.REGULAR and item.judgement.verdict in _TRANSPLANT_PASSING
     ]
-    found = [p for p in promotions(passing, ran) if delay is None or p.delay == delay]
+    made = from_global(passing, ran) if source == "glb" else promotions(passing, ran)
+    found = [p for p in made if delay is None or p.delay == delay]
     universes: dict[int, list[str]] = {}
     for r in await state.catalog.query(
         "SELECT DISTINCT delay, universe FROM data_field WHERE region = ? ORDER BY universe",
@@ -865,11 +881,14 @@ async def promotion_rows(state: State, delay: int | None) -> tuple[PromotionPlan
 
 @router.get("/promotions")
 async def promotion_plan(
-    state: State, delay: Annotated[int | None, Query()] = None
+    state: State,
+    delay: Annotated[int | None, Query()] = None,
+    source: Annotated[PromotionSource, Query()] = "regions",
 ) -> PromotionPlan:
     """Expressions that pass as regular Alphas in two or more region-agnostic markets and
-    have never run as a region-agnostic Alpha. Simulates nothing."""
-    return (await promotion_rows(state, delay))[0]
+    have never run as a region-agnostic Alpha (``source=glb``: Global Alphas). Simulates
+    nothing."""
+    return (await promotion_rows(state, delay, source))[0]
 
 
 @router.post("/promotions/tasks")
@@ -880,11 +899,12 @@ async def queue_promotions(
     take: Annotated[int, Body(ge=1, le=100)] = 20,
     cores: Annotated[int, Body(ge=1)] = DEFAULT_SLOTS,
     start: Annotated[bool, Body()] = True,
+    source: Annotated[PromotionSource, Body()] = "regions",
 ) -> AddedTask:
     """Run the best ``take`` as region-agnostic Alphas in ``universe``, in Full mode."""
     if cores > state.engine.slots:
         raise refuse(422, "too_many_cores", f"The engine has {state.engine.slots} slots.")
-    plan, found = await promotion_rows(state, delay)
+    plan, found = await promotion_rows(state, delay, source)
     if universe not in plan.universes.get(delay, []):
         raise refuse(
             422,
@@ -895,7 +915,11 @@ async def queue_promotions(
     chosen = found[:take]
     if not chosen:
         raise refuse(
-            422, "no_promotions", "No expression passes in two region-agnostic markets yet."
+            422,
+            "no_promotions",
+            "No Global Alpha passes and is new to region-agnostic yet."
+            if source == "glb"
+            else "No expression passes in two region-agnostic markets yet.",
         )
     return await add_promotions(
         state,

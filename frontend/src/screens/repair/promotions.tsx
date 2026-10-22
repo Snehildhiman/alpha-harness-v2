@@ -11,7 +11,7 @@ import { useState } from 'react'
 import { fmt } from '@/lib/format'
 import { Button, Empty, ErrorNotice, LINK, Notice, Panel, Segmented } from '@/ui/kit'
 import { type Column, DataTable } from '@/ui/table'
-import { type PromotionRow, promotionPlan, queuePromotions } from './api'
+import { type PromotionRow, type PromotionSource, promotionPlan, queuePromotions } from './api'
 
 const COLUMNS: Column<PromotionRow>[] = [
   {
@@ -60,7 +60,8 @@ const COLUMNS: Column<PromotionRow>[] = [
 ]
 
 export function PromotionsPanel() {
-  const plan = useQuery(promotionPlan)
+  const [source, setSource] = useState<PromotionSource>('regions')
+  const plan = useQuery(promotionPlan(source))
   const queue = useMutation({ mutationFn: queuePromotions })
   const [delay, setDelay] = useState(1)
   const [picked, setPicked] = useState<string | null>(null)
@@ -75,6 +76,15 @@ export function PromotionsPanel() {
       title="Promote to region agnostic"
       actions={
         <div className="flex flex-wrap items-center gap-2">
+          <Segmented
+            label="From"
+            items={[
+              { value: 'regions' as const, label: 'Pass in 2 regions' },
+              { value: 'glb' as const, label: 'Global alphas' },
+            ]}
+            value={source}
+            onChange={setSource}
+          />
           {delays.length > 1 && (
             <Segmented
               label="Delay"
@@ -102,7 +112,7 @@ export function PromotionsPanel() {
               <Button
                 variant="primary"
                 loading={queue.isPending}
-                onClick={() => queue.mutate({ universe, delay, take })}
+                onClick={() => queue.mutate({ universe, delay, take, source })}
               >
                 <PlayIcon aria-hidden />
                 Run top {Math.min(take, rows.length)} as RA
@@ -114,9 +124,9 @@ export function PromotionsPanel() {
     >
       <div className="flex flex-col gap-3">
         <p className="text-body-compact text-ink-subtle">
-          Expressions that already pass as regular Alphas in two or more of USA, EUR, ASI and GLB
-          and have never run as a region-agnostic Alpha. BRAIN takes a family once two of its
-          regions pass.
+          {source === 'glb'
+            ? 'Your passing and submitted Global alphas at delay 1 that never ran as region-agnostic: the ARC webinar’s easiest start, since a Global signal already spans markets and currencies. Each runs once as an RA alpha; BRAIN takes it once two regions pass.'
+            : 'Expressions that already pass as regular Alphas in two or more of USA, EUR, ASI and GLB and have never run as a region-agnostic Alpha. BRAIN takes a family once two of its regions pass.'}
         </p>
         {plan.isError && <ErrorNotice error={plan.error} title="Could not find promotions" />}
         {data && universes.length === 0 && (

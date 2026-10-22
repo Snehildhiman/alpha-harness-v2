@@ -3,6 +3,21 @@
 What v2 adds on top of [alpha-harness-improved](https://github.com/residual-lab/alpha-harness)
 (MIT, © MiracleInvoker). How to use each part: [GUIDE.md](GUIDE.md).
 
+## 2026-10-23 (ARC webinar)
+
+From the ARC webinar's Q&A:
+
+- **Currency guard**: a region-agnostic alpha that ranks an amount (sales, a price, market cap,
+  volume) across stocks reporting in different currencies is not sent; the Region Agnostic
+  Lab says why and how to fix it: divide by another amount, or compare with the stock's own
+  history (ts_rank, ts_zscore, ts_scale). The built-in shapes never write one, and two new
+  shapes divide one amount by another (favoured for fundamentals).
+- **Global alphas to ARC**: Repair → Promote to region agnostic → *Global alphas* runs your
+  passing and submitted Global alphas at delay 1, never run as RA, once each as an RA alpha:
+  the webinar's lowest-hanging fruit.
+- GLB children now face the EMEA / AMER / APAC Sharpe tests in ARC; the lab already counts
+  those checks when it decides what to promote.
+
 ## 2026-10-23 (ARC)
 
 - **Region Agnostic Lab promotes by itself**: each candidate still runs cheaply as an ordinary

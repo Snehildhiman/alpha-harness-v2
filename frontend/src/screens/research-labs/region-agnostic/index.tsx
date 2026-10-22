@@ -461,6 +461,15 @@ function ArcPanel({
             onChange={onPromote}
           />
         </Fieldset>
+        <p className="text-body-compact text-pretty text-ink-muted">
+          Quickest start, from the ARC webinar: run your passing and submitted Global alphas as
+          region-agnostic in{' '}
+          <Link to="/repair" className={LINK}>
+            Repair → Promote to region agnostic → Global alphas
+          </Link>
+          . Alphas that rank an amount (sales, a price, market cap) across currencies are not sent:
+          divide it by another amount or compare it with its own history.
+        </p>
         <Fieldset
           legend="Datasets the community reports work for ARC"
           hint="From the 1 October 2026 webinar and consultants' posts: pv1, fundamental17/23, other335, model38/110/138, analyst69, imbalance5, predictive_starmine, intraday_pv_feats, institutions6 and more. A starting point; the hypothesis matters more."

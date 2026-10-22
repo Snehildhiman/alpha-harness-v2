@@ -199,3 +199,38 @@ def promotions(
         )
     out.sort(key=lambda p: (-len(p.regions), -(p.sharpe or 0.0)))
     return out
+
+
+#: The region whose passing Alphas the webinar calls the easiest start for ARC.
+GLB = "GLB"
+
+
+def from_global(
+    passing: Iterable[dict[str, Any]], simulated: dict[str, set[tuple[str, int]]]
+) -> list[Promotion]:
+    """Passing (or submitted) Global Alphas at delay 1 that never ran as region-agnostic:
+    a Global signal already spans markets and currencies, so it is the likeliest to pass in
+    two regions as one. Strongest first; one per expression."""
+    best: dict[str, dict[str, Any]] = {}
+    for row in passing:
+        if str(row.get("region") or "") != GLB or int(row.get("delay") or 0) != 1:
+            continue
+        key = _canonical(str(row.get("expression") or ""))
+        if not key or ("ALL", 1) in simulated.get(key, set()):
+            continue
+        if key not in best or (row.get("sharpe") or 0.0) > (best[key].get("sharpe") or 0.0):
+            best[key] = row
+    out = [
+        Promotion(
+            expression=str(row.get("expression")),
+            delay=1,
+            regions={GLB: str(row.get("alpha_id"))},
+            sharpe=row.get("sharpe"),
+            neutralization=row.get("neutralization"),
+            decay=row.get("decay"),
+            truncation=row.get("truncation"),
+        )
+        for row in best.values()
+    ]
+    out.sort(key=lambda p: -(p.sharpe or 0.0))
+    return out
