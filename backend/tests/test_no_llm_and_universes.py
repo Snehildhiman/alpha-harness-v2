@@ -225,3 +225,16 @@ def test_models_for_other_jobs_are_not_writers() -> None:
     assert not writes("text-embedding-004")
     assert writes("gemini-3.5-flash")
     assert writes("llama-3.3-70b-versatile")
+
+
+def test_super_library_is_wide_and_distinct() -> None:
+    library = super_alpha.library(30)
+    combos = super_alpha.ALL_COMBOS
+    assert len(library) - len(super_alpha.selections(30)) >= 50
+    assert len(combos) - len(super_alpha.COMBOS) >= 50
+    for recipes in (library, combos):
+        assert len({r.name for r in recipes}) == len(recipes)
+        assert len({r.code for r in recipes}) == len(recipes)
+    # Every selection keeps the operator budget, and every combo reads the stats first.
+    assert all(r.code.startswith("(operator_count <= 266)") for r in library)
+    assert all(r.code == "1" or r.code.startswith("stats = generate_stats(alpha);") for r in combos)

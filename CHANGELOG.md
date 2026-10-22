@@ -3,6 +3,15 @@
 What v2 adds on top of [alpha-harness-improved](https://github.com/residual-lab/alpha-harness)
 (MIT, © MiracleInvoker). How to use each part: [GUIDE.md](GUIDE.md).
 
+## 2026-10-22 (afternoon)
+
+- **SuperAlpha library**: 67 selections (55 new: correlation caps, turnover bands, broad and
+  balanced books, simple expressions, by number of categories, blended scores) and 65 combos
+  (55 new: IR over 20 to 750 days, floored and squared IR, inverse volatility and variance,
+  mean return, crowding over other windows, uncrowded IR, momentum and positive-IR gates,
+  blends). Each list has *Defaults* and *All* buttons; hovering a chip shows its expression,
+  and a task over 300 SuperAlphas warns that it runs for days.
+
 ## 2026-10-22
 
 - **No more stuck clicks**: a screen opens at once on a click (its code is loaded in the

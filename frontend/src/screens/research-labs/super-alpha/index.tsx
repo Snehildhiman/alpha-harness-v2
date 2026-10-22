@@ -8,6 +8,7 @@ import { fmt } from '@/lib/format'
 import { REGION_AGNOSTIC, useScope, useScopeOptions } from '@/lib/scope'
 import { AddTaskButtons, useAddTask } from '@/screens/research-labs/add-task'
 import {
+  Button,
   Chips,
   Disclosure,
   ErrorNotice,
@@ -35,6 +36,8 @@ const ACTIVATIONS: { value: NonNullable<Activation>; label: string }[] = [
 /** BRAIN runs at most three SuperAlpha simulations per person at once. */
 const CORES = [1, 2, 3].map((n) => ({ value: n, label: String(n) }))
 const MIN_LIMIT = 10
+/** Past this a task of SuperAlphas, three at a time, runs for days. */
+const LARGE_TASK = 300
 const MAX_LIMIT = 200
 
 export function SuperAlphaLabScreen() {
@@ -177,28 +180,24 @@ export function SuperAlphaLabScreen() {
               />
               <Metric boxed label="Truncation" value={String(plan.data.truncation)} />
             </div>
-            <Fieldset
+            <RecipePicker
               legend="Selections"
-              hint="Which Alphas each SuperAlpha keeps. None ticked runs the five defaults."
-            >
-              <Chips
-                label="Selections"
-                items={plan.data.selections.map((r) => ({ value: r.name, label: r.name }))}
-                value={plan.data.selections.filter((r) => r.chosen).map((r) => r.name)}
-                onChange={setSelections}
-              />
-            </Fieldset>
-            <Fieldset
+              hint={`Which Alphas each SuperAlpha keeps: ${plan.data.selections.length} to choose from. None ticked runs the five defaults.`}
+              recipes={plan.data.selections}
+              onChange={setSelections}
+            />
+            <RecipePicker
               legend="Combos"
-              hint="How the kept Alphas are weighted each day. None ticked runs the four defaults."
-            >
-              <Chips
-                label="Combos"
-                items={plan.data.combos.map((r) => ({ value: r.name, label: r.name }))}
-                value={plan.data.combos.filter((r) => r.chosen).map((r) => r.name)}
-                onChange={setCombos}
+              hint={`How the kept Alphas are weighted each day: ${plan.data.combos.length} to choose from. None ticked runs the four defaults.`}
+              recipes={plan.data.combos}
+              onChange={setCombos}
+            />
+            {plan.data.simulations > LARGE_TASK && (
+              <Notice
+                tone="warn"
+                title={`${fmt.int(plan.data.simulations)} SuperAlphas: BRAIN runs three at a time, so this takes days. Tick a few selections and combos to start.`}
               />
-            </Fieldset>
+            )}
             <Fieldset
               legend="Decays"
               hint="More Decay lowers Turnover and often lifts Fitness; less keeps fast edges."
@@ -226,6 +225,42 @@ export function SuperAlphaLabScreen() {
         )}
       </Panel>
     </Page>
+  )
+}
+
+/** Tick recipes; quick buttons for the defaults, every one, or none. */
+function RecipePicker({
+  legend,
+  hint,
+  recipes,
+  onChange,
+}: {
+  legend: string
+  hint: string
+  recipes: Schemas['Recipe'][]
+  onChange: (names: string[]) => void
+}) {
+  return (
+    <Fieldset legend={legend} hint={hint}>
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" onClick={() => onChange([])}>
+            Defaults
+          </Button>
+          <Button size="sm" onClick={() => onChange(recipes.map((r) => r.name))}>
+            All {recipes.length}
+          </Button>
+        </div>
+        <div className="max-h-56 overflow-auto rounded-md border border-hairline p-2">
+          <Chips
+            label={legend}
+            items={recipes.map((r) => ({ value: r.name, label: r.name, title: r.code }))}
+            value={recipes.filter((r) => r.chosen).map((r) => r.name)}
+            onChange={onChange}
+          />
+        </div>
+      </div>
+    </Fieldset>
   )
 }
 

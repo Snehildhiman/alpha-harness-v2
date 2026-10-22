@@ -60,6 +60,10 @@ def library(limit: int) -> list[Recipe]:
     cap = OPERATOR_LIMIT // max(limit, MIN_SELECTION)
     budget = f"(operator_count <= {cap})"
     broad = "(long_count + short_count) / sqrt(universe_size(universe))"
+    return [*_core(budget, broad), *_more_selections(budget, broad)]
+
+
+def _core(budget: str, broad: str) -> list[Recipe]:
     return [
         Recipe(
             "Least correlated",
@@ -113,6 +117,125 @@ def library(limit: int) -> list[Recipe]:
     ]
 
 
+def _more_selections(budget: str, broad: str) -> list[Recipe]:
+    """Families beyond the core twelve, each a different way to keep the pool diverse.
+
+    Same properties only: correlations, turnover, book size, operator and category counts.
+    """
+    out: list[Recipe] = []
+    uncorrelated = "(1 - prod_correlation)"
+    unique = "(1 - self_correlation)"
+    # Hard correlation caps: only Alphas well clear of the crowd and of each other.
+    for prod in (0.3, 0.4, 0.5, 0.6):
+        for own in (0.5, 0.6, 0.7):
+            out.append(  # noqa: PERF401 - one family per loop reads plainer
+                Recipe(
+                    f"Prod < {prod:g}, self < {own:g}",
+                    f"{budget} * (prod_correlation < {prod:g}) * (self_correlation < {own:g})"
+                    f" * {uncorrelated}",
+                    default=False,
+                )
+            )
+    # Turnover bands, scored by prod or by self-correlation.
+    bands = ((0.02, 0.1), (0.05, 0.15), (0.1, 0.2), (0.15, 0.3), (0.2, 0.4))
+    for low, high in bands:
+        gate = f"(turnover >= {low:g}) * (turnover < {high:g})"
+        out.append(
+            Recipe(
+                f"Turnover {low:.0%}-{high:.0%}, low prod",
+                f"{budget} * {gate} * {uncorrelated}",
+                default=False,
+            )
+        )
+        out.append(
+            Recipe(
+                f"Turnover {low:.0%}-{high:.0%}, low self",
+                f"{budget} * {gate} * {unique}",
+                default=False,
+            )
+        )
+    # Broad books under a prod cap, and broad books that are also unique.
+    for prod in (0.4, 0.5, 0.6, 0.7):
+        out.append(  # noqa: PERF401 - one family per loop reads plainer
+            Recipe(
+                f"Broad books, prod < {prod:g}",
+                f"{budget} * (prod_correlation < {prod:g}) * {broad}",
+                default=False,
+            )
+        )
+    out.append(Recipe("Broad and unique", f"{budget} * {unique} * {broad}", default=False))
+    out.append(
+        Recipe(
+            "Broad, slow, uncrowded",
+            f"{budget} * (turnover < 0.2) * {uncorrelated} * {broad}",
+            default=False,
+        )
+    )
+    # Simple expressions: fewer operators overfit less.
+    for most in (5, 10, 20, 40):
+        out.append(  # noqa: PERF401 - one family per loop reads plainer
+            Recipe(
+                f"At most {most} operators",
+                f"{budget} * (operator_count <= {most}) * {uncorrelated}",
+                default=False,
+            )
+        )
+    out.append(
+        Recipe(
+            "Simplest unique",
+            f"{budget} * {unique} * {uncorrelated} / (1 + operator_count)",
+            default=False,
+        )
+    )
+    # By how many data categories an Alpha reads.
+    for name, gate in (
+        ("One category", "(datacategory_count == 1)"),
+        ("Two categories", "(datacategory_count == 2)"),
+        ("Three or more categories", "(datacategory_count >= 3)"),
+    ):
+        out.append(Recipe(f"{name}, unique", f"{budget} * {gate} * {unique}", default=False))
+        out.append(Recipe(f"{name}, broad", f"{budget} * {gate} * {broad}", default=False))
+    # Balanced books: as long as short, so the combination stays market-neutral.
+    gross = "(long_count + short_count + 1)"
+    tilt = f"((long_count - short_count) * (long_count - short_count)) / ({gross} * {gross})"
+    out.append(Recipe("Balanced books", f"{budget} * (1 - {tilt})", default=False))
+    out.append(
+        Recipe(
+            "Balanced and uncrowded",
+            f"{budget} * (1 - {tilt}) * {uncorrelated}",
+            default=False,
+        )
+    )
+    out.append(
+        Recipe(
+            "Balanced and broad",
+            f"{budget} * (1 - {tilt}) * {broad}",
+            default=False,
+        )
+    )
+    # Blended scores.
+    for name, code in (
+        ("Unique, uncrowded", f"{unique} * {uncorrelated}"),
+        ("Unique, uncrowded, slow", f"{unique} * {uncorrelated} / (turnover + 0.05)"),
+        ("Uncrowded squared", f"{uncorrelated} * {uncorrelated}"),
+        ("Unique squared", f"{unique} * {unique}"),
+        ("Uncrowded, many sources", f"{uncorrelated} * datacategory_count"),
+        ("Slow and simple", "(turnover < 0.25) / ((turnover + 0.05) * (1 + operator_count))"),
+        ("Uncrowded per operator", f"{uncorrelated} / sqrt(1 + operator_count)"),
+        ("Distance from crowd", "1 / (prod_correlation + 0.1)"),
+        ("Distance from own pool", "1 / (self_correlation + 0.1)"),
+        (
+            "Distance from both",
+            "1 / ((prod_correlation + 0.1) * (self_correlation + 0.1))",
+        ),
+        ("Tradeable, broad, unique", f"(turnover < 0.35) * {unique} * {broad}"),
+        ("Low turnover first", "1 / (turnover + 0.02)"),
+        ("Mid turnover first", "(turnover >= 0.05) * (turnover < 0.3) / (turnover + 0.1)"),
+    ):
+        out.append(Recipe(name, f"{budget} * {code}", default=False))
+    return out
+
+
 def pick(recipes: list[Recipe], names: list[str] | None) -> list[Recipe]:
     """Those named, in library order; the defaults when none is (or none named is known)."""
     if names:
@@ -131,7 +254,7 @@ _MAX_CORR = (
 )
 
 #: Weighting schemes from BRAIN's own combo examples and their risk-aware variants.
-ALL_COMBOS = [
+_CORE_COMBOS = [
     Recipe("Equal weight", "1"),
     Recipe("Rolling IR", _STATS + "max(ts_ir(stats.returns, 250), 0)"),
     Recipe("Least crowded", _STATS + _MAX_CORR + "max(1 - maxCorr, 0.05)"),
@@ -162,6 +285,97 @@ ALL_COMBOS = [
         default=False,
     ),
 ]
+
+
+def _more_combos() -> list[Recipe]:
+    """Weightings beyond the core ten, from the same pieces: rolling IR, volatility, mean
+    return and the highest correlation with the rest, over other windows and blends."""
+    r = "stats.returns"
+    eps = "0.0001"
+    out: list[Recipe] = []
+
+    def add(name: str, code: str, *, crowd: bool = False, corr: int = 500) -> None:
+        head = _STATS + (_max_corr(corr) if crowd else "")
+        out.append(Recipe(name, head + code, default=False))
+
+    for w in (20, 40, 60, 90, 180, 375, 750):
+        add(f"IR {w} days", f"max(ts_ir({r}, {w}), 0)")
+    for floor in (0.1, 0.5):
+        for w in (120, 250, 500):
+            add(f"Floored IR {w}, +{floor:g}", f"{floor:g} + max(ts_ir({r}, {w}), 0)")
+    for w in (20, 60, 250, 500):
+        add(f"Inverse volatility {w}", f"1 / (ts_std_dev({r}, {w}) + {eps})")
+    for w in (60, 120, 250):
+        add(
+            f"Inverse variance {w}",
+            f"1 / (ts_std_dev({r}, {w}) * ts_std_dev({r}, {w}) + {eps})",
+        )
+    for ir, vol in ((60, 60), (120, 120), (250, 250), (500, 250), (120, 60)):
+        add(
+            f"IR {ir} over volatility {vol}",
+            f"max(ts_ir({r}, {ir}), 0) / (ts_std_dev({r}, {vol}) + {eps})",
+        )
+    for w in (20, 60, 120, 250):
+        add(f"Mean return {w}", f"max(ts_mean({r}, {w}), 0)")
+    for corr, floor in ((250, 0.05), (1000, 0.05), (250, 0.2), (500, 0.2), (1000, 0.2)):
+        add(
+            f"Least crowded {corr}, floor {floor:g}",
+            f"max(1 - maxCorr, {floor:g})",
+            crowd=True,
+            corr=corr,
+        )
+    for ir, corr in ((120, 250), (500, 250), (120, 500), (500, 500)):
+        add(
+            f"Uncrowded IR {ir}, corr {corr}",
+            f"max(ts_ir({r}, {ir}), 0) * max(1 - maxCorr, 0.05)",
+            crowd=True,
+            corr=corr,
+        )
+    for vol in (60, 250):
+        add(
+            f"Uncrowded, inverse volatility {vol}",
+            f"max(1 - maxCorr, 0.05) / (ts_std_dev({r}, {vol}) + {eps})",
+            crowd=True,
+            corr=250,
+        )
+    for ir, vol in ((250, 120), (120, 60)):
+        add(
+            f"Uncrowded IR {ir} over volatility {vol}",
+            f"max(ts_ir({r}, {ir}), 0) * max(1 - maxCorr, 0.05) / (ts_std_dev({r}, {vol}) + {eps})",
+            crowd=True,
+        )
+    for w in (120, 250, 500):
+        add(f"IR {w} squared", f"max(ts_ir({r}, {w}), 0) * max(ts_ir({r}, {w}), 0)")
+    for a, b in ((120, 250), (60, 250), (250, 750)):
+        add(f"IR {a} plus IR {b}", f"max(ts_ir({r}, {a}), 0) + max(ts_ir({r}, {b}), 0)")
+    for w in (20, 60, 120):
+        add(f"Momentum gate {w}", f"if_else(ts_mean({r}, {w}) > 0, 1, 0.2)")
+    for vol in (60, 120):
+        add(
+            f"Positive IR, inverse volatility {vol}",
+            f"if_else(ts_ir({r}, 250) > 0, 1 / (ts_std_dev({r}, {vol}) + {eps}), 0)",
+        )
+    add(
+        "Positive IR, uncrowded",
+        f"if_else(ts_ir({r}, 250) > 0, max(1 - maxCorr, 0.05), 0)",
+        crowd=True,
+    )
+    add(
+        "Mean over volatility 120",
+        f"max(ts_mean({r}, 120), 0) / (ts_std_dev({r}, 120) + {eps})",
+    )
+    return out
+
+
+def _max_corr(window: int) -> str:
+    return (
+        f"innerCorr = self_corr(stats.returns, {window});\n"
+        "ic = if_else(innerCorr == 1.0, nan, innerCorr);\n"
+        "maxCorr = reduce_max(ic);\n"
+    )
+
+
+ALL_COMBOS = [*_CORE_COMBOS, *_more_combos()]
 #: The default set, as before.
 COMBOS = [r for r in ALL_COMBOS if r.default]
 
