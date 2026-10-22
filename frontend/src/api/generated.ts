@@ -1723,6 +1723,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/overview/stalls": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stalls
+         * @description The last times the app stopped answering for 2 s or more, newest first.
+         */
+        get: operations["stalls_api_overview_stalls_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/overview/templates": {
         parameters: {
             query?: never;
@@ -7158,6 +7178,15 @@ export interface components {
             /** Universe */
             universe: string | null;
         };
+        /** Stall */
+        Stall: {
+            /** At */
+            at: string;
+            /** Seconds */
+            seconds: number;
+            /** Where */
+            where: string[];
+        };
         /** StandingPoint */
         StandingPoint: {
             /** Alphas */
@@ -11002,6 +11031,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stalls_api_overview_stalls_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Stall"][];
                 };
             };
         };

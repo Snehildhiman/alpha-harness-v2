@@ -158,6 +158,8 @@ cd ..\frontend; pnpm check; pnpm build
 * **A lab finishes early or writes fewer alphas**: it skips shapes that failed 4+ times in the
   region and never passed, and requests BRAIN already refused; that is quota saved. Choose other
   datasets or templates for more.
+* **Screens are slow while tasks run**: open Health → Responsiveness. If it says Fix, send a
+  screenshot of it and of the black console window (lines starting `loop.stalled` say where).
 * **A click does nothing until refresh**: update (`update.bat`). Screens now open at once and
   slow reads give up after 45 s; if one still hangs, the window behind it shows which.
 * **The LLM lab writes nothing**: a translation, speech or image model is chosen (marked *not

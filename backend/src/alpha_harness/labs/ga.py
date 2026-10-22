@@ -30,6 +30,7 @@ import numpy as np
 import structlog
 from sqlalchemy import String, func, select, type_coerce
 
+from .. import workers
 from ..brain.schemas import (
     REGION_AGNOSTIC_REGION,
     TEST_PERIOD,
@@ -590,7 +591,7 @@ async def _parents(optimizer: Optimizer, ranked: list[Trial], limit: int) -> lis
     if missing and optimizer.backfill is not None:
         optimizer.backfill.schedule_returns(missing)
     series = {a: profile_of(regions, days) for a, regions in where.items()}
-    kept = set(await asyncio.to_thread(independent, ids, series, limit))
+    kept = set(await workers.in_labs(independent, ids, series, limit))
     return [t for t in ranked if t.alpha_id in kept]
 
 
@@ -646,7 +647,7 @@ async def breed(
 
     generation = 1 + (bred or 0) // population
     # Off the event loop: each key validates a trial's settings.
-    seen = await asyncio.to_thread(
+    seen = await workers.in_labs(
         lambda: {ga_key(e, json.loads(s or "null")) for e, s in identities}
     )
     rate = run.mutation_rate or MUTATION_RATE

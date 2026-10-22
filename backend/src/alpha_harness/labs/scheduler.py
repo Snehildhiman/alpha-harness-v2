@@ -8,11 +8,13 @@ only decides how one point of its search is drawn (its ``draw``).
 import asyncio
 import json
 import random
+import time
 from typing import TYPE_CHECKING, Any
 
 import structlog
 from sqlalchemy import String, func, not_, or_, select, type_coerce, update
 
+from .. import workers
 from ..brain.schemas import SimulationRequest, SimulationSettings, SimulationType
 from ..brain.settings_schema import validate_settings
 from ..db.models import SimStatus, SimulationRecord, Study, StudyStatus, Trial, TrialState, utcnow
@@ -207,8 +209,11 @@ def ask_points(
     overflow: list[tuple[Any, dict[str, Any], SimulationRequest]] = []
     per_family: dict[families.Family, int] = {}
     keys: set[tuple[str, str]] = set()
+    # A round plans for at most PLAN_SECONDS: the optimizer slows as a task's trials grow,
+    # and what is not planned now is planned on the task's next turn.
+    deadline = time.monotonic() + workers.PLAN_SECONDS
     for _ in range(want * 5):
-        if len(picked) >= want:
+        if len(picked) >= want or (picked and time.monotonic() > deadline):
             break
         trial = study.ask()
         params, request = lab.draw(trial, run, choices)
@@ -380,7 +385,7 @@ async def advance(optimizer: Optimizer, study_id: int) -> int:
                 ).where(Trial.study_id == study_id, Trial.state != TrialState.PRUNED)
             )
         ).all()
-    tried, seen = await asyncio.to_thread(_search_memory, counted, key)
+    tried, seen = await workers.in_labs(_search_memory, counted, key)
     limit = row.max_trials // 2
     cover: list[str] = []
     if len(tried) < limit:
@@ -396,7 +401,7 @@ async def advance(optimizer: Optimizer, study_id: int) -> int:
     asked = want * optimizer.screen_factor if screening else want
     catalog = getattr(getattr(optimizer, "alphas", None), "catalog", None)
     dead = await families.dead(catalog) if catalog is not None else frozenset()
-    picked = await asyncio.to_thread(ask_points, study, lab, run, asked, seen, cover, schema, dead)
+    picked = await workers.in_labs(ask_points, study, lab, run, asked, seen, cover, schema, dead)
     if screening and predictors is not None and len(picked) > want:
         picked = await _screened(optimizer, predictors, study, picked, want)
     if not picked:
@@ -461,7 +466,7 @@ async def _screened(
             else:
                 study.tell(trial, state=OptunaState.PRUNED)
 
-    await asyncio.to_thread(prune)
+    await workers.in_labs(prune)
     kept: list[tuple[Any, dict[str, Any], SimulationRequest]] = []
     for index in chosen.keep:
         trial, params, request = picked[index]
@@ -582,7 +587,7 @@ async def _breed(
                 .order_by(Trial.number)
             )
         ).all()
-    if await asyncio.to_thread(lambda: ga.stalled(_spent(spent_rows))):
+    if await workers.in_labs(lambda: ga.stalled(_spent(spent_rows))):
         if not waiting:
             await finish(optimizer, row.id, StudyStatus.COMPLETE, ga.STALLED)
         return 0

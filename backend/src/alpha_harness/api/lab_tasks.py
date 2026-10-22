@@ -492,9 +492,37 @@ async def _payload(state: Any, task_id: int) -> LabTask:
 async def list_tasks(state: State) -> LabTasks:
     """Every task, newest first, and the slots they share."""
     rows = await _rows(state)
-    progress = await _progress(state, [r.id for r in rows])
+    progress = await _progress_cached(state, rows)
     names = await _dataset_names(state, rows)
     return LabTasks(slots=state.engine.slots, tasks=[_task(r, progress[r.id], names) for r in rows])
+
+
+#: Counts of tasks that are not running, by ``(id, status, updated_at)``: their trials do not
+#: change, so a list of many large finished tasks is counted once rather than on every visit.
+_SETTLED: dict[int, tuple[tuple[Any, ...], dict[str, Any]]] = {}
+_MOVING = frozenset({StudyStatus.RUNNING, StudyStatus.QUEUED})
+
+
+async def _progress_cached(state: Any, rows: list[Study]) -> dict[int, dict[str, Any]]:
+    out: dict[int, dict[str, Any]] = {}
+    todo: list[int] = []
+    marks: dict[int, tuple[Any, ...]] = {}
+    for r in rows:
+        marks[r.id] = (r.status, r.updated_at)
+        hit = _SETTLED.get(r.id)
+        if r.status not in _MOVING and hit is not None and hit[0] == marks[r.id]:
+            out[r.id] = hit[1]
+        else:
+            todo.append(r.id)
+    if todo:
+        fresh = await _progress(state, todo)
+        out |= fresh
+        for r in rows:
+            if r.id in fresh and r.status not in _MOVING:
+                _SETTLED[r.id] = (marks[r.id], fresh[r.id])
+    for gone in set(_SETTLED) - set(marks):
+        _SETTLED.pop(gone, None)
+    return out
 
 
 async def _queue(state: Any, ids: list[int]) -> None:

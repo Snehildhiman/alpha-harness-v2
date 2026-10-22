@@ -25,7 +25,7 @@ from fastapi import APIRouter, Body, Query, Request
 from fastapi.responses import FileResponse
 from sqlalchemy import func, select
 
-from .. import backup
+from .. import backup, workers
 from ..db.models import (
     Preference,
     SimStatus,
@@ -38,6 +38,7 @@ from ..db.models import (
 )
 from ..engine.slots import errored_for_good
 from ..labs.params import TASK_SAMPLERS
+from ..recent import Recent
 from ..repair.rank import near_miss
 from ..schemas import Out
 from ..separation import Judged, Kind, Verdict
@@ -227,6 +228,23 @@ async def health(state: State) -> AppHealth:
         )
     )
 
+    worst = workers.watchdog.worst_last_minute()
+    last = workers.watchdog.stalls[-1] if workers.watchdog.stalls else None
+    items.append(
+        _item(
+            "responsive",
+            "Responsiveness",
+            "bad" if worst > 5 else ("warn" if worst > 1 else "ok"),
+            f"Slowest answer delay in the last minute: {worst:.1f} s",
+            detail=(
+                f"Last stall {last['seconds']} s at {last['at']}"
+                + (f" in {last['where'][0]}" if last["where"] else "")
+                if last
+                else None
+            ),
+        )
+    )
+
     folder = state.settings.data_dir
     usage = await asyncio.to_thread(shutil.disk_usage, folder)
     free_gb = usage.free / 1e9
@@ -251,6 +269,20 @@ async def health(state: State) -> AppHealth:
         )
     )
     return AppHealth(ok=all(i.ok for i in items), items=items)
+
+
+class Stall(Out):
+    at: str
+    seconds: float
+    #: The app's own code the loop was in, innermost first; empty when it was waiting on
+    #: worker threads rather than running code itself.
+    where: list[str]
+
+
+@router.get("/stalls")
+async def stalls() -> list[Stall]:
+    """The last times the app stopped answering for 2 s or more, newest first."""
+    return [Stall.model_validate(s) for s in reversed(workers.watchdog.stalls)]
 
 
 # -- since yesterday --------------------------------------------------------------------------
@@ -661,24 +693,44 @@ def _template_of(
     return TASK_SAMPLERS.get(sampler, sampler), (name or label or first)[:160]
 
 
+#: The leaderboard moves only as results arrive: read at most every ten minutes, and the
+#: last answer shown at once meanwhile.
+_boards = Recent(ttl=600)
+
+
 @router.get("/templates")
 async def templates(state: State) -> list[TemplateScore]:
     """Each template, shape or recipe by how often its Alphas pass, best first."""
+    return await _boards.get("templates", lambda: _templates(state))
+
+
+async def _templates(state: State) -> list[TemplateScore]:
+    shape = func.json_extract(Trial.params, "$.shape")
+    recipe = func.json_extract(Trial.params, "$.recipe")
+    family = func.json_extract(Trial.params, "$.family")
     async with state.db.session() as db:
         rows = (
             await db.execute(
-                select(
-                    Study.sampler,
-                    Study.template_name,
-                    Study.label,
-                    Study.template_source,
-                    Trial.params,
-                    Trial.alpha_id,
-                )
-                .join(Study, Study.id == Trial.study_id)
+                # Only the three names, never whole rows: a long task holds 100,000 trials.
+                select(Trial.study_id, shape, recipe, family, Trial.alpha_id)
                 .where(Trial.state == TrialState.COMPLETE, Trial.alpha_id.is_not(None))
+                .distinct()
             )
         ).all()
+        studies = {
+            sid: (sampler, name, label, source)
+            for sid, sampler, name, label, source in (
+                await db.execute(
+                    select(
+                        Study.id,
+                        Study.sampler,
+                        Study.template_name,
+                        Study.label,
+                        func.substr(Study.template_source, 1, 400),
+                    )
+                )
+            ).all()
+        }
     vault = await judge_vault(state)
 
     def score() -> list[TemplateScore]:
@@ -692,7 +744,9 @@ async def templates(state: State) -> list[TemplateScore]:
                 sharpe[key] = figure(item, "sharpe")
         tally: dict[tuple[str, str], list[Any]] = {}
         seen: set[tuple[tuple[str, str], str]] = set()
-        for sampler, name, label, source, params, alpha_id in rows:
+        for study_id, shape_of, recipe_of, family_of, alpha_id in rows:
+            sampler, name, label, source = studies.get(study_id, ("", None, None, ""))
+            params = {"shape": shape_of, "recipe": recipe_of, "family": family_of}
             key = _template_of(str(sampler), name, label, str(source or ""), params)
             if (key, alpha_id) in seen or alpha_id not in verdict:
                 continue

@@ -7,6 +7,8 @@ dependency, so nothing constructs its own connections and shutdown is determinis
 
 import asyncio
 import contextlib
+import os
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
@@ -14,7 +16,7 @@ from datetime import timedelta
 import structlog
 from sqlalchemy import select
 
-from . import backup, preferences, updates
+from . import backup, preferences, updates, workers
 from .account import AuthService, PlatformMetadata
 from .autopilot import Autopilot
 from .brain.client import BrainClient
@@ -55,8 +57,12 @@ from .vault.store import AlphaVault
 
 log = structlog.get_logger(__name__)
 
-#: Worker threads for catalog reads, predictions and judging.
-WORKERS = 32
+#: Worker threads for catalog reads, predictions and judging: the usual size. More only
+#: crowds out the thread that answers the screens (see :mod:`.workers`).
+WORKERS = min(32, (os.cpu_count() or 4) + 4)
+#: How often a busy thread hands over to the next: shorter gives the screens their turn
+#: sooner while workers run.
+SWITCH_SECONDS = 0.002
 
 #: How far back startup looks for finished Alphas the vault missed. Older ones reach it
 #: through Sync from BRAIN.
@@ -171,6 +177,8 @@ class AppState:
         asyncio.get_running_loop().set_default_executor(
             ThreadPoolExecutor(max_workers=WORKERS, thread_name_prefix="harness")
         )
+        sys.setswitchinterval(SWITCH_SECONDS)
+        workers.watchdog.start()
         # The catalog's single-writer lock is this process's claim on the data directory, so it
         # comes first: a second backend must fail here, before it backs up or migrates.
         await self.catalog.open()
@@ -323,6 +331,7 @@ class AppState:
                 return False
 
     async def shutdown(self) -> None:
+        await workers.watchdog.stop()
         watch = getattr(self, "_session_watch", None)
         if watch is not None:
             watch.cancel()

@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, Any
 import structlog
 from sqlalchemy import func, select
 
+from .. import workers
 from ..brain.schemas import FULL_MODE, QUICK_MODE
 from ..db.models import (
     SimStatus,
@@ -362,7 +363,7 @@ class Optimizer:
             # asked over; the column is deferred, so it is read for those alone.
             replayed = [t.id for asked, t, _, _ in finished if asked is None]
             asked_over = await self._distributions(replayed) if replayed else {}
-            await asyncio.to_thread(_tell_many, study, finished, asked_over)
+            await workers.in_labs(_tell_many, study, finished, asked_over)
 
         # A Quick Alpha that passed every check BRAIN ran is owed a run in Full mode, which is
         # what BRAIN submits. Parked here; the scheduler sends it ahead of the search.
@@ -464,7 +465,7 @@ class Optimizer:
             group=True,
             constant_liar=row.batch_size > 1,
         )
-        study = await asyncio.to_thread(_rebuild, sampler, history)
+        study = await workers.in_labs(_rebuild, sampler, history)
         self.studies[study_id] = study
         return study
 

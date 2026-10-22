@@ -3,6 +3,21 @@
 What v2 adds on top of [alpha-harness-improved](https://github.com/residual-lab/alpha-harness)
 (MIT, © MiracleInvoker). How to use each part: [GUIDE.md](GUIDE.md).
 
+## 2026-10-23
+
+- **Tasks and the other screens no longer wait for minutes while tasks run.** Each running
+  Search or Template task asked its optimizer for up to 20 candidates per alpha it sent, and
+  each ask grows slower with the task's trials (about 0.1 s at 3,000 trials). Several tasks
+  did this at once on their own threads, which starved the thread that answers the screens.
+  Now the labs plan on one shared thread, each round for at most 2 seconds (the rest on its
+  next turn), the worker pool is back to its usual size, and the screens get their turn sooner.
+- **Tasks list**: counts of tasks that are not running are kept, so only running tasks are
+  counted on each visit (0.3 s for 250,000 trials).
+- **Which templates pay**: reads only the names it needs, and answers from its last reading at
+  once while a fresh one is made (every 10 minutes).
+- **Responsiveness** on Health: the slowest delay of the last minute, and any stall of 2 s or
+  more with where in the app it happened (also in the console as `loop.stalled`).
+
 ## 2026-10-22 (night)
 
 - **Restore** (Health and Backup → a backup → Restore): every alpha, PnL day and crowd snapshot
