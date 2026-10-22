@@ -9,6 +9,8 @@ import { Link } from '@tanstack/react-router'
 import { useEffect } from 'react'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import type { components } from '@/api/generated'
+import { http } from '@/api/http'
 import { fmt } from '@/lib/format'
 import { useCores } from '@/lib/preferences'
 import { REGION_AGNOSTIC, useScopeOptions } from '@/lib/scope'
@@ -36,6 +38,7 @@ import {
   SimulationsSetting,
 } from '@/screens/research-labs/task-settings'
 import {
+  Badge,
   Button,
   Chips,
   Disclosure,
@@ -80,6 +83,8 @@ interface RegionAgnosticDraft {
   writer?: 'llm' | 'shapes'
   /** When an expression earns a real region-agnostic simulation. */
   promote?: 'near' | 'strict' | 'off'
+  /** Built-in shapes ticked; empty uses every one. */
+  shapes?: string[]
 }
 
 const useDraft = create<RegionAgnosticDraft>()(
@@ -174,6 +179,7 @@ export function RegionAgnosticLabScreen() {
     research_ids: shapes ? [] : researchIds,
     writer,
     promote: draft.promote ?? 'near',
+    shapes: shapes ? (draft.shapes ?? []) : [],
   }
   const { preview, current } = useLabPreview('region-agnostic-lab', body, regionAgnosticLab.preview)
   const plan = preview.data
@@ -223,6 +229,9 @@ export function RegionAgnosticLabScreen() {
           </p>
         </div>
       </Panel>
+      {shapes && (
+        <ShapePicker chosen={draft.shapes ?? []} onChange={(next) => set({ shapes: next })} />
+      )}
       {options.isError && <ErrorNotice error={options.error} title="Could not load the options" />}
       {options.isSuccess && !shapes && models.length === 0 && (
         <Notice
@@ -522,7 +531,12 @@ function PickChips({
   chosen,
   onDatasets,
 }: {
-  list: { datasetId: string; name?: string | null; crowding?: number | null }[]
+  list: {
+    datasetId: string
+    name?: string | null
+    crowding?: number | null
+    regions?: number | null
+  }[]
   chosen: string[]
   onDatasets: (ids: string[]) => void
 }) {
@@ -542,12 +556,103 @@ function PickChips({
         label="Datasets"
         items={list.map((d) => ({
           value: d.datasetId,
-          label: `${d.datasetId}${d.crowding != null ? ` · ${fmt.int(d.crowding)}/field` : ''}`,
+          label: `${d.datasetId}${d.regions ? ` · ${d.regions} regions` : ''}${d.crowding != null ? ` · ${fmt.int(d.crowding)}/field` : ''}`,
           title: d.name ?? d.datasetId,
         }))}
         value={chosen.filter((id) => ids.includes(id))}
         onChange={(next) => onDatasets([...outside, ...next])}
       />
     </div>
+  )
+}
+
+/** The built-in shapes to write with: tick any number; none ticked uses every one. */
+function ShapePicker({
+  chosen,
+  onChange,
+}: {
+  chosen: string[]
+  onChange: (names: string[]) => void
+}) {
+  const list = useQuery({
+    queryKey: ['region-agnostic-lab', 'shapes'],
+    queryFn: regionAgnosticLab.shapes,
+  })
+  // How each shape has done for you, from Research Labs → Which templates pay.
+  const board = useQuery({
+    queryKey: ['overview', 'templates'],
+    queryFn: () => http.get<components['schemas']['TemplateScore'][]>('/api/overview/templates'),
+    staleTime: 5 * 60_000,
+  })
+  const rate = new Map(
+    (board.data ?? [])
+      .filter((t) => t.lab === 'Region Agnostic shapes')
+      .map((t) => [t.name, t] as const),
+  )
+  const shapes = list.data ?? []
+  const suggested = shapes.filter((s) => s.suggested).map((s) => s.name)
+  const toggle = (name: string) =>
+    onChange(chosen.includes(name) ? chosen.filter((n) => n !== name) : [...chosen, name])
+  return (
+    <Panel
+      title="Templates"
+      description={
+        chosen.length === 0
+          ? 'None ticked: every template is used, the suggested and unusual ones more often. Tick the ones you want to run.'
+          : `${chosen.length} ticked: only these are written. x and y are your fields, d and D lookbacks, group an industry grouping.`
+      }
+      actions={
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="primary" onClick={() => onChange(suggested)}>
+            Suggested for 2+ regions ({suggested.length})
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => onChange(shapes.filter((s) => s.unusual).map((s) => s.name))}
+          >
+            Low crowd only
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => onChange([])}>
+            Clear
+          </Button>
+        </div>
+      }
+    >
+      {list.isError && <ErrorNotice error={list.error} title="Could not read the templates" />}
+      <ul className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+        {shapes.map((s) => {
+          const score = rate.get(s.name)
+          const on = chosen.includes(s.name)
+          return (
+            <li key={s.name}>
+              <label
+                className={`flex cursor-pointer flex-col gap-1 rounded-md border px-3 py-2 transition-colors ${on ? 'border-primary bg-surface-2' : 'border-hairline hover:border-hairline-strong'}`}
+              >
+                <span className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={on}
+                    onChange={() => toggle(s.name)}
+                    className="size-4 accent-current"
+                  />
+                  <span className="text-body text-ink">{s.title}</span>
+                  {s.suggested && <Badge tone="profit">2+ regions</Badge>}
+                  {s.unusual && <Badge tone="outline">Low crowd</Badge>}
+                  {score && (
+                    <span className="num ml-auto text-caption text-ink-subtle">
+                      {fmt.pct(score.passRate, 0)} pass · {fmt.int(score.simulated)} run
+                    </span>
+                  )}
+                </span>
+                <span className="text-body-compact text-ink-muted">{s.about}</span>
+                <code className="num truncate text-caption text-ink-subtle" title={s.text}>
+                  {s.text}
+                </code>
+              </label>
+            </li>
+          )
+        })}
+      </ul>
+    </Panel>
   )
 }

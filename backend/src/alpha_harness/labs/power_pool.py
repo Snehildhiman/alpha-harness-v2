@@ -987,6 +987,7 @@ async def _write(optimizer: Optimizer, study_id: int) -> None:
                 count=SHAPES_PER_CALL,
                 offset=offset,
                 scores=await shape_scores(optimizer, study_id),
+                chosen=frozenset(ra.shapes) if ra is not None and ra.shapes else None,
             )
             answered = True
             entry: dict[str, Any] = {

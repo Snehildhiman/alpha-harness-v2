@@ -145,6 +145,8 @@ class RegionAgnosticParams(PowerPoolParams):
     #: regions pass every check but correlation, or one passes and another is within 7%.
     #: ``strict``: only when two pass. ``off``: never; Repair's promotions remain.
     promote: str = "near"
+    #: Built-in shapes ticked in the lab; empty uses them all.
+    shapes: list[str] = Field(default_factory=list)
 
 
 class SettingsParams(TaskParams):

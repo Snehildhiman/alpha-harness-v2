@@ -150,3 +150,15 @@ def test_single_region_fields_are_not_written_alone() -> None:
     one = replace(ctx, held=held)
     written, _ = ra_shapes.write(one, NAMES, random.Random(2), count=40, offset=0)
     assert all("eps" not in w["expression"] for w in written)
+
+
+def test_only_ticked_templates_are_written() -> None:
+    ctx = _ctx()
+    written, _ = ra_shapes.write(
+        ctx, NAMES, random.Random(4), count=40, offset=0, chosen=frozenset({"trend"})
+    )
+    assert written
+    assert {w["shape"] for w in written} == {"trend"}
+    listed = {s["name"] for s in ra_shapes.listing()}
+    assert {s.name for s in ra_shapes.SHAPES} <= listed
+    assert listed >= ra_shapes.SUGGESTED

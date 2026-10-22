@@ -64,6 +64,8 @@ class RegionAgnosticRequest(BaseModel):
     #: When an expression earns a real region-agnostic simulation
     #: (:func:`..labs.power_pool.promotable`).
     promote: Literal["near", "strict", "off"] = "near"
+    #: Built-in shapes to write with; empty uses every one.
+    shapes: list[str] = Field(default_factory=list, max_length=100)
 
 
 class RegionChoice(Out):
@@ -238,6 +240,7 @@ async def _plan(body: RegionAgnosticRequest, state: Any) -> dict[str, Any]:
         research_ids=body.research_ids,
         writer=body.writer,
         promote=body.promote,
+        shapes=[n for n in body.shapes if n in ra_shapes.ABOUT],
     )
     sample: list[str] = []
     fields = 0
@@ -275,6 +278,7 @@ async def _plan(body: RegionAgnosticRequest, state: Any) -> dict[str, Any]:
                     random.Random(7),
                     count=8,
                     offset=0,
+                    chosen=frozenset(body.shapes) if body.shapes else None,
                 )
                 sample = [w["expression"] for w in written]
                 if not written:
@@ -354,6 +358,24 @@ ARC_PICKS: tuple[str, ...] = (
 )
 
 
+class ShapeInfo(Out):
+    name: str
+    title: str
+    about: str
+    #: The shape with x and y for fields, d and D for lookbacks, group for a grouping field.
+    text: str
+    #: Unit-free and history-based: suggested for passing in two or more regions.
+    suggested: bool
+    #: Written rarely by others, so lower prod correlation.
+    unusual: bool
+
+
+@router.get("/shapes")
+async def shapes() -> list[ShapeInfo]:
+    """The built-in shapes to choose from, suggested ones first."""
+    return [ShapeInfo.model_validate(r) for r in ra_shapes.listing()]
+
+
 class PickedDataset(Out):
     dataset_id: str
     name: str | None
@@ -363,6 +385,8 @@ class PickedDataset(Out):
     alphas: int | None
     #: Alphas per field: the crowd's weight on each of its fields.
     crowding: float | None
+    #: Regional markets (of USA, EUR, ASI, GLB) that have it: two is enough.
+    regions: int | None = None
 
 
 class DatasetPicks(Out):
@@ -412,6 +436,7 @@ async def picks(state: State) -> DatasetPicks:
             fields=fields,
             alphas=alphas,
             crowding=(alphas / fields) if fields and alphas is not None else None,
+            regions=r.get("regions"),
         )
 
     by_id = {str(r["dataset_id"]): r for r in rows}
@@ -427,7 +452,7 @@ async def picks(state: State) -> DatasetPicks:
     return DatasetPicks(
         community=[item(by_id[d]) for d in ARC_PICKS if d in by_id],
         missing=[d for d in ARC_PICKS if d not in by_id],
-        least_crowded=[item(r) for r in roomy[:20]],
+        least_crowded=[item(r) for r in roomy[:40]],
     )
 
 

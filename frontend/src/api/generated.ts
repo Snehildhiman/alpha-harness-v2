@@ -2046,6 +2046,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/region-agnostic-lab/shapes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Shapes
+         * @description The built-in shapes to choose from, suggested ones first.
+         */
+        get: operations["shapes_api_region_agnostic_lab_shapes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/region-agnostic-lab/tasks": {
         parameters: {
             query?: never;
@@ -5825,6 +5845,8 @@ export interface components {
             fields: number | null;
             /** Name */
             name: string | null;
+            /** Regions */
+            regions?: number | null;
         };
         /** PlanRequest */
         PlanRequest: {
@@ -6635,6 +6657,8 @@ export interface components {
             regions?: string[];
             /** Research Ids */
             research_ids?: number[];
+            /** Shapes */
+            shapes?: string[];
             /**
              * Simulations
              * @default 0
@@ -7098,6 +7122,21 @@ export interface components {
             totals: components["schemas"]["PlanTotals"];
             /** Warnings */
             warnings: string[];
+        };
+        /** ShapeInfo */
+        ShapeInfo: {
+            /** About */
+            about: string;
+            /** Name */
+            name: string;
+            /** Suggested */
+            suggested: boolean;
+            /** Text */
+            text: string;
+            /** Title */
+            title: string;
+            /** Unusual */
+            unusual: boolean;
         };
         /**
          * SimStatus
@@ -11581,6 +11620,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    shapes_api_region_agnostic_lab_shapes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShapeInfo"][];
                 };
             };
         };

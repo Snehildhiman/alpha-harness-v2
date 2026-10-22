@@ -3,6 +3,16 @@
 What v2 adds on top of [alpha-harness-improved](https://github.com/residual-lab/alpha-harness)
 (MIT, © MiracleInvoker). How to use each part: [GUIDE.md](GUIDE.md).
 
+## 2026-10-23 (choose templates)
+
+- **Templates in the Region Agnostic Lab**: with the built-in writer, every template is listed
+  with its name, idea and expression, marked *2+ regions* (unit-free, history- or ratio-based:
+  suggested for passing in two regions) and *Low crowd* (rarely written, for prod correlation
+  under 0.7), with its pass rate once it has results. Tick any number; *Suggested for 2+
+  regions*, *Low crowd only* and *Clear* set the ticks; none ticked uses them all.
+- **Datasets**: each shows how many of USA, EUR, ASI and GLB have it (two is enough); the least
+  crowded list holds 40.
+
 ## 2026-10-23 (low prod correlation)
 
 - **Crowded candidates are not sent**: once the models have learned prod correlation, the

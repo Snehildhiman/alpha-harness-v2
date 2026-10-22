@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from . import currency, search
 
@@ -106,6 +106,123 @@ UNIQUE = frozenset(
     }
 )
 UNIQUE_WEIGHT = 2.0
+
+#: Each shape as the Region Agnostic Lab lists it: a name and the idea behind it.
+ABOUT: dict[str, tuple[str, str]] = {
+    "rank": ("Plain rank", "The field itself, ranked. The most common shape, so the most crowded."),
+    "ts_rank": ("Against its own past", "Where the field stands in its own history."),
+    "zscore_change": ("Size of the change", "How far the field moved, scored across stocks."),
+    "vol_scaled_change": (
+        "Change in its own swings",
+        "A recent change divided by the field's usual variation: a surprise.",
+    ),
+    "steady": ("High and steady", "Average over variation: high and stable beats high and noisy."),
+    "reversion": ("Back to normal", "Leans against a field far from its own average."),
+    "trend": ("Rising against its past", "The field's z-score in its own history."),
+    "av_diff": ("Fade the move", "Leans against the field's distance from its recent mean."),
+    "decayed": ("Smoothed level", "A smoothed field: trades less, so crowds less."),
+    "rank_change": ("Climbing the ranking", "How far a stock rose among all stocks on the field."),
+    "ratio_momentum": ("Fast over slow", "A short average over a long one."),
+    "peer_trend": ("Rising against peers", "Own-history score, ranked within industry."),
+    "peer_neutral": ("Peer-neutral history", "Own-history rank, with the industry's taken out."),
+    "peer_zscore": ("Change against peers", "A change scored within industry."),
+    "spread": ("One field over another", "Two fields' ranks against each other."),
+    "spread_trend": (
+        "Two histories apart",
+        "How far one field's own-history score runs ahead of another's.",
+    ),
+    "price_divergence": ("Against the price", "The field moving against the stock's price."),
+    "volume_divergence": ("Against the volume", "The field moving against trading activity."),
+    "quantile_change": ("Distribution shift", "Its recent distribution against its longer one."),
+    "short_reversal": ("Short reversal", "Leans against the last week's change."),
+    "slow_level": ("Slow level", "A year's average, ranked."),
+    "year_change": ("Year over year", "The change on a year ago, in its yearly swings."),
+    "revision_trend": (
+        "Revision momentum",
+        "A month's change over half a year's swings, within industry: estimates keep moving.",
+    ),
+    "amount_ratio": ("Amount over amount", "One amount over another: the currency cancels."),
+    "amount_ratio_trend": ("Ratio against its past", "The ratio of two amounts in its history."),
+    "cross_comovement": (
+        "Two datasets moving together",
+        "How closely two fields from different datasets move: rarely written.",
+    ),
+    "residual_of_partner": (
+        "What the other does not explain",
+        "One field with a second field's effect regressed out.",
+    ),
+    "recency_of_change": (
+        "Freshly changed",
+        "Favours stocks whose figure changed most recently: new information.",
+    ),
+    "change_steadiness": ("Steady changes", "Changes that are steady rather than jumpy."),
+    "busy_days_signal": (
+        "Only on busy days",
+        "The signal only while volume runs above its usual level.",
+    ),
+    "volatility_regime": (
+        "Flips in rough markets",
+        "Follows the signal in calm markets and fades it when volatility rises.",
+    ),
+    "field_skew": ("Lopsided history", "The skew of the field over time."),
+    "versus_returns": ("Against returns", "The field moving against the stock's returns."),
+    "extremes_emphasised": ("Extremes count more", "Its z-score squared, sign kept."),
+    "extremes_only": ("Extremes only", "Trades only when the field is far from its normal."),
+    "disagreement": (
+        "Analysts disagreeing",
+        "For vector data: the spread of the values over their mean.",
+    ),
+}
+#: Suggested for region-agnostic Alphas: unit-free (they compare across currencies and
+#: markets), and built on a stock's own history or a ratio, so they tend to hold in two
+#: or more regions.
+SUGGESTED = frozenset(
+    {
+        "ts_rank",
+        "vol_scaled_change",
+        "steady",
+        "trend",
+        "reversion",
+        "peer_trend",
+        "peer_neutral",
+        "year_change",
+        "revision_trend",
+        "amount_ratio",
+        "amount_ratio_trend",
+        "spread_trend",
+        "cross_comovement",
+        "residual_of_partner",
+        "recency_of_change",
+        "busy_days_signal",
+        "volatility_regime",
+        "extremes_only",
+        "disagreement",
+    }
+)
+
+
+def listing() -> list[dict[str, Any]]:
+    """Every shape for the lab's picker: suggested first, then the rest."""
+    texts = {shape.name: shape.text for shape in SHAPES}
+    texts["disagreement"] = "rank(-vec_stddev(x) / abs(vec_avg(x)))"
+    out = [
+        {
+            "name": name,
+            "title": ABOUT.get(name, (name, ""))[0],
+            "about": ABOUT.get(name, (name, ""))[1],
+            "text": text.replace("{b}", "x")
+            .replace("{c}", "y")
+            .replace("{d}", "d")
+            .replace("{e}", "D")
+            .replace("{g}", "group"),
+            "suggested": name in SUGGESTED,
+            "unusual": name in UNIQUE,
+        }
+        for name, text in texts.items()
+    ]
+    out.sort(key=lambda r: (not r["suggested"], not r["unusual"], str(r["title"])))
+    return out
+
 
 #: The hypotheses that suit each kind of data, by words in its dataset's id: analyst figures
 #: drift after revisions, scores built by models are signals already, fundamentals move slowly,
@@ -196,12 +313,16 @@ def write(
     count: int,
     offset: int,
     scores: dict[str, float] | None = None,
+    chosen: frozenset[str] | None = None,
 ) -> tuple[list[dict[str, str]], int]:
     """Up to ``count`` new expressions, and how many fields this call worked through.
 
     Every expression names its shape, so the task can learn which shapes pay.
     """
     shapes = usable(operators, ctx.names)
+    if chosen:
+        # Only the shapes ticked in the lab.
+        shapes = tuple(sh for sh in shapes if sh.name in chosen)
     # Most regions first (two passing are what BRAIN needs), then the least crowded: a field
     # few Alphas use is where prod correlation stays low.
     # A field only one chosen region has can never run in two: an Alpha on it is wasted.
@@ -211,7 +332,8 @@ def write(
     )
     fields = [f.id for f in ordered]
     dataset_of = {f.id: f.dataset for f in ordered}
-    if not shapes or not fields:
+    disagreeing = not chosen or "disagreement" in chosen
+    if not fields or (not shapes and not disagreeing):
         return [], 0
     vector = [v for v in VECTOR_OPS if v in operators]
     weights = [
@@ -234,7 +356,8 @@ def write(
         if (
             ctx.types.get(field) == "VECTOR"
             and {"vec_stddev", "vec_avg"} <= operators
-            and rng.random() < 0.3
+            and disagreeing
+            and (not shapes or rng.random() < (0.3 if not chosen else 0.6))
         ):
             # Analysts or models disagreeing: the spread of a vector's values over its mean.
             text = (
@@ -244,6 +367,8 @@ def write(
             if text not in written:
                 written.add(text)
                 out.append({"expression": text, "shape": "disagreement"})
+        if not shapes:
+            continue
         likes = favoured(dataset_of.get(field) or "")
         mine = [
             w * (FAVOUR if s.name in likes else 1.0) for s, w in zip(shapes, weights, strict=True)
