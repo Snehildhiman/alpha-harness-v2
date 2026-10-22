@@ -47,6 +47,8 @@ export interface TemplateLabRequest {
   template: string
   variables: Record<string, VariableDef>
   universes: string[]
+  /** Each Alpha's universe drawn at random among those ticked that hold its fields. */
+  random_universe?: boolean
   neutralizations: string[]
   investability: Investability[]
   decay: number

@@ -8,6 +8,7 @@ import { fmt } from '@/lib/format'
 import { REGION_AGNOSTIC, useScope, useScopeOptions } from '@/lib/scope'
 import { AddTaskButtons, useAddTask } from '@/screens/research-labs/add-task'
 import {
+  Chips,
   Disclosure,
   ErrorNotice,
   Field,
@@ -43,6 +44,10 @@ export function SuperAlphaLabScreen() {
   const [limit, setLimit] = useState(30)
   const [activation, setActivation] = useState<NonNullable<Activation>>('BOTH')
   const [cores, setCores] = useState(3)
+  // Empty: the default set, which the plan marks as chosen.
+  const [selections, setSelections] = useState<string[]>([])
+  const [combos, setCombos] = useState<string[]>([])
+  const [decays, setDecays] = useState<number[]>([])
 
   // BRAIN's own list for the market; Subindustry first where it has one, as most Alphas use it.
   const neutralization = options.neutralizations.some((n) => n.value === picked)
@@ -60,10 +65,21 @@ export function SuperAlphaLabScreen() {
     selectionLimit: limit,
     activation,
     cores,
+    selections,
+    combos,
+    decays,
   }
 
   const plan = useQuery({
-    queryKey: ['super-lab', 'plan', limitValid ? limit : MIN_LIMIT, activation],
+    queryKey: [
+      'super-lab',
+      'plan',
+      limitValid ? limit : MIN_LIMIT,
+      activation,
+      selections,
+      combos,
+      decays,
+    ],
     queryFn: () =>
       http.post<Schemas['SuperPlan']>('/api/super-lab/plan', {
         ...body,
@@ -147,7 +163,7 @@ export function SuperAlphaLabScreen() {
 
       <Panel
         title="What Runs"
-        description="Every selection with every combo, at two Decays to land Turnover between 2% and 40%. Each runs in Full mode, so BRAIN's own checks say which are submittable: those show green in Tasks and reach the Submission Planner."
+        description="Every chosen selection with every chosen combo, at each chosen Decay (two by default, to land Turnover between 2% and 40%). Each runs in Full mode, so BRAIN's own checks say which are submittable: those show green in Tasks and reach the Submission Planner. SuperAlphas are slow: BRAIN runs three at a time."
       >
         {plan.isError && <ErrorNotice error={plan.error} title="Could not plan the task" />}
         {plan.data && (
@@ -161,11 +177,46 @@ export function SuperAlphaLabScreen() {
               />
               <Metric boxed label="Truncation" value={String(plan.data.truncation)} />
             </div>
-            <Disclosure summary={`Selections (${plan.data.selections.length})`}>
-              <Recipes recipes={plan.data.selections} />
-            </Disclosure>
-            <Disclosure summary={`Combos (${plan.data.combos.length})`}>
-              <Recipes recipes={plan.data.combos} />
+            <Fieldset
+              legend="Selections"
+              hint="Which Alphas each SuperAlpha keeps. None ticked runs the five defaults."
+            >
+              <Chips
+                label="Selections"
+                items={plan.data.selections.map((r) => ({ value: r.name, label: r.name }))}
+                value={plan.data.selections.filter((r) => r.chosen).map((r) => r.name)}
+                onChange={setSelections}
+              />
+            </Fieldset>
+            <Fieldset
+              legend="Combos"
+              hint="How the kept Alphas are weighted each day. None ticked runs the four defaults."
+            >
+              <Chips
+                label="Combos"
+                items={plan.data.combos.map((r) => ({ value: r.name, label: r.name }))}
+                value={plan.data.combos.filter((r) => r.chosen).map((r) => r.name)}
+                onChange={setCombos}
+              />
+            </Fieldset>
+            <Fieldset
+              legend="Decays"
+              hint="More Decay lowers Turnover and often lifts Fitness; less keeps fast edges."
+            >
+              <Chips
+                label="Decays"
+                items={plan.data.decayChoices.map((d) => ({ value: String(d), label: String(d) }))}
+                value={plan.data.decays.map(String)}
+                onChange={(next) => setDecays(next.map(Number))}
+              />
+            </Fieldset>
+            <Disclosure
+              summary={`Expressions · ${plan.data.selections.filter((r) => r.chosen).length} selections, ${plan.data.combos.filter((r) => r.chosen).length} combos`}
+            >
+              <div className="flex flex-col gap-4">
+                <Recipes recipes={plan.data.selections.filter((r) => r.chosen)} />
+                <Recipes recipes={plan.data.combos.filter((r) => r.chosen)} />
+              </div>
             </Disclosure>
             <Notice
               tone="info"

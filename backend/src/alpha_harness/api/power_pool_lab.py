@@ -3,6 +3,7 @@
 Nothing here calls the LLM or simulates; the preview shows the exact first prompt.
 """
 
+import re
 from typing import Any
 
 from fastapi import APIRouter
@@ -63,6 +64,21 @@ class PowerPoolModel(Out):
     ref: str
     provider: str
     remaining_today: int
+    #: ``False`` for models built for something else (translation, speech, images,
+    #: embeddings, live audio): they are offered last and never chosen by default.
+    writes: bool = True
+
+
+#: Model ids that are not for writing text: they answer, but not with expressions.
+NOT_FOR_WRITING = re.compile(
+    r"translate|tts|speech|audio|transcri|whisper|embed|imagen|image|veo|video|live|"
+    r"moderation|guard|rerank|vision-only|realtime",
+    re.IGNORECASE,
+)
+
+
+def writes(model_id: str) -> bool:
+    return NOT_FOR_WRITING.search(model_id) is None
 
 
 class PowerPoolOptions(Out):
@@ -103,8 +119,18 @@ async def llm_models(state: Any) -> list[dict[str, Any]]:
                 for k in mine
             ]
         )
-        out.append({"id": m.id, "ref": m.ref, "provider": m.provider, "remainingToday": left})
-    return sorted(out, key=lambda m: -m["remainingToday"])
+        out.append(
+            {
+                "id": m.id,
+                "ref": m.ref,
+                "provider": m.provider,
+                "remainingToday": left,
+                "writes": writes(m.id),
+            }
+        )
+    # Models that write first, then most left today: a translation or speech model with a big
+    # allowance is never the default.
+    return sorted(out, key=lambda m: (not m["writes"], -m["remainingToday"]))
 
 
 @router.get("/options")
@@ -136,6 +162,11 @@ async def _plan(body: PowerPoolRequest, state: Any) -> dict[str, Any]:
         problems.append(f"{ref} is not set up. Set it up under LLM Integration › Models.")
     elif info.ref not in models:
         problems.append(f"{info.id} can't run: no enabled Key for it. Add one in LLM Integration.")
+    if info is not None and not writes(info.id):
+        warnings.append(
+            f"{info.id} is built for something else (translation, speech, images or live audio) "
+            "and rarely writes usable expressions. Choose a chat or reasoning model."
+        )
 
     schema = await state.metadata.cached_settings_schema()
     legal = legal_choices(schema, body.region, body.delay)

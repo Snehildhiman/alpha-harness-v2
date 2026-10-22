@@ -3,6 +3,29 @@
 What v2 adds on top of [alpha-harness-improved](https://github.com/residual-lab/alpha-harness)
 (MIT, © MiracleInvoker). How to use each part: [GUIDE.md](GUIDE.md).
 
+## 2026-10-22
+
+- **No more stuck clicks**: a screen opens at once on a click (its code is loaded in the
+  background after start), and a read that takes over 45 s gives up so it cannot hold the
+  browser's connections. The server no longer does heavy work on its main loop: *What to
+  submit next*, transplants, *Submittable* and model predictions run on worker threads (the
+  longest stall fell from 2.3 s to under 0.5 s on a 50k vault). Quarter and pyramid counts
+  from BRAIN are kept for 10 minutes and refreshed in the background. Tasks no longer wait on a
+  busy catalog for dataset names.
+- **Region Agnostic Lab without an LLM**: *Built-in shapes* (the default) writes 40 alphas a
+  call from nineteen shapes over fields two or more chosen regions share, and favours shapes
+  whose alphas score better. No key or budget needed.
+- **Universe in every lab**: tick universes (none = every downloaded one) and *Random*, which
+  draws each alpha's universe at random among those holding its fields. Region Agnostic gets a
+  *Random* size; Evolution can run children in other universes too.
+- **SuperAlpha**: seven more selections (unique and uncrowded, lean expressions, single
+  source, fast but tradeable, quiet and slow, …) and six more combos (short and long IR, IR
+  over volatility, uncrowded IR, …); tick which to run and which decays.
+- **SuperAlpha repair**: near-miss SuperAlphas no longer fail with "Cannot read '.returns'";
+  they get one-step changes to their settings, selection or combo, ordered by the failed check.
+- **LLM labs** no longer default to translation, speech or image models (such as
+  *live-translate*); those are marked *not for writing*.
+
 ## 2026-10-21 (evening)
 
 - **Current Theme Lab** (Research Labs, no LLM): simulates only alphas that fit the running

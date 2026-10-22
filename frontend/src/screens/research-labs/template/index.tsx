@@ -28,6 +28,7 @@ import { CoresSetting, SimulationsSetting } from '@/screens/research-labs/task-s
 import { TemplateSections } from '@/screens/research-labs/template-sections'
 import {
   Button,
+  Checkbox,
   Chips,
   Disclosure,
   ErrorNotice,
@@ -229,6 +230,7 @@ export function TemplateLabScreen() {
     template: draft.text,
     variables: Object.fromEntries(names.flatMap((n) => (defs[n] ? [[n, defs[n]] as const] : []))),
     universes: draft.universes,
+    random_universe: draft.randomUniverse ?? false,
     neutralizations: draft.neutralizations,
     investability: draft.investability,
     decay: clamp(draft.decay, 512),
@@ -562,6 +564,11 @@ export function TemplateLabScreen() {
             ) : (
               <Skeleton className="h-8 w-64" />
             )}
+            <Checkbox
+              label="Random: each Alpha in a ticked universe drawn at random, rather than the one the search learns pays"
+              checked={draft.randomUniverse ?? false}
+              onChange={(next) => set({ randomUniverse: next })}
+            />
           </Fieldset>
           {neutralizations.length > 0 && (
             <NeutralizationPicker

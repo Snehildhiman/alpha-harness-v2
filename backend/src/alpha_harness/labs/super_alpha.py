@@ -26,9 +26,11 @@ if TYPE_CHECKING:
 OPERATOR_LIMIT = 8000
 #: The least ``selectionLimit`` BRAIN accepts.
 MIN_SELECTION = 10
-#: Combo smoothing, each pairing at both: lighter keeps fast components' edge, heavier pulls an
-#: over-trading combination under the 40% Turnover ceiling.
+#: Combo smoothing, each pairing at both by default: lighter keeps fast components' edge,
+#: heavier pulls an over-trading combination under the 40% Turnover ceiling.
 DECAYS = (4, 10)
+#: Every decay the form offers.
+DECAY_CHOICES = (2, 4, 6, 10, 15, 20)
 #: Applied to the final weighted combination. Lower than an Alpha's usual 0.08: a SuperAlpha
 #: concentrates more easily, and truncation is the documented brake on overfitting.
 TRUNCATION = 0.05
@@ -38,16 +40,26 @@ TRUNCATION = 0.05
 class Recipe:
     name: str
     code: str
+    #: Part of a task when none is chosen: the original, proven set.
+    default: bool = True
 
 
-def selections(limit: int) -> list[Recipe]:
+def selections(limit: int, names: list[str] | None = None) -> list[Recipe]:
+    """The selections named, or the defaults: see :func:`library`."""
+    return pick(library(limit), names)
+
+
+def library(limit: int) -> list[Recipe]:
     """Rankings over Alpha properties, each one keeping the pool diverse in its own way.
 
     ``{cap}`` bounds an Alpha's operators so the kept ones never pass 8,000 between them.
     Products of gates and scores: a gate that fails scores 0, which ``POSITIVE`` drops.
+    Every one reads only the properties the first five do, which BRAIN's selection
+    expressions accept.
     """
     cap = OPERATOR_LIMIT // max(limit, MIN_SELECTION)
     budget = f"(operator_count <= {cap})"
+    broad = "(long_count + short_count) / sqrt(universe_size(universe))"
     return [
         Recipe(
             "Least correlated",
@@ -57,41 +69,105 @@ def selections(limit: int) -> list[Recipe]:
             "Tradeable turnover",
             f"{budget} * (turnover >= 0.02) * (turnover < 0.35) * (1 - self_correlation)",
         ),
-        Recipe(
-            "Broad books",
-            f"{budget} * (long_count + short_count) / sqrt(universe_size(universe))",
-        ),
-        Recipe(
-            "Slow core",
-            f"{budget} * (turnover < 0.25) / (turnover + 0.05)",
-        ),
+        Recipe("Broad books", f"{budget} * {broad}"),
+        Recipe("Slow core", f"{budget} * (turnover < 0.25) / (turnover + 0.05)"),
         Recipe(
             "Many sources",
             f"{budget} * (1 + datacategory_count) * (1 - prod_correlation)",
         ),
+        Recipe(
+            "Unique and uncrowded",
+            f"{budget} * (prod_correlation < 0.5) * (1 - self_correlation)",
+            default=False,
+        ),
+        Recipe(
+            "Lean expressions",
+            f"{budget} * (1 - prod_correlation) / (1 + operator_count)",
+            default=False,
+        ),
+        Recipe(
+            "Unique broad books",
+            f"{budget} * (1 - prod_correlation) * (1 - self_correlation) * {broad}",
+            default=False,
+        ),
+        Recipe(
+            "Single source",
+            f"{budget} * (datacategory_count == 1) * (1 - prod_correlation)",
+            default=False,
+        ),
+        Recipe(
+            "Fast but tradeable",
+            f"{budget} * (turnover >= 0.08) * (turnover < 0.4) * (1 - prod_correlation)",
+            default=False,
+        ),
+        Recipe(
+            "Quiet and slow",
+            f"{budget} * (turnover < 0.15) * (self_correlation < 0.6) * (1 - prod_correlation)",
+            default=False,
+        ),
+        Recipe(
+            "Mixed sources, broad",
+            f"{budget} * (datacategory_count >= 2) * {broad}",
+            default=False,
+        ),
     ]
 
 
+def pick(recipes: list[Recipe], names: list[str] | None) -> list[Recipe]:
+    """Those named, in library order; the defaults when none is (or none named is known)."""
+    if names:
+        wanted = set(names)
+        chosen = [r for r in recipes if r.name in wanted]
+        if chosen:
+            return chosen
+    return [r for r in recipes if r.default]
+
+
+_STATS = "stats = generate_stats(alpha);\n"
+_MAX_CORR = (
+    "innerCorr = self_corr(stats.returns, 500);\n"
+    "ic = if_else(innerCorr == 1.0, nan, innerCorr);\n"
+    "maxCorr = reduce_max(ic);\n"
+)
+
 #: Weighting schemes from BRAIN's own combo examples and their risk-aware variants.
-COMBOS = [
+ALL_COMBOS = [
     Recipe("Equal weight", "1"),
-    Recipe(
-        "Rolling IR",
-        "stats = generate_stats(alpha);\nmax(ts_ir(stats.returns, 250), 0)",
-    ),
-    Recipe(
-        "Least crowded",
-        "stats = generate_stats(alpha);\n"
-        "innerCorr = self_corr(stats.returns, 500);\n"
-        "ic = if_else(innerCorr == 1.0, nan, innerCorr);\n"
-        "maxCorr = reduce_max(ic);\n"
-        "max(1 - maxCorr, 0.05)",
-    ),
+    Recipe("Rolling IR", _STATS + "max(ts_ir(stats.returns, 250), 0)"),
+    Recipe("Least crowded", _STATS + _MAX_CORR + "max(1 - maxCorr, 0.05)"),
     Recipe(
         "Inverse volatility",
-        "stats = generate_stats(alpha);\n1 / (ts_std_dev(stats.returns, 120) + 0.0001)",
+        _STATS + "1 / (ts_std_dev(stats.returns, 120) + 0.0001)",
+    ),
+    Recipe("Short IR", _STATS + "max(ts_ir(stats.returns, 120), 0)", default=False),
+    Recipe("Long IR", _STATS + "max(ts_ir(stats.returns, 500), 0)", default=False),
+    Recipe(
+        "IR over volatility",
+        _STATS + "max(ts_ir(stats.returns, 250), 0) / (ts_std_dev(stats.returns, 120) + 0.0001)",
+        default=False,
+    ),
+    Recipe(
+        "Uncrowded IR",
+        _STATS + _MAX_CORR + "max(ts_ir(stats.returns, 250), 0) * max(1 - maxCorr, 0.05)",
+        default=False,
+    ),
+    Recipe(
+        "Uncrowded, low volatility",
+        _STATS + _MAX_CORR + "max(1 - maxCorr, 0.05) / (ts_std_dev(stats.returns, 120) + 0.0001)",
+        default=False,
+    ),
+    Recipe(
+        "Floored IR",
+        _STATS + "0.2 + max(ts_ir(stats.returns, 250), 0)",
+        default=False,
     ),
 ]
+#: The default set, as before.
+COMBOS = [r for r in ALL_COMBOS if r.default]
+
+
+def combos(names: list[str] | None = None) -> list[Recipe]:
+    return pick(ALL_COMBOS, names)
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,6 +189,9 @@ def candidates(
     neutralization: str,
     selection_limit: int,
     activations: list[str],
+    selection_names: list[str] | None = None,
+    combo_names: list[str] | None = None,
+    decays: list[int] | None = None,
 ) -> list[Candidate]:
     """Every selection · combo · decay · activation, as Full SUPER simulations.
 
@@ -121,9 +200,9 @@ def candidates(
     """
     out: list[Candidate] = []
     for activation in activations:
-        for decay in DECAYS:
-            for selection in selections(selection_limit):
-                for combo in COMBOS:
+        for decay in sorted(set(decays or DECAYS)):
+            for selection in selections(selection_limit, selection_names):
+                for combo in combos(combo_names):
                     settings = SimulationSettings(
                         region=region,
                         delay=delay,

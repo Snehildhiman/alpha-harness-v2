@@ -60,6 +60,8 @@ class EvolutionRequest(BaseModel):
     mutation_rate: float = Field(default=ga.MUTATION_RATE, ge=0.01, le=0.2)
     #: Needed to add a task; a preview uses it to size the population.
     simulations: int = Field(default=0, ge=0, le=search.MAX_SIMULATIONS)
+    #: Other universes of the market children also run in, one at random per child.
+    child_universes: list[str] = Field(default_factory=list, max_length=20)
 
 
 class AutoSeedsRequest(BaseModel):
@@ -109,6 +111,8 @@ class EvolutionPreview(Out):
     generations: int
     sample: list[SampleAlpha]
     problems: list[str]
+    #: Other downloaded universes of the region and delay, to run children in too.
+    offered_universes: list[str] = Field(default_factory=list)
 
 
 class AutoSeedsStarted(Out):
@@ -175,6 +179,44 @@ async def options(state: State) -> EvolutionOptions:
     )
 
 
+#: A universe lacking more of the breeding universe's fields than this is not offered.
+MAX_ABSENT = 5000
+
+
+async def _other_universes(state: Any, body: EvolutionRequest) -> dict[str, list[str] | None]:
+    """Every other downloaded universe of the market, with the breeding universe's fields
+    it lacks (``None``: too many to run children there)."""
+    rows = await state.catalog.query(
+        "SELECT DISTINCT universe FROM data_field WHERE instrument_type = 'EQUITY' "
+        "AND region = ? AND delay = ? AND universe <> ? ORDER BY universe",
+        [body.region, body.delay, body.universe],
+    )
+    out: dict[str, list[str] | None] = {}
+    for row in rows:
+        other = str(row["universe"])
+        if other not in body.child_universes:
+            out[other] = []
+            continue
+        missing = await state.catalog.query(
+            "SELECT a.field_id FROM data_field a WHERE a.instrument_type = 'EQUITY' "
+            "AND a.region = ? AND a.delay = ? AND a.universe = ? AND NOT EXISTS ("
+            "SELECT 1 FROM data_field b WHERE b.instrument_type = 'EQUITY' AND b.region = ? "
+            "AND b.delay = ? AND b.universe = ? AND b.field_id = a.field_id) LIMIT ?",
+            [
+                body.region,
+                body.delay,
+                body.universe,
+                body.region,
+                body.delay,
+                other,
+                MAX_ABSENT + 1,
+            ],
+        )
+        ids = [str(m["field_id"]) for m in missing]
+        out[other] = None if len(ids) > MAX_ABSENT else ids
+    return out
+
+
 async def _plan(body: EvolutionRequest, state: Any) -> dict[str, Any]:
     """Everything a task would breed from, checked, without queueing anything."""
     market, problems = await _market(
@@ -198,9 +240,26 @@ async def _plan(body: EvolutionRequest, state: Any) -> dict[str, Any]:
     if ids and len(seeds) < 2:
         problems.append("Choose at least 2 seeds this market can breed from.")
 
+    others = await _other_universes(state, body)
+    universe_absent = {
+        u: missing
+        for u in body.child_universes
+        if (missing := others.get(u)) is not None and u in others
+    }
+    too_far = [u for u in body.child_universes if u in others and others[u] is None]
+    if too_far:
+        problems.append(
+            f"{', '.join(too_far)} lacks too many of {body.universe}'s fields to run children in."
+        )
+
     sample: list[SampleAlpha] = []
     if market is not None and len(seeds) >= 2 and not problems:
-        run = EvolutionParams(region=body.region, delay=body.delay, universe=body.universe)
+        run = EvolutionParams(
+            region=body.region,
+            delay=body.delay,
+            universe=body.universe,
+            universe_absent=universe_absent,
+        )
         parents = [p for r in seeds if (p := ga.Parent.of(str(r["alpha_id"]), r["expression"], r))]
         bred = market
 
@@ -219,6 +278,8 @@ async def _plan(body: EvolutionRequest, state: Any) -> dict[str, Any]:
         "sample": sample,
         "problems": problems,
         "neutralizations": list(market.neutralizations) if market else [],
+        "offeredUniverses": list(others),
+        "universeAbsent": universe_absent,
     }
 
 
@@ -384,6 +445,7 @@ async def add_task(body: EvolutionRequest, state: State) -> AddedTask:
             mutation_rate=body.mutation_rate,
             test_period=TEST_PERIOD,
             neutralizations=plan["neutralizations"],
+            universe_absent=plan["universeAbsent"],
         ),
         simulations=body.simulations,
         batch_size=body.cores * 10,

@@ -93,6 +93,9 @@ class EvolutionParams(TaskParams):
     mutation_rate: float | None = None
     test_period: str | None = None
     neutralizations: list[str] = Field(default_factory=list)
+    #: Other universes children also run in, each with the fields of ``universe`` it lacks:
+    #: a child goes to one drawn at random among ``universe`` and those that hold its fields.
+    universe_absent: dict[str, list[str]] = Field(default_factory=dict)
 
 
 class PowerPoolParams(TaskParams):
@@ -132,6 +135,12 @@ class RegionAgnosticParams(PowerPoolParams):
     region_universes: dict[str, str] = Field(default_factory=dict)
     #: BRAIN's region-agnostic universe size, which ``region_universes`` spells out.
     size: str = "LARGE"
+    #: ``llm``: the chosen model writes the Alphas. ``shapes``: the built-in shapes do, with no
+    #: LLM at all (:mod:`alpha_harness.labs.ra_shapes`).
+    writer: str = "llm"
+    #: ``size`` ``RANDOM`` only: each size's universe per region, downloaded ones only. Each
+    #: Alpha then runs at one size drawn at random, the same in every region.
+    size_universes: dict[str, dict[str, str]] = Field(default_factory=dict)
 
 
 class SettingsParams(TaskParams):

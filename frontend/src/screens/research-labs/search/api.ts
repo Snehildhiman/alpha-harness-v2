@@ -21,6 +21,10 @@ export interface SearchLabRequest {
   cores: number
   /** Needed to add a task; a preview ignores it. */
   simulations?: number
+  /** The universes searched; empty searches every downloaded one. */
+  universes?: string[]
+  /** Each Alpha's universe drawn at random, rather than learned by the search. */
+  random_universe?: boolean
 }
 
 type Schemas = components['schemas']

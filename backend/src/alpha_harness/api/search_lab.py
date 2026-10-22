@@ -7,6 +7,7 @@ is done.
 from typing import Any
 
 from fastapi import APIRouter
+from pydantic import Field
 
 from ..db.models import utcnow
 from ..labs import search
@@ -41,6 +42,8 @@ class Preview(Out):
     fields: FieldCounts
     left_out: LeftOut
     universes: list[str]
+    #: Every downloaded universe of the market, to choose from.
+    offered_universes: list[str] = Field(default_factory=list)
     sample: list[SampleAlpha]
     problems: list[str]
     warnings: list[str]
@@ -77,14 +80,17 @@ async def plan_search(body: SearchRequest, state: Any) -> dict[str, Any]:
         "universes": list(pool.universes),
         "absent": pool.absent,
         "neutralizations": market["neutralizations"],
+        "randomUniverse": body.random_universe,
     }
     sample: list[SampleAlpha] = []
     if not problems:
         run = SearchParams(region=body.region, delay=body.delay, decay=body.decay, space=space)
         choices = search.field_choices(space)
         sample = preview_samples(
-            lambda rng: search.request_for(
-                search.suggest(search.RandomTrial(rng), space, choices), run
+            lambda rng: search.reroll_universe(
+                search.request_for(search.suggest(search.RandomTrial(rng), space, choices), run),
+                space,
+                rng,
             ),
             tries=5,
         )
@@ -94,6 +100,7 @@ async def plan_search(body: SearchRequest, state: Any) -> dict[str, Any]:
         "fields": field_counts(pool.fields),
         "leftOut": {"vector": pool.vector_skipped},
         "universes": list(pool.universes),
+        "offeredUniverses": market["offered"],
         "sample": sample,
         "problems": problems,
         "warnings": market["warnings"],

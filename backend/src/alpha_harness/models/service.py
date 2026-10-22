@@ -31,9 +31,15 @@ COLUMNS = (
 
 async def field_infos(catalog: Catalog, expressions: list[str | None]) -> dict[str, FieldInfo]:
     """Dataset, category and crowding of every field the expressions read."""
-    wanted: set[str] = set()
-    for expression in expressions:
-        wanted.update(read_expression(expression).fields)
+
+    def read() -> set[str]:
+        wanted: set[str] = set()
+        for expression in expressions:
+            wanted.update(read_expression(expression).fields)
+        return wanted
+
+    # Off the event loop: parsing thousands of expressions takes most of a second.
+    wanted = await asyncio.to_thread(read)
     if not wanted:
         return {}
     rows = await catalog.query(

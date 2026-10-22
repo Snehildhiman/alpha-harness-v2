@@ -14,6 +14,7 @@ scores.
 """
 
 import json
+import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -227,6 +228,38 @@ def suggest(trial: Any, space: dict[str, Any], choices: dict[str, list[str]]) ->
         else trial.suggest_categorical("neutralization", neutralizations)
     )
     return params
+
+
+#: A name in an expression: an operator or a field.
+NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def _absent_sets(space: dict[str, Any]) -> dict[str, set[str]]:
+    """Per universe, every field some part of the space lacks there."""
+    out: dict[str, set[str]] = {}
+    parts = [space.get("absent") or {}]
+    parts += [v.get("absent") or {} for v in space.get("variables") or () if isinstance(v, dict)]
+    for part in parts:
+        for universe, missing in part.items():
+            out.setdefault(str(universe), set()).update(missing or ())
+    return out
+
+
+def reroll_universe(
+    request: SimulationRequest, space: dict[str, Any], rng: random.Random
+) -> SimulationRequest:
+    """With ``randomUniverse`` set: the Alpha in a universe drawn at random from those
+    searched that carry every field it reads, instead of the one the search chose."""
+    universes = [str(u) for u in space.get("universes") or ()]
+    if not space.get("randomUniverse") or len(universes) < 2 or not request.regular:
+        return request
+    names = set(NAME.findall(request.regular))
+    absent = _absent_sets(space)
+    fit = [u for u in universes if not names & absent.get(u, set())]
+    if not fit:
+        return request
+    settings = request.settings.model_copy(update={"universe": rng.choice(fit)})
+    return request.model_copy(update={"settings": settings})
 
 
 class RandomTrial:

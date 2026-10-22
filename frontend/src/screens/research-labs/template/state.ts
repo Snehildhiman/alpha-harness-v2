@@ -15,6 +15,8 @@ export interface TemplateDraft {
   variables: Record<string, VariableDef>
   /** Searched, like the variables. Nothing is ticked until the user ticks it. */
   universes: string[]
+  /** Each Alpha's universe drawn at random among those ticked. */
+  randomUniverse?: boolean
   neutralizations: string[]
   investability: Investability[]
   /** As typed, so a number half-way through being typed is not snapped back. */

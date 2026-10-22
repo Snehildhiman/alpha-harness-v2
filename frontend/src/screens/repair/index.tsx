@@ -173,6 +173,20 @@ const RA_COLUMNS: Column<RepairVariant>[] = [
   REGIONS_COLUMN,
 ]
 
+/** SuperAlphas: no model scores them, so the change, what it touched and the settings. */
+const SUPER_COLUMNS: Column<RepairVariant>[] = VARIANT_COLUMNS.filter(
+  (c) => c.key === 'edit' || c.key === 'settings',
+).concat({
+  key: 'expression',
+  header: 'Selection or combo used',
+  width: 'minmax(220px,2fr)',
+  cell: (r) => (
+    <span className="truncate font-mono text-body-compact" title={r.expression}>
+      {r.expression.replaceAll('\n', ' ')}
+    </span>
+  ),
+})
+
 const RANKS: { value: RankBy; label: string }[] = [
   { value: 'pass', label: 'Pass everything' },
   { value: 'sharpe', label: 'Higher Sharpe' },
@@ -185,13 +199,16 @@ function PlanPanel({ alphaId, improve }: { alphaId: string; improve?: boolean })
   const [take, setTake] = useState(10)
   const queue = useMutation({ mutationFn: queueRepair })
   const data = plan.data
+  const isSuper = data?.kind === 'super'
   return (
     <Panel
       title={`Variants of ${alphaId}`}
       actions={
         data && data.variants.length > 0 ? (
           <div className="flex flex-wrap items-center gap-2">
-            <Segmented label="Rank by" items={RANKS} value={rankBy} onChange={setRankBy} />
+            {!isSuper && (
+              <Segmented label="Rank by" items={RANKS} value={rankBy} onChange={setRankBy} />
+            )}
             <Segmented
               label="How many to simulate"
               items={[5, 10, 20].map((n) => ({ value: n, label: `Top ${n}` }))}
@@ -218,7 +235,14 @@ function PlanPanel({ alphaId, improve }: { alphaId: string; improve?: boolean })
             {p}
           </Notice>
         ))}
-        {data && !data.ranked && (
+        {isSuper && (
+          <Notice tone="info" title="SuperAlpha repair">
+            One change at a time to its settings, selection or combo, ordered by the check it
+            failed: low fitness or high turnover tries more Decay and lighter Truncation first, low
+            Sharpe tries other combos and selections first. BRAIN runs three SuperAlphas at a time.
+          </Notice>
+        )}
+        {data && !data.ranked && !isSuper && (
           <Notice tone="warn" title="Not ranked yet">
             Train the models on the{' '}
             <Link to="/models" className={LINK}>
@@ -252,7 +276,7 @@ function PlanPanel({ alphaId, improve }: { alphaId: string; improve?: boolean })
             )}
             <DataTable
               rows={data.variants}
-              columns={data.kind === 'ra' ? RA_COLUMNS : VARIANT_COLUMNS}
+              columns={data.kind === 'ra' ? RA_COLUMNS : isSuper ? SUPER_COLUMNS : VARIANT_COLUMNS}
               rowKey={(r) => r.id}
               label="Variants"
             />

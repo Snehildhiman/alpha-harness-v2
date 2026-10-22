@@ -29,17 +29,26 @@ class SuperTask(Out):
     activation: Literal["IS", "OS", "BOTH"] = "BOTH"
     cores: int = Field(default=MAX_CORES, ge=1, le=MAX_CORES)
     run: bool = False
+    #: Recipe names to run; empty runs the default set.
+    selections: list[str] = Field(default_factory=list, max_length=40)
+    combos: list[str] = Field(default_factory=list, max_length=40)
+    #: Empty: the default decays.
+    decays: list[int] = Field(default_factory=list, max_length=len(super_alpha.DECAY_CHOICES))
 
 
 class Recipe(Out):
     name: str
     code: str
+    #: Part of this task.
+    chosen: bool = True
+    default: bool = True
 
 
 class SuperPlan(Out):
     selections: list[Recipe]
     combos: list[Recipe]
     decays: list[int]
+    decay_choices: list[int]
     truncation: float
     simulations: int
 
@@ -48,21 +57,49 @@ def _activations(choice: str) -> list[str]:
     return ["IS", "OS"] if choice == "BOTH" else [choice]
 
 
+def _decays(body: SuperTask) -> list[int]:
+    return sorted(
+        {d for d in body.decays if d in super_alpha.DECAY_CHOICES} or set(super_alpha.DECAYS)
+    )
+
+
+def _found(body: SuperTask) -> list[super_alpha.Candidate]:
+    return super_alpha.candidates(
+        region=body.region,
+        delay=body.delay,
+        universe=body.universe,
+        neutralization=body.neutralization,
+        selection_limit=body.selection_limit,
+        activations=_activations(body.activation),
+        selection_names=body.selections,
+        combo_names=body.combos,
+        decays=_decays(body),
+    )
+
+
 @router.post("/plan")
 async def plan(body: SuperTask) -> SuperPlan:
     """What a task with these settings would run, without running anything."""
-    activations = _activations(body.activation)
+    every = super_alpha.library(body.selection_limit)
+    chosen_s = {r.name for r in super_alpha.selections(body.selection_limit, body.selections)}
+    chosen_c = {r.name for r in super_alpha.combos(body.combos)}
+    decays = _decays(body)
     return SuperPlan(
         selections=[
-            Recipe(name=r.name, code=r.code) for r in super_alpha.selections(body.selection_limit)
+            Recipe(name=r.name, code=r.code, chosen=r.name in chosen_s, default=r.default)
+            for r in every
         ],
-        combos=[Recipe(name=r.name, code=r.code) for r in super_alpha.COMBOS],
-        decays=list(super_alpha.DECAYS),
+        combos=[
+            Recipe(name=r.name, code=r.code, chosen=r.name in chosen_c, default=r.default)
+            for r in super_alpha.ALL_COMBOS
+        ],
+        decays=decays,
+        decay_choices=list(super_alpha.DECAY_CHOICES),
         truncation=super_alpha.TRUNCATION,
-        simulations=len(super_alpha.selections(body.selection_limit))
-        * len(super_alpha.COMBOS)
-        * len(super_alpha.DECAYS)
-        * len(activations),
+        simulations=len(chosen_s)
+        * len(chosen_c)
+        * len(decays)
+        * len(_activations(body.activation)),
     )
 
 
@@ -71,14 +108,7 @@ async def add_task(body: SuperTask, state: State) -> AddedTask:
     """Write every pairing as a SuperAlpha simulation, and queue the task when ``run``."""
     if body.region == "ALL":
         raise refuse(422, "region_agnostic", "SuperAlphas combine Alphas of one region.")
-    found = super_alpha.candidates(
-        region=body.region,
-        delay=body.delay,
-        universe=body.universe,
-        neutralization=body.neutralization,
-        selection_limit=body.selection_limit,
-        activations=_activations(body.activation),
-    )
+    found = _found(body)
     return await add_study(
         state,
         now=utcnow(),

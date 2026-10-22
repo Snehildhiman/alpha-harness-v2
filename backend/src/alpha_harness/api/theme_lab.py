@@ -62,6 +62,9 @@ class ThemeLabOptions(Out):
 class ThemeLabRequest(BaseModel):
     region: str
     universe: str | None = None
+    #: Searched universes; empty: every downloaded one.
+    universes: list[str] = Field(default_factory=list, max_length=20)
+    random_universe: bool = False
     #: Empty: every allowed dataset of the region.
     dataset_ids: list[str] = Field(default_factory=list, max_length=200)
     neutralizations: list[str] = Field(default_factory=list, max_length=20)
@@ -75,6 +78,7 @@ class ThemeLabPreview(Out):
     theme: str | None
     fields: FieldCounts | None
     universes: list[str]
+    offered_universes: list[str] = Field(default_factory=list)
     sample: list[SampleAlpha]
     problems: list[str]
     warnings: list[str]
@@ -150,6 +154,8 @@ async def _plan(body: ThemeLabRequest, state: State) -> tuple[dict[str, Any], Th
             region=body.region,
             delay=rule.delay if rule.delay is not None else 1,
             universe=body.universe,
+            universes=body.universes,
+            random_universe=body.random_universe,
             dataset_ids=chosen,
             vector_operators=body.vector_operators,
             neutralizations=body.neutralizations,
@@ -184,8 +190,12 @@ async def _plan(body: ThemeLabRequest, state: State) -> tuple[dict[str, Any], Th
         plan["sample"] = [
             s
             for s in preview_samples(
-                lambda rng: search.request_for(
-                    search.suggest(search.RandomTrial(rng), space, choices), run
+                lambda rng: search.reroll_universe(
+                    search.request_for(
+                        search.suggest(search.RandomTrial(rng), space, choices), run
+                    ),
+                    space,
+                    rng,
                 ),
                 tries=8,
             )
@@ -203,6 +213,7 @@ async def preview(body: ThemeLabRequest, state: State) -> ThemeLabPreview:
             "theme": rule.describe() if rule else None,
             "fields": plan.get("fields"),
             "universes": plan.get("universes", []),
+            "offeredUniverses": plan.get("offeredUniverses", []),
             "sample": plan.get("sample", []),
             "problems": plan["problems"],
             "warnings": plan["warnings"],

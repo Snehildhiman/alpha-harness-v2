@@ -422,9 +422,11 @@ def _task(row: Study, progress: dict[str, Any], names: dict[str, str] | None = N
             "datasetNames": [(names or {}).get(d, d) for d in params.get("datasetIds") or []],
             "chosenFields": len(params.get("fieldIds") or []),
             "promptName": (params.get("promptName") or "Built-in")
-            if row.sampler in LLM_SAMPLERS
+            if row.sampler in LLM_SAMPLERS and params.get("writer") != "shapes"
             else None,
-            "model": params.get("model") or None,
+            "model": "Built-in shapes (no LLM)"
+            if params.get("writer") == "shapes"
+            else (params.get("model") or None),
             "fields": _fields(params.get("space")),
             "target": row.max_trials,
             # What spent quota, as the scheduler counts toward the target.
@@ -450,19 +452,34 @@ def _task(row: Study, progress: dict[str, Any], names: dict[str, str] | None = N
     )
 
 
+#: Dataset id → name, kept between calls: names never change, and the task list must not wait
+#: on the catalog while a sync or an import keeps it busy.
+_NAMES: dict[str, str] = {}
+#: Longest the list waits for the catalog before showing ids instead of names.
+NAMES_WAIT = 0.5
+
+
 async def _dataset_names(state: Any, rows: list[Study]) -> dict[str, str]:
-    """Every dataset the tasks name, by id, as the catalog calls them. Empty when unsynced."""
+    """Every dataset the tasks name, by id, as the catalog calls them. Ids not read yet (or
+    not read quickly enough) are shown as they are."""
     ids = sorted({d for r in rows for d in (r.sampler_params or {}).get("datasetIds") or []})
-    if not ids:
-        return {}
-    found = await state.catalog.query(
-        f"""
-        SELECT dataset_id, any_value(name) AS name FROM data_set
-        WHERE dataset_id IN ({", ".join("?" for _ in ids)}) GROUP BY dataset_id
-        """,  # noqa: S608
-        ids,
-    )
-    return {str(f["dataset_id"]): str(f["name"] or f["dataset_id"]) for f in found}
+    missing = [i for i in ids if i not in _NAMES]
+    if missing:
+        try:
+            found = await asyncio.wait_for(
+                state.catalog.query(
+                    f"""
+                    SELECT dataset_id, any_value(name) AS name FROM data_set
+                    WHERE dataset_id IN ({", ".join("?" for _ in missing)}) GROUP BY dataset_id
+                    """,  # noqa: S608
+                    missing,
+                ),
+                timeout=NAMES_WAIT,
+            )
+            _NAMES.update({str(f["dataset_id"]): str(f["name"] or f["dataset_id"]) for f in found})
+        except TimeoutError:
+            pass
+    return {i: _NAMES[i] for i in ids if i in _NAMES}
 
 
 async def _payload(state: Any, task_id: int) -> LabTask:
@@ -1029,7 +1046,11 @@ async def info(task_id: int, state: State) -> TaskInfo:
         for k, v in params.items()
         if k not in HIDDEN and v not in (None, "", [])
     ]
-    if row.sampler in LLM_SAMPLERS and "promptName" not in params:
+    if (
+        row.sampler in LLM_SAMPLERS
+        and "promptName" not in params
+        and params.get("writer") != "shapes"
+    ):
         settings.append(TaskSetting(label="Prompt", value="Built-in"))
     space = params.get("space") or {}
     if space.get("fields"):

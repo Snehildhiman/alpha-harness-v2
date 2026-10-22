@@ -469,6 +469,8 @@ export interface paths {
         /**
          * Pyramids
          * @description Every pyramid: its multiplier, this quarter's alpha count, and download state.
+         *
+         *     From the last read; a fresh one follows in the background once it is ten minutes old.
          */
         get: operations["pyramids_api_catalog_pyramids_get"];
         put?: never;
@@ -1711,11 +1713,8 @@ export interface paths {
         };
         /**
          * Standing
-         * @description Submitted Alphas and formulated pyramids for the quarter in progress.
-         *
-         *     Two reads, run together. Neither is derivable from the other: an Alpha belongs to as
-         *     many pyramids as it has data categories, so the pyramid counts sum to more than the
-         *     number of Alphas and cannot stand in for it.
+         * @description This quarter's standing, from the last read; a fresh read follows in the background
+         *     once it is ten minutes old.
          */
         get: operations["standing_api_quarter_get"];
         put?: never;
@@ -3630,6 +3629,8 @@ export interface components {
         BasicTemplatePreview: {
             fields: components["schemas"]["FieldCounts"];
             leftOut: components["schemas"]["LeftOut"];
+            /** Offereduniverses */
+            offeredUniverses?: string[];
             /** Problems */
             problems: string[];
             /** Sample */
@@ -3692,6 +3693,11 @@ export interface components {
             field_ids?: string[];
             /** Neutralizations */
             neutralizations?: string[];
+            /**
+             * Random Universe
+             * @default false
+             */
+            random_universe: boolean;
             /** Region */
             region: string;
             /**
@@ -3710,6 +3716,8 @@ export interface components {
             };
             /** Universe */
             universe?: string | null;
+            /** Universes */
+            universes?: string[];
             /** Vector Operators */
             vector_operators?: string[];
         };
@@ -4433,6 +4441,8 @@ export interface components {
         EvolutionPreview: {
             /** Generations */
             generations: number;
+            /** Offereduniverses */
+            offeredUniverses?: string[];
             /** Population */
             population: number;
             /** Problems */
@@ -4448,6 +4458,8 @@ export interface components {
         EvolutionRequest: {
             /** Alpha Ids */
             alpha_ids?: string[];
+            /** Child Universes */
+            child_universes?: string[];
             /**
              * Cores
              * @default 8
@@ -5595,6 +5607,11 @@ export interface components {
             ref: string;
             /** Remainingtoday */
             remainingToday: number;
+            /**
+             * Writes
+             * @default true
+             */
+            writes: boolean;
         };
         /** PowerPoolOptions */
         PowerPoolOptions: {
@@ -5844,6 +5861,8 @@ export interface components {
         Preview: {
             fields: components["schemas"]["FieldCounts"];
             leftOut: components["schemas"]["LeftOut"];
+            /** Offereduniverses */
+            offeredUniverses?: string[];
             /** Problems */
             problems: string[];
             /** Sample */
@@ -6098,8 +6117,18 @@ export interface components {
         };
         /** Recipe */
         Recipe: {
+            /**
+             * Chosen
+             * @default true
+             */
+            chosen: boolean;
             /** Code */
             code: string;
+            /**
+             * Default
+             * @default true
+             */
+            default: boolean;
             /** Name */
             name: string;
         };
@@ -6135,6 +6164,8 @@ export interface components {
             /** Problems */
             problems: string[];
             prompt: components["schemas"]["PowerPoolPrompt"] | null;
+            /** Sample */
+            sample?: string[];
             /** Warnings */
             warnings: string[];
         };
@@ -6173,9 +6204,15 @@ export interface components {
              * @default LARGE
              * @enum {string}
              */
-            size: "LARGE" | "MEDIUM" | "SMALL";
+            size: "LARGE" | "MEDIUM" | "SMALL" | "RANDOM";
             /** Universe */
             universe?: string | null;
+            /**
+             * Writer
+             * @default llm
+             * @enum {string}
+             */
+            writer: "llm" | "shapes";
         };
         /** RegionChoice */
         RegionChoice: {
@@ -6438,6 +6475,11 @@ export interface components {
             field_ids?: string[];
             /** Neutralizations */
             neutralizations?: string[];
+            /**
+             * Random Universe
+             * @default false
+             */
+            random_universe: boolean;
             /** Region */
             region: string;
             /**
@@ -6447,6 +6489,8 @@ export interface components {
             simulations: number;
             /** Universe */
             universe?: string | null;
+            /** Universes */
+            universes?: string[];
             /** Vector Operators */
             vector_operators?: string[];
         };
@@ -6819,6 +6863,8 @@ export interface components {
         SuperPlan: {
             /** Combos */
             combos: components["schemas"]["Recipe"][];
+            /** Decaychoices */
+            decayChoices: number[];
             /** Decays */
             decays: number[];
             /** Selections */
@@ -6836,11 +6882,15 @@ export interface components {
              * @enum {string}
              */
             activation: "IS" | "OS" | "BOTH";
+            /** Combos */
+            combos?: string[];
             /**
              * Cores
              * @default 3
              */
             cores: number;
+            /** Decays */
+            decays?: number[];
             /** Delay */
             delay: number;
             /** Neutralization */
@@ -6857,6 +6907,8 @@ export interface components {
              * @default 30
              */
             selectionLimit: number;
+            /** Selections */
+            selections?: string[];
             /** Universe */
             universe: string;
         };
@@ -7467,6 +7519,11 @@ export interface components {
              * @enum {string}
              */
             pasteurization: "ON" | "OFF";
+            /**
+             * Random Universe
+             * @default false
+             */
+            random_universe: boolean;
             /** Region */
             region: string;
             /**
@@ -7535,6 +7592,8 @@ export interface components {
         /** ThemeLabPreview */
         ThemeLabPreview: {
             fields: components["schemas"]["FieldCounts"] | null;
+            /** Offereduniverses */
+            offeredUniverses?: string[];
             /** Problems */
             problems: string[];
             /** Sample */
@@ -7562,6 +7621,11 @@ export interface components {
             decay: number;
             /** Neutralizations */
             neutralizations?: string[];
+            /**
+             * Random Universe
+             * @default false
+             */
+            random_universe: boolean;
             /** Region */
             region: string;
             /**
@@ -7571,6 +7635,8 @@ export interface components {
             simulations: number;
             /** Universe */
             universe?: string | null;
+            /** Universes */
+            universes?: string[];
             /** Vector Operators */
             vector_operators?: string[];
         };

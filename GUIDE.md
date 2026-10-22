@@ -27,6 +27,10 @@ How to run it, what each part does, how it learns, and how to change it yourself
 | Try alphas in other regions | **Repair → Transplants** | Every passing regular or Power Pool alpha (each keeps its type), in each downloaded region it has not run in (same settings, same-size universe, only where every field exists). Ranked by the models; *Simulate top N*. Passing in 2+ regions makes an all-region alpha. |
 | Turn all-region alphas into RA | **Repair → Promote to region agnostic** | Expressions that already pass as regular alphas in 2+ of USA/EUR/ASI/GLB and never ran as RA. Pick the RA universe (needs region ALL downloaded) and *Run top N as RA*. |
 | Find new alphas | **Research Labs** | Search / Template / Evolution / LLM labs. Search and Template rounds are **screened** by the models (Settings → Model screening). |
+| Region-agnostic alphas without an LLM | **Research Labs → Region Agnostic** | *Writer: Built-in shapes · no LLM* (the default). Pick datasets in the All Regions market, the regions and a size (or *Random*). Nineteen shapes are written over fields two or more regions share; shapes whose alphas score better are written more often. |
+| Choose the universe | Every lab | Search, Basic Template, Current Theme: tick universes (none = all downloaded) and *Random* to draw each alpha's universe at random. Template and Power Pool: tick universes. Evolution: *Also run children in*. Region Agnostic: size *Random*. |
+| SuperAlphas | **Research Labs → Super Alpha** | Tick selections, combos and decays (none ticked = the proven defaults). Each pairing runs in Full mode. |
+| Fix a SuperAlpha near-miss | **Repair** | One change at a time to decay, truncation, selection limit, neutralization, activation, selection or combo, ordered by the failed check. |
 | Use papers | **Research** | Tick papers, then add an LLM Power Pool or Region Agnostic Lab task: each LLM call carries one paper's idea over to your fields. |
 | See where the crowd is going | **Crowding** | Datasets and fields by how many new alphas and users they gained over 1/7/30 days, from the daily catalog snapshots. Fast growers will push prod correlation up; large, quiet datasets have room. |
 | Learn what to avoid | **Scorecards** | Which operators, pairs, fields, datasets, categories, lookbacks and settings run hot or cold on prod / Power Pool / self-correlation. |
@@ -144,4 +148,8 @@ cd ..\frontend; pnpm check; pnpm build
   correlation labels fastest.
 * **Research says a feed could not be read**: check the address in Settings; arXiv is free and
   needs no account.
+* **A click does nothing until refresh**: update (`update.bat`). Screens now open at once and
+  slow reads give up after 45 s; if one still hangs, the window behind it shows which.
+* **The LLM lab writes nothing**: a translation, speech or image model is chosen (marked *not
+  for writing*); pick a chat model, or use the built-in shapes in the Region Agnostic Lab.
 * **CI failed email**: open the run on GitHub; the failing step names the check.

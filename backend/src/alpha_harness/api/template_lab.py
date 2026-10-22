@@ -86,6 +86,8 @@ class TemplateTask(BaseModel):
     variables: dict[str, Variable] = Field(default_factory=dict, max_length=64)
     #: Searched, like the variables. Each needs at least one.
     universes: list[str] = Field(default_factory=list, max_length=20)
+    #: Each Alpha's universe drawn at random among those ticked that carry its fields.
+    random_universe: bool = False
     neutralizations: list[str] = Field(default_factory=list, max_length=20)
     investability: list[Literal["none", "max_trade", "max_position"]] = Field(
         default_factory=list, max_length=3
@@ -693,6 +695,7 @@ async def _plan(body: TemplateTask, state: Any) -> dict[str, Any]:
         "neutralizations": neutralizations,
         "investability": investability,
         "variables": space_variables,
+        "randomUniverse": body.random_universe,
     }
     run = TemplateParams(
         region=body.region,
@@ -708,10 +711,13 @@ async def _plan(body: TemplateTask, state: Any) -> dict[str, Any]:
     sample: list[SampleAlpha] = []
     if not problems:
         picks = template.field_choices(space)
+
         # A draw can land two variables on one field, so it is given a few more tries.
-        sample = preview_samples(
-            lambda rng: template.draw(search.RandomTrial(rng), run, picks)[1], tries=25
-        )
+        def draw(rng: Any) -> Any:
+            request = template.draw(search.RandomTrial(rng), run, picks)[1]
+            return search.reroll_universe(request, space, rng) if request else None
+
+        sample = preview_samples(draw, tries=25)
     own = StatsItem(text=body.template, variables=given)
     return {
         "stats": (await _stats(state, [own], body.region, body.delay))[0]

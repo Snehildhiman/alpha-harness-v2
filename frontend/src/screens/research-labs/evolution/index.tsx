@@ -25,6 +25,7 @@ import { NeutralizationPicker } from '@/screens/research-labs/neutralization'
 import { CoresSetting, SimulationsSetting } from '@/screens/research-labs/task-settings'
 import {
   Button,
+  Chips,
   Disclosure,
   Empty,
   ErrorNotice,
@@ -88,6 +89,7 @@ export function EvolutionLabScreen() {
     population: draft.population,
     mutation_rate: draft.mutationRate,
     simulations: draft.simulations ?? 0,
+    child_universes: draft.childUniverses ?? [],
   }
   const { preview, current: planned } = useLabPreview('evolution-lab', body, evolutionLab.preview)
   const plan = preview.data
@@ -390,6 +392,21 @@ export function EvolutionLabScreen() {
               </Fieldset>
             </div>
           </Disclosure>
+          {(plan?.offeredUniverses?.length ?? 0) > 0 && (
+            <Fieldset
+              legend="Also run children in"
+              hint={`Children breed in ${draft.universe}; tick others and each child runs in one drawn at random among ${draft.universe} and these, where it holds the child's fields.`}
+            >
+              <Chips
+                label="Also run children in"
+                items={(plan?.offeredUniverses ?? []).map((u) => ({ value: u, label: u }))}
+                value={(draft.childUniverses ?? []).filter((u) =>
+                  plan?.offeredUniverses?.includes(u),
+                )}
+                onChange={(next) => set({ childUniverses: next })}
+              />
+            </Fieldset>
+          )}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Metric boxed label="Seeds" value={fmt.int(hasSeeds ? plan?.seeds.length : 0)} />
             <Metric boxed label="Population" value={sized ? fmt.int(plan?.population) : DASH} />

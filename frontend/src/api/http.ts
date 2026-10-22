@@ -86,6 +86,10 @@ export function normalise(status: number, raw: unknown): ApiErrorBody {
   return { code: `http_${status}`, message: describe(status) }
 }
 
+/** A read that takes longer than this is given up, so it frees its connection: a browser opens
+ * only six to one server, and a few stuck reads would stall every click until a refresh. */
+const READ_TIMEOUT_MS = 45_000
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   // Serialised before the request: a body that cannot be turned into JSON throws a TypeError
   // too, which inside the fetch below would read as an unreachable backend.
@@ -100,8 +104,14 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
         ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
       },
       body: payload,
+      ...(method === 'GET' ? { signal: AbortSignal.timeout(READ_TIMEOUT_MS) } : {}),
     })
   } catch (failure) {
+    if (failure instanceof DOMException && failure.name === 'TimeoutError')
+      throw new ApiError(0, {
+        code: 'timeout',
+        message: 'The app took too long to answer. It is still working; try again in a moment.',
+      })
     // Only a failed fetch is a TypeError; anything else must not be reported as "the backend
     // is not running".
     if (!(failure instanceof TypeError)) throw failure

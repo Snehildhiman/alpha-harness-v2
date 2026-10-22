@@ -13,8 +13,8 @@ export interface RegionAgnosticRequest {
   /** The All Regions market's universe the fields were chosen in. */
   universe: string
   regions: string[]
-  /** BRAIN's region-agnostic universe size: LARGE, MEDIUM or SMALL. */
-  size: 'LARGE' | 'MEDIUM' | 'SMALL'
+  /** BRAIN's region-agnostic universe size: LARGE, MEDIUM, SMALL, or RANDOM per Alpha. */
+  size: 'LARGE' | 'MEDIUM' | 'SMALL' | 'RANDOM'
   field_ids: string[]
   dataset_ids: string[]
   rank_by: string | null
@@ -26,6 +26,8 @@ export interface RegionAgnosticRequest {
   simulations: number
   /** Research papers the LLM draws on, one a call in turn. */
   research_ids: number[]
+  /** `shapes`: no LLM, the built-in shapes write the Alphas. */
+  writer: 'llm' | 'shapes'
 }
 
 const B = '/api/region-agnostic-lab'

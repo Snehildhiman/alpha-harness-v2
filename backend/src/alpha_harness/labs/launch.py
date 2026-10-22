@@ -172,6 +172,11 @@ class SearchRequest(BaseModel):
     #: ``dataset_ids`` are theirs.
     field_ids: list[str] = Field(default_factory=list, max_length=MAX_PICKED_FIELDS)
     vector_operators: list[str] = Field(default_factory=list)
+    #: The universes searched; empty: every downloaded one, ``universe`` first.
+    universes: list[str] = Field(default_factory=list, max_length=20)
+    #: Each Alpha's universe drawn at random among those searched that carry its fields,
+    #: instead of the one the search learns pays best.
+    random_universe: bool = False
     #: What the lab searches. Empty is refused: see :data:`NO_NEUTRALIZATION`.
     neutralizations: list[str] = Field(default_factory=list, max_length=20)
     decay: int = 0
@@ -206,6 +211,17 @@ async def market_for(body: SearchRequest, state: Any, need: tuple[str, ...] = ()
     legal = legal_choices(schema, body.region, body.delay)
     universes = await synced_universes(state, legal, body.region, body.delay, body.universe)
     downloaded = bool(universes)
+    offered = list(universes)
+    if body.universes and universes:
+        wanted = set(body.universes)
+        if kept := [u for u in universes if u in wanted]:
+            universes = kept
+        else:
+            # Ticked in another market: this one searches all of its own.
+            warnings.append(
+                f"None of the ticked universes is a downloaded {region_label(body.region)} "
+                f"delay {body.delay} universe, so every downloaded one is searched."
+            )
     neutralizations = await neutralizations_for(
         state, body.region, body.delay, body.neutralizations
     )
@@ -289,6 +305,7 @@ async def market_for(body: SearchRequest, state: Any, need: tuple[str, ...] = ()
         "pool": pool,
         "neutralizations": neutralizations,
         "vector": vector_ops,
+        "offered": offered,
         "problems": problems,
         "warnings": warnings,
     }

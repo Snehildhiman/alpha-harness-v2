@@ -1,13 +1,15 @@
 """Region Agnostic Lab: region-agnostic fields, the regions to run them in, then a task.
 
-BRAIN runs only two region-agnostic simulations at a time. This lab runs none: the LLM writes
-an expression, and it is simulated as an ordinary Alpha in each chosen region that carries all
-its fields, with the same settings but the region. Those runs batch ten to a core like any
-other. Nothing here calls the LLM or simulates; the preview shows the exact first prompt.
+BRAIN runs only two region-agnostic simulations at a time. This lab runs none: the LLM, or
+with ``writer="shapes"`` the built-in shapes and no LLM at all, writes an expression, and it
+is simulated as an ordinary Alpha in each chosen region that carries all its fields, with the
+same settings but the region. Those runs batch ten to a core like any other. Nothing here
+calls the LLM or simulates; the preview shows the exact first prompt.
 """
 
 from __future__ import annotations
 
+import random
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Query
@@ -15,7 +17,7 @@ from pydantic import BaseModel, Field
 
 from ..brain.schemas import REGION_AGNOSTIC_REGION
 from ..db.models import utcnow
-from ..labs import power_pool, search
+from ..labs import power_pool, ra_shapes, search
 from ..labs.launch import (
     MAX_PICKED_FIELDS,
     NO_NEUTRALIZATION,
@@ -32,7 +34,7 @@ from ..llm.text import estimate_tokens
 from ..research.service import first_brief
 from ..schemas import Out
 from .deps import State, refuse
-from .power_pool_lab import PowerPoolModel, PowerPoolPrompt, llm_models
+from .power_pool_lab import PowerPoolModel, PowerPoolPrompt, llm_models, writes
 from .prompts import chosen
 
 router = APIRouter(prefix="/api/region-agnostic-lab", tags=["region-agnostic-lab"])
@@ -44,7 +46,8 @@ class RegionAgnosticRequest(BaseModel):
     universe: str | None = None
     #: The regions to run in, and the region-agnostic universe size that says each one's.
     regions: list[str] = Field(default_factory=list, max_length=len(power_pool.RA_MARKETS))
-    size: Literal["LARGE", "MEDIUM", "SMALL"] = "LARGE"
+    #: ``RANDOM``: each Alpha at a size drawn at random, the same in every region.
+    size: Literal["LARGE", "MEDIUM", "SMALL", "RANDOM"] = "LARGE"
     field_ids: list[str] = Field(default_factory=list, max_length=MAX_PICKED_FIELDS)
     dataset_ids: list[str] = Field(default_factory=list, max_length=200)
     rank_by: str | None = Field(default=None, max_length=160)
@@ -56,6 +59,8 @@ class RegionAgnosticRequest(BaseModel):
     simulations: int = Field(default=0, ge=0, le=search.MAX_SIMULATIONS)
     #: Research papers to draw ideas from, one a call in turn.
     research_ids: list[int] = Field(default_factory=list, max_length=50)
+    #: ``shapes``: no LLM; the built-in shapes write the Alphas (:mod:`..labs.ra_shapes`).
+    writer: Literal["llm", "shapes"] = "llm"
 
 
 class RegionChoice(Out):
@@ -89,6 +94,8 @@ class RegionAgnosticPreview(Out):
     neutralizations: list[str]
     llm_calls: int
     prompt: PowerPoolPrompt | None
+    #: With the built-in shapes: a few of the expressions the first call would write.
+    sample: list[str] = Field(default_factory=list)
     problems: list[str]
     warnings: list[str]
 
@@ -139,22 +146,51 @@ async def _plan(body: RegionAgnosticRequest, state: Any) -> dict[str, Any]:
             "Choose datasets or fields in the Data Explorer's All Regions market: tick whole "
             "datasets in More filters, or single fields in the table."
         )
+    shapes = body.writer == "shapes"
     models = {m["ref"]: m for m in await llm_models(state)}
-    ref = body.model or next(iter(models), "")
-    info = state.llm.registry.get(ref)
-    if not ref:
+    ref = "" if shapes else body.model or next(iter(models), "")
+    info = None if shapes else state.llm.registry.get(ref)
+    if shapes:
+        pass
+    elif not ref:
         problems.append("No model is set up. Set one up under LLM Integration › Models.")
     elif info is None:
         problems.append(f"{ref} is not set up. Set it up under LLM Integration › Models.")
     elif info.ref not in models:
         problems.append(f"{info.id} can't run: no enabled Key for it. Add one in LLM Integration.")
+    if info is not None and not writes(info.id):
+        warnings.append(
+            f"{info.id} is built for something else (translation, speech, images or live audio) "
+            "and rarely writes usable expressions. Choose a chat or reasoning model."
+        )
 
     offered = {r["region"]: r for r in await _regions(state, body.delay)}
     regions = [r for r in dict.fromkeys(body.regions) if r in offered]
     if len(regions) < power_pool.MIN_REGIONS:
         problems.append(f"Choose at least {power_pool.MIN_REGIONS} regions to run in.")
     markets: dict[str, str] = {}
-    for region in regions:
+    size_universes: dict[str, dict[str, str]] = {}
+    if body.size == "RANDOM":
+        for size, sized in power_pool.RA_UNIVERSES.items():
+            here = {
+                r: sized[r] for r in regions if r in sized and sized[r] in offered[r]["universes"]
+            }
+            if here:
+                size_universes[size] = here
+        for region in regions:
+            first = next((m[region] for m in size_universes.values() if region in m), None)
+            if first is None:
+                problems.append(
+                    f"No {region} region-agnostic universe at delay {body.delay} is downloaded. "
+                    "Sync one in Sync with BRAIN, or leave the region out."
+                )
+            else:
+                markets[region] = first
+        if len(size_universes) < 2:
+            warnings.append(
+                "Only one size is downloaded in these regions, so Random runs at that one."
+            )
+    for region in regions if body.size != "RANDOM" else ():
         universe = power_pool.RA_UNIVERSES[body.size][region]
         if universe not in offered[region]["universes"]:
             problems.append(
@@ -176,7 +212,7 @@ async def _plan(body: RegionAgnosticRequest, state: Any) -> dict[str, Any]:
         problems.append("The chosen regions share none of the chosen neutralizations.")
 
     prompt_name, system = await chosen(state, power_pool.RA_KIND, body.prompt_id)
-    if not system.strip():
+    if not shapes and not system.strip():
         problems.append(f"“{prompt_name}” is empty. Write it in LLM Prompts, or choose another.")
     run = RegionAgnosticParams(
         region=REGION_AGNOSTIC_REGION,
@@ -190,8 +226,11 @@ async def _plan(body: RegionAgnosticRequest, state: Any) -> dict[str, Any]:
         dataset_ids=body.dataset_ids,
         rank_by=body.rank_by,
         size=body.size,
+        size_universes=size_universes,
         research_ids=body.research_ids,
+        writer=body.writer,
     )
+    sample: list[str] = []
     fields = 0
     per_region: list[dict[str, Any]] = []
     lonely = 0
@@ -220,6 +259,19 @@ async def _plan(body: RegionAgnosticRequest, state: Any) -> dict[str, Any]:
                     f"{left:,} chosen fields are in none of the chosen regions, or are grouping "
                     "fields, so the LLM won't see them."
                 )
+            if shapes and operators:
+                written, _ = ra_shapes.write(
+                    ctx,
+                    {str(o.get("name")) for o in operators},
+                    random.Random(7),
+                    count=8,
+                    offset=0,
+                )
+                sample = [w["expression"] for w in written]
+                if not written:
+                    problems.append(
+                        "None of the built-in shapes fits these fields with your operators."
+                    )
             if info is not None and operators:
                 research = await first_brief(state.db, body.research_ids)
                 user, shown = power_pool.user_prompt(
@@ -238,8 +290,10 @@ async def _plan(body: RegionAgnosticRequest, state: Any) -> dict[str, Any]:
                         "Max Prompt Tokens, or choose fewer fields."
                     )
     # Each written Alpha is a simulation per region, so a call fills more of the target.
-    per_call = power_pool.PER_CALL * max(1, len(markets))
-    calls = -(-body.simulations // per_call)
+    per_call = (power_pool.SHAPES_PER_CALL if shapes else power_pool.PER_CALL) * max(
+        1, len(markets)
+    )
+    calls = 0 if shapes else -(-body.simulations // per_call)
     left = models[info.ref]["remainingToday"] if info and info.ref in models else None
     if info is not None and left is not None and calls > left:
         warnings.append(
@@ -253,6 +307,7 @@ async def _plan(body: RegionAgnosticRequest, state: Any) -> dict[str, Any]:
         "neutralizations": neutralizations,
         "llmCalls": calls,
         "prompt": prompt,
+        "sample": sample,
         "problems": problems,
         "warnings": warnings,
         "run": run,
@@ -277,10 +332,10 @@ async def add_task(body: RegionAgnosticRequest, state: State) -> AddedTask:
         raise refuse(422, "region_agnostic_blocked", plan["problems"][0])
     run: RegionAgnosticParams = plan["run"]
     run.dataset_ids = body.dataset_ids
-    run.model = plan["model"]
+    run.model = "" if body.writer == "shapes" else plan["model"]
     run.cores = body.cores
     run.llm = {"calls": 0}
-    if body.prompt_id is not None:
+    if body.prompt_id is not None and body.writer == "llm":
         run.prompt_id = body.prompt_id
         run.prompt_name = plan["promptName"]
         run.system = plan["system"]
@@ -292,6 +347,10 @@ async def add_task(body: RegionAgnosticRequest, state: State) -> AddedTask:
         simulations=body.simulations,
         batch_size=body.cores * 10,
         template_source=(
-            "# Region Agnostic Lab writes its expressions with an LLM; there is no template."
+            "# Region Agnostic Lab, built-in shapes (no LLM): see labs/ra_shapes.py."
+            if body.writer == "shapes"
+            else "# Region Agnostic Lab writes its expressions with an LLM; there is no template."
         ),
+        label=f"Region Agnostic · {'no LLM' if body.writer == 'shapes' else 'LLM'} · "
+        f"{', '.join(run.regions)}",
     )

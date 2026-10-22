@@ -27,6 +27,8 @@ export interface EvolutionRequest {
   mutation_rate: number
   /** Needed to add a task; a preview uses it to size the population. */
   simulations?: number
+  /** Other universes children also run in, one at random per child. */
+  child_universes?: string[]
 }
 
 const B = '/api/evolution-lab'

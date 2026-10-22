@@ -8,6 +8,8 @@ export interface EvolutionDraft {
   region: string
   delay: number
   universe: string
+  /** Other universes children also run in, one drawn at random per child. */
+  childUniverses?: string[]
   seedIds: string[]
   /** `null` until chosen in the form: until then Settings' default applies. */
   cores: number | null

@@ -13,6 +13,7 @@ import { describeFilter, type FieldFilterState } from '@/screens/data/state'
 import { NeutralizationPicker } from '@/screens/research-labs/neutralization'
 import {
   Button,
+  Checkbox,
   Chips,
   Disclosure,
   Empty,
@@ -82,9 +83,57 @@ export interface LabPlan {
   fields: { total: number; matrix: number; vector: number }
   leftOut: { vector: number }
   universes: string[]
+  /** Every downloaded universe of the market, to choose from. */
+  offeredUniverses?: string[] | undefined
   sample: { expression: string; settings: Record<string, unknown> }[]
   problems: string[]
   warnings: string[]
+}
+
+/**
+ * Which universes a lab's Alphas run in. None ticked: every downloaded one, and the search
+ * learns which pays. Random draws each Alpha's universe at random among those searched.
+ */
+export function UniverseSetting({
+  offered,
+  value,
+  random,
+  onChange,
+  learns = true,
+}: {
+  offered: string[]
+  value: string[]
+  random: boolean
+  onChange: (change: { universes?: string[]; randomUniverse?: boolean }) => void
+  /** False where the lab never steers by universe, so the hint does not claim it. */
+  learns?: boolean
+}) {
+  if (offered.length === 0) return null
+  const ticked = value.filter((u) => offered.includes(u))
+  return (
+    <Fieldset
+      legend="Universes"
+      hint={
+        ticked.length === 0
+          ? `None ticked: every downloaded universe${learns && !random ? ', and the search learns which pays' : ''}.`
+          : `Only ${ticked.join(', ')}.`
+      }
+    >
+      <div className="flex flex-col gap-2">
+        <Chips
+          label="Universes"
+          items={offered.map((u) => ({ value: u, label: u }))}
+          value={ticked}
+          onChange={(next) => onChange({ universes: next })}
+        />
+        <Checkbox
+          label="Random: each Alpha in a universe drawn at random (among those holding its fields)"
+          checked={random}
+          onChange={(next) => onChange({ randomUniverse: next })}
+        />
+      </div>
+    </Fieldset>
+  )
 }
 
 /** One removable chip: a dataset, or a ranked field. */
@@ -286,6 +335,12 @@ export function SettingsPanel({
               onChange={(decay) => set({ decay })}
             />
           </Fieldset>
+          <UniverseSetting
+            offered={plan?.offeredUniverses ?? []}
+            value={draft.universes ?? []}
+            random={draft.randomUniverse ?? false}
+            onChange={(change) => set(change)}
+          />
           {showVector && (
             <Fieldset legend="Vector Operators">
               <Chips

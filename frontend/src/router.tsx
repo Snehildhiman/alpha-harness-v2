@@ -11,7 +11,7 @@ import {
   redirect,
 } from '@tanstack/react-router'
 import { Shell } from '@/shell/shell'
-import { Button, Empty, ErrorNotice, Page, Panel } from '@/ui/kit'
+import { Button, Empty, ErrorNotice, Page, Panel, Skeleton } from '@/ui/kit'
 
 const root = createRootRoute({ component: Shell })
 
@@ -353,9 +353,22 @@ function NotFound() {
   )
 }
 
+/** Shown at once on a click while a screen's code arrives, so the old screen never lingers. */
+function Pending() {
+  return (
+    <Page>
+      <Skeleton className="h-8 w-64" label="Opening the screen" />
+      <Skeleton className="h-64 w-full" />
+    </Page>
+  )
+}
+
 export const router = createRouter({
   routeTree,
   defaultPreload: 'intent',
+  defaultPendingComponent: Pending,
+  defaultPendingMs: 80,
+  defaultPendingMinMs: 0,
   defaultErrorComponent: RouteError,
   defaultNotFoundComponent: NotFound,
 })
@@ -363,5 +376,14 @@ export const router = createRouter({
 declare module '@tanstack/react-router' {
   interface Register {
     router: typeof router
+  }
+}
+
+/** Every screen's code, fetched once the app is idle: a click then switches screens without
+ * waiting on the network, even while slow requests hold the browser's few connections. */
+export function preloadScreens() {
+  for (const route of Object.values(router.routesById)) {
+    const component = route.options.component as { preload?: () => Promise<void> } | undefined
+    void component?.preload?.().catch(() => undefined)
   }
 }

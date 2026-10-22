@@ -8,6 +8,7 @@ dependency, so nothing constructs its own connections and shutdown is determinis
 import asyncio
 import contextlib
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 
 import structlog
@@ -53,6 +54,9 @@ from .vault.backfill import Backfill
 from .vault.store import AlphaVault
 
 log = structlog.get_logger(__name__)
+
+#: Worker threads for catalog reads, predictions and judging.
+WORKERS = 32
 
 #: How far back startup looks for finished Alphas the vault missed. Older ones reach it
 #: through Sync from BRAIN.
@@ -159,6 +163,12 @@ class AppState:
             log.warning("startup.warm_failed", exc_info=True)
 
     async def startup(self) -> None:
+        # Every catalog read, model prediction and judgement runs on the default thread pool.
+        # Python sizes it from the CPU count (as few as 8 on a laptop), so a sync, an import
+        # and a training run could fill it and every page would wait behind them.
+        asyncio.get_running_loop().set_default_executor(
+            ThreadPoolExecutor(max_workers=WORKERS, thread_name_prefix="harness")
+        )
         # The catalog's single-writer lock is this process's claim on the data directory, so it
         # comes first: a second backend must fail here, before it backs up or migrates.
         await self.catalog.open()

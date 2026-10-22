@@ -34,6 +34,10 @@ export interface LabDraft {
   vectorOperators: string[] | null
   /** Empty leaves the lab on its own four group neutralizations. */
   neutralizations: string[]
+  /** The universes searched; empty searches every downloaded one. */
+  universes?: string[]
+  /** Each Alpha's universe drawn at random among those searched. */
+  randomUniverse?: boolean
 }
 
 export const LAB_DEFAULTS: LabDraft = {
@@ -175,6 +179,8 @@ export function labBody(draft: LabDraft, vectorOperators: string[], cores: numbe
     neutralizations: draft.neutralizations,
     decay: draft.decay,
     cores,
+    universes: draft.universes ?? [],
+    random_universe: draft.randomUniverse ?? false,
   }
 }
 

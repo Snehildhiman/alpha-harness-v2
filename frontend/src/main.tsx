@@ -9,7 +9,7 @@ import { Toaster, toast } from 'sonner'
 import { ApiError, errorMessage } from '@/api/http'
 import { useLive } from '@/lib/live'
 import { telemetry } from '@/lib/ws'
-import { router } from '@/router'
+import { preloadScreens, router } from '@/router'
 
 /** Any call BRAIN answers with a verification demand raises the global banner. */
 const noteVerification = (error: unknown) => {
@@ -34,7 +34,8 @@ const queryClient = new QueryClient({
       // is, the daily limit is not.
       retry: (count, error) => {
         if (count >= 2) return false
-        if (error instanceof ApiError) return error.status === 0 || error.retryable
+        if (error instanceof ApiError)
+          return error.body.code !== 'timeout' && (error.status === 0 || error.retryable)
         return true
       },
     },
@@ -45,6 +46,9 @@ const root = document.getElementById('root')
 if (!root) throw new Error('index.html has no #root element')
 
 telemetry.connect()
+
+const idle = window.requestIdleCallback ?? ((run: () => void) => window.setTimeout(run, 1500))
+idle(preloadScreens)
 
 createRoot(root).render(
   <StrictMode>

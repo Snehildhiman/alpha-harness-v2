@@ -11,6 +11,7 @@ from ..catalog.markets import markets as list_markets
 from ..catalog.pyramids import pyramid_grid
 from ..catalog.queries import FieldFilter, Tuple4
 from ..catalog.sync import SyncTarget
+from ..recent import Recent
 from ..schemas import Out, SyncAllRun
 from .deps import State, refuse
 
@@ -304,8 +305,20 @@ async def cancel_run(run_id: int, state: State) -> Cancelled:
 
 @router.get("/pyramids")
 async def pyramids(state: State) -> PyramidGrid:
-    """Every pyramid: its multiplier, this quarter's alpha count, and download state."""
-    return PyramidGrid.model_validate(await pyramid_grid(state.endpoints, state.catalog))
+    """Every pyramid: its multiplier, this quarter's alpha count, and download state.
+
+    From the last read; a fresh one follows in the background once it is ten minutes old.
+    """
+    who = state.auth.session.user_id or "-"
+
+    async def read() -> PyramidGrid:
+        return PyramidGrid.model_validate(await pyramid_grid(state.endpoints, state.catalog))
+
+    return await _pyramids.get(who, read)
+
+
+#: Multipliers and counts move slowly; BRAIN is asked at most every ten minutes.
+_pyramids = Recent(ttl=600)
 
 
 @router.get("/scopes")

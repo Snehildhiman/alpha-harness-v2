@@ -197,6 +197,7 @@ def ask_points(
             study.enqueue_trial(lab.first_pass(space, field_id))
 
     choices = lab.field_choices(space)
+    rng = random.Random()
     picked: list[tuple[Any, dict[str, Any], SimulationRequest]] = []
     keys: set[tuple[str, str]] = set()
     for _ in range(want * 5):
@@ -204,6 +205,8 @@ def ask_points(
             break
         trial = study.ask()
         params, request = lab.draw(trial, run, choices)
+        if request is not None and space.get("randomUniverse"):
+            request = search.reroll_universe(request, space, rng)
         if (
             request is not None
             and schema

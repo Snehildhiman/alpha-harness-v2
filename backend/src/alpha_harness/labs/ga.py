@@ -455,18 +455,31 @@ def child(
     return None
 
 
+def universe_for(expression: str, run: EvolutionParams) -> str:
+    """The breeding universe, or with other universes chosen, one drawn at random among it
+    and those that hold every field the child reads."""
+    if not run.universe_absent:
+        return run.universe
+    names = set(search.NAME.findall(expression))
+    fit = [run.universe] + [
+        u for u, missing in run.universe_absent.items() if not names & set(missing)
+    ]
+    return random.choice(fit)
+
+
 def request_for(tree: Node, settings: dict[str, Any], run: EvolutionParams) -> SimulationRequest:
+    expression = render(tree)
     return SimulationRequest(
         settings=SimulationSettings(
             region=run.region,
             delay=run.delay,
-            universe=run.universe,
+            universe=universe_for(expression, run),
             neutralization=settings["neutralization"],
             decay=int(settings["decay"]),
             truncation=float(settings["truncation"]),
             test_period=TEST_PERIOD,
         ),
-        regular=render(tree),
+        regular=expression,
     )
 
 

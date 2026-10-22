@@ -1,5 +1,6 @@
 """Repair: find near-misses, generate variants, let the models pick, simulate the best few."""
 
+import asyncio
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
@@ -10,18 +11,22 @@ from ..brain.schemas import (
     REGION_AGNOSTIC_REGION,
     SimulationRequest,
     SimulationSettings,
+    SimulationType,
 )
 from ..db.models import utcnow
 from ..engine.packer import MAX_BATCH
 from ..engine.slots import DEFAULT_SLOTS
+from ..labs import super_alpha
 from ..labs.launch import AddedTask, account_operators, add_study
-from ..labs.params import CORRELATION_BREAKER, BreakerParams
+from ..labs.params import CORRELATION_BREAKER, SUPER_LAB, BreakerParams, SuperParams
+from ..repair import super_repair
 from ..repair.generate import Reshape, Variant, variants
 from ..repair.rank import Score, at_least, near_miss, score
 from ..repair.transplant import Markets, Promotion, Transplant, promotions, ran_in, transplants
 from ..schemas import Out
 from ..separation import RA_MIN_REGIONS, Judged, Kind, Verdict
 from ..tools import correlation_breaker, settings_sampler
+from . import super_lab
 from .deps import State, refuse
 from .separation import (
     NO_FILTER,
@@ -166,6 +171,98 @@ def _rank(scored: list[tuple[Variant, Score | None]], rank_by: RankBy) -> None:
         return ((s.p_all or 0.0) < IMPROVE_FLOOR, -(figure if figure is not None else -9.0))
 
     scored.sort(key=key)
+
+
+async def _is_super(state: State, alpha_id: str) -> bool:
+    """From the judged vault, which is cached: no request to BRAIN."""
+    for item in await judge_vault(state):
+        if str(item.row.get("alpha_id")) == alpha_id:
+            return str(item.row.get("type") or item.row.get("sim_type") or "").upper() == "SUPER"
+    return False
+
+
+async def _super_plan(
+    state: State, alpha_id: str
+) -> tuple[RepairPlan, list[super_repair.SuperVariant], dict[str, Any]]:
+    body = await state.endpoints.alpha_body(alpha_id)
+    settings = dict(body.get("settings") or {})
+    found = super_repair.variants(body) if body else []
+    problems = [] if found else [f"{alpha_id} could not be read from BRAIN."]
+    plan = RepairPlan(
+        alpha_id=alpha_id,
+        expression=super_repair.code_of(body, "combo"),
+        kind=Kind.SUPER.value,
+        power_pool=False,
+        region=str(settings.get("region") or ""),
+        generated=len(found),
+        ranked=False,
+        variants=[
+            RepairVariant(
+                id=v.id,
+                edit=v.edit,
+                family=v.family,
+                expression=v.combo if v.family == "combo" else v.selection,
+                neutralization=v.settings.get("neutralization"),
+                decay=v.settings.get("decay"),
+                truncation=v.settings.get("truncation"),
+                p_all=None,
+                p_correlation=None,
+                correlation=None,
+                sharpe=None,
+                fitness=None,
+            )
+            for v in found[:SHOWN]
+        ],
+        problems=problems,
+    )
+    return plan, found, settings
+
+
+async def _queue_super(
+    state: State, alpha_id: str, take: int, cores: int, start: bool
+) -> AddedTask:
+    found, chosen, settings = await _super_plan(state, alpha_id)
+    if found.problems:
+        raise refuse(422, "repair_blocked", found.problems[0])
+    picked = chosen[:take]
+    cores = min(cores, super_lab.MAX_CORES)
+    candidates = [
+        super_alpha.Candidate(
+            super_alpha.Recipe(v.edit, v.selection),
+            super_alpha.Recipe("", v.combo),
+            SimulationRequest(
+                type=SimulationType.SUPER,
+                settings=SimulationSettings.model_validate(
+                    v.settings | {"simulationMode": FULL_MODE}
+                ),
+                selection=v.selection,
+                combo=v.combo,
+            ),
+        )
+        for v in picked
+    ]
+    return await add_study(
+        state,
+        now=utcnow(),
+        sampler=SUPER_LAB,
+        params=SuperParams(
+            region=str(settings.get("region") or ""),
+            delay=int(settings.get("delay") or 0),
+            universe=str(settings.get("universe") or ""),
+            neutralization=str(settings.get("neutralization") or ""),
+            selection_limit=int(settings.get("selectionLimit") or 30),
+            activation=[str(settings.get("componentActivation") or "IS")],
+            recipes=[v.edit for v in picked],
+            cores=cores,
+        ),
+        simulations=len(candidates),
+        batch_size=cores * MAX_BATCH,
+        template_source=found.expression,
+        template_name=f"Repair · {alpha_id}",
+        label=f"Repair SuperAlpha · {alpha_id}",
+        run=start,
+        seeds=super_alpha.seed_trials(candidates),
+    )
 
 
 async def _plan(
@@ -342,7 +439,10 @@ async def plan(
 ) -> RepairPlan:
     """Generate every variant of one Alpha and rank them. Simulates nothing. ``rankBy``
     ``sharpe`` or ``fitness`` improves an Alpha that already passes."""
-    return (await _plan(state, alpha_id.strip(), rank_by))[0]
+    alpha_id = alpha_id.strip()
+    if await _is_super(state, alpha_id):
+        return (await _super_plan(state, alpha_id))[0]
+    return (await _plan(state, alpha_id, rank_by))[0]
 
 
 @router.post("/tasks")
@@ -358,6 +458,8 @@ async def queue(
     (the only mode that runs the correlation checks this is for)."""
     if cores > state.engine.slots:
         raise refuse(422, "too_many_cores", f"The engine has {state.engine.slots} slots.")
+    if await _is_super(state, alpha_id.strip()):
+        return await _queue_super(state, alpha_id.strip(), take, cores, start)
     found, scored, settings = await _plan(state, alpha_id.strip(), rank_by)
     if found.problems:
         raise refuse(422, "repair_blocked", found.problems[0])
@@ -476,25 +578,33 @@ async def transplant_rows(
 ) -> tuple[TransplantPlan, list[tuple[Transplant, TransplantRow]]]:
     """``filters`` narrow the *source* Alphas (their dataset, figures, settings)."""
     markets, known, ran = await _markets_and_runs(state)
-    sources: list[dict[str, Any]] = []
-    verdicts: dict[str, tuple[str, float | None]] = {}
     vault = await judge_vault(state)
     wanted = filters.dataset or filters.category or filters.theme
     data = await data_of(state, vault) if wanted else {}
-    for item in vault:
-        judged_as = item.judgement.kind
-        if judged_as not in _TRANSPLANT_KINDS or item.judgement.verdict not in _TRANSPLANT_PASSING:
-            continue
-        if not filters.keeps(item, data):
-            continue
-        sources.append(item.row | {"power_pool": judged_as != Kind.REGULAR})
-        verdicts[str(item.row.get("alpha_id"))] = (
-            item.judgement.verdict.value,
-            figure(item, "sharpe"),
-        )
-    # Strongest sources first, so the pool the models score holds the likeliest.
-    sources.sort(key=lambda r: -(r.get("sharpe") or 0.0))
-    found = transplants(sources, markets, ran, known_fields=known)
+
+    def gather() -> tuple[list[Transplant], dict[str, tuple[str, float | None]]]:
+        # Off the event loop: a vault of 50,000 and every region each could move to.
+        sources: list[dict[str, Any]] = []
+        verdicts: dict[str, tuple[str, float | None]] = {}
+        for item in vault:
+            judged_as = item.judgement.kind
+            if (
+                judged_as not in _TRANSPLANT_KINDS
+                or item.judgement.verdict not in _TRANSPLANT_PASSING
+            ):
+                continue
+            if not filters.keeps(item, data):
+                continue
+            sources.append(item.row | {"power_pool": judged_as != Kind.REGULAR})
+            verdicts[str(item.row.get("alpha_id"))] = (
+                item.judgement.verdict.value,
+                figure(item, "sharpe"),
+            )
+        # Strongest sources first, so the pool the models score holds the likeliest.
+        sources.sort(key=lambda r: -(r.get("sharpe") or 0.0))
+        return transplants(sources, markets, ran, known_fields=known), verdicts
+
+    found, verdicts = await asyncio.to_thread(gather)
     if region:
         found = [t for t in found if t.region == region]
     if kind is not None:
@@ -521,32 +631,40 @@ async def transplant_rows(
                 for t in pool
             ]
         )
-        scores = [
-            score(p, Kind.POWER_POOL if t.power_pool else Kind.REGULAR)
-            for t, p in zip(pool, predicted, strict=True)
+
+        def scored() -> list[Score | None]:
+            return [
+                score(p, Kind.POWER_POOL if t.power_pool else Kind.REGULAR)
+                for t, p in zip(pool, predicted, strict=True)
+            ]
+
+        scores = await asyncio.to_thread(scored)
+
+    def build() -> list[tuple[Transplant, TransplantRow]]:
+        return [
+            (
+                t,
+                TransplantRow(
+                    id=f"t{i}",
+                    source_id=t.source_id,
+                    expression=t.expression,
+                    origin=t.origin,
+                    region=t.region,
+                    universe=t.universe,
+                    delay=t.delay,
+                    source_verdict=verdicts[t.source_id][0],
+                    kind="power_pool" if t.power_pool else "regular",
+                    source_sharpe=verdicts[t.source_id][1],
+                    p_all=s.p_all if s else None,
+                    correlation=s.correlation if s else None,
+                    sharpe=s.sharpe if s else None,
+                    fitness=s.fitness if s else None,
+                ),
+            )
+            for i, (t, s) in enumerate(zip(pool, scores, strict=True))
         ]
-    rows = [
-        (
-            t,
-            TransplantRow(
-                id=f"t{i}",
-                source_id=t.source_id,
-                expression=t.expression,
-                origin=t.origin,
-                region=t.region,
-                universe=t.universe,
-                delay=t.delay,
-                source_verdict=verdicts[t.source_id][0],
-                kind="power_pool" if t.power_pool else "regular",
-                source_sharpe=verdicts[t.source_id][1],
-                p_all=s.p_all if s else None,
-                correlation=s.correlation if s else None,
-                sharpe=s.sharpe if s else None,
-                fitness=s.fitness if s else None,
-            ),
-        )
-        for i, (t, s) in enumerate(zip(pool, scores, strict=True))
-    ]
+
+    rows = await asyncio.to_thread(build)
     rows.sort(key=lambda tr: -(tr[1].p_all if tr[1].p_all is not None else -1.0))
     plan = TransplantPlan(
         found=len(found),

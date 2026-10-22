@@ -360,12 +360,7 @@ async def _tally(alphas: AlphaVault, where: str, params: list[Any]) -> tuple[lis
         f"SELECT a.alpha_id, hash(a.checks) AS h, a.simulation_mode FROM alpha a WHERE {where}",  # noqa: S608
         params,
     )
-    stale = [
-        str(k["alpha_id"])
-        for k in keys
-        if (seen := _JUDGED.get(str(k["alpha_id"]))) is None
-        or seen[0] != (k["h"], k["simulation_mode"])
-    ]
+    stale = await asyncio.to_thread(_stale, keys)
     columns = "a.alpha_id, a.checks, a.simulation_mode, hash(a.checks) AS h"
     if len(stale) > _RESCAN:
         rows = await alphas.catalog.query(f"SELECT {columns} FROM alpha a WHERE {where}", params)  # noqa: S608
@@ -379,7 +374,20 @@ async def _tally(alphas: AlphaVault, where: str, params: list[Any]) -> tuple[lis
         rows = []
     # Off the event loop: a cold start parses every row's JSON, which takes seconds.
     await asyncio.to_thread(_judge, rows)
+    return await asyncio.to_thread(_count, keys)
 
+
+def _stale(keys: list[dict[str, Any]]) -> list[str]:
+    """The rows not judged yet, or changed since. Off the loop: a vault holds 50,000."""
+    return [
+        str(k["alpha_id"])
+        for k in keys
+        if (seen := _JUDGED.get(str(k["alpha_id"]))) is None
+        or seen[0] != (k["h"], k["simulation_mode"])
+    ]
+
+
+def _count(keys: list[dict[str, Any]]) -> tuple[list[str], int, int]:
     ready: list[str] = []
     pending = near = 0
     for k in keys:

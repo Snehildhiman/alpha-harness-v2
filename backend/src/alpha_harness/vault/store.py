@@ -8,6 +8,7 @@ if the series are kept. The stored series rebuilds the platform's own figures (s
 :mod:`.metrics`), so a mix can be judged before a simulation is spent on it.
 """
 
+import asyncio
 import itertools
 import json
 from datetime import UTC, date, datetime
@@ -673,7 +674,9 @@ class AlphaVault:
         if not alpha_ids:
             return {}
         placeholders = ", ".join("?" for _ in alpha_ids)
-        rows = await self.catalog.query(
+        # Arrow, not a dict per row: building a few hundred thousand row objects holds
+        # Python's lock and stalls every other request while it runs.
+        table = await self.catalog.arrow(
             f"""
             SELECT alpha_id, date, pnl, turnover FROM alpha_pnl
             WHERE alpha_id IN ({placeholders}) AND turnover IS NOT NULL
@@ -681,13 +684,7 @@ class AlphaVault:
             """,  # noqa: S608
             list(alpha_ids),
         )
-        grouped: dict[str, dict[date, tuple[float, float]]] = {}
-        for row in rows:
-            grouped.setdefault(str(row["alpha_id"]), {})[row["date"]] = (
-                float(row["pnl"] or 0.0),
-                float(row["turnover"]),
-            )
-        return grouped
+        return await asyncio.to_thread(_group_series, table)
 
     async def pnl_grid(self, alpha_ids: list[str]) -> PnlGrid:
         """Of these Alphas, the ones holding a current daily PnL (turnover or not); every date
@@ -834,3 +831,14 @@ class AlphaVault:
             list(alpha_ids),
         )
         return {str(r["alpha_id"]): r for r in rows}
+
+
+def _group_series(table: Any) -> dict[str, dict[date, tuple[float, float]]]:
+    grouped: dict[str, dict[date, tuple[float, float]]] = {}
+    ids = table.column("alpha_id").to_pylist()
+    days = table.column("date").to_pylist()
+    pnl = np.nan_to_num(table.column("pnl").to_numpy(zero_copy_only=False).astype(float)).tolist()
+    turnover = table.column("turnover").to_numpy(zero_copy_only=False).astype(float).tolist()
+    for alpha_id, day, p, t in zip(ids, days, pnl, turnover, strict=True):
+        grouped.setdefault(str(alpha_id), {})[day] = (p, t)
+    return grouped

@@ -23,7 +23,7 @@ from ..llm.keys import BudgetExhaustedError, LLMError
 from ..llm.prompts import POWER_POOL_LAB, REGION_AGNOSTIC_LAB
 from ..llm.text import FENCE
 from ..tasks import spawn
-from . import scheduler, search
+from . import ra_shapes, scheduler, search
 from .fastexpr import (
     GROUPING,
     MAX_FIELDS,
@@ -443,11 +443,16 @@ def draw_regions(
         )
     neutralization = rng.choice(run.neutralizations)
     decay = rng.choice(search.DECAYS)
+    universes = run.region_universes
+    if run.size == "RANDOM" and run.size_universes:
+        sizes = [m for m in run.size_universes.values() if all(region in m for region in regions)]
+        if sizes:
+            universes = rng.choice(sizes)
     return [
         SimulationSettings(
             region=region,
             delay=run.delay,
-            universe=run.region_universes[region],
+            universe=universes[region],
             neutralization=neutralization,
             decay=decay,
             truncation=search.TRUNCATION,
@@ -770,7 +775,8 @@ async def _write(optimizer: Optimizer, study_id: int) -> None:
                 dataset,
                 FieldFilter.model_validate(run.field_filter) if run.field_filter else None,
             )
-        if model is None:
+        shapes = ra is not None and ra.writer == "shapes"
+        if model is None and not shapes:
             return await _pause(
                 optimizer,
                 study_id,
@@ -791,47 +797,67 @@ async def _write(optimizer: Optimizer, study_id: int) -> None:
                 + " in the downloaded catalog. Sync it, then resume.",
             )
 
-        prompt_name, system = await _system(optimizer, run)
-        memory = await memory_of(optimizer, study_id, dataset)
         offset = int(by.get(dataset, {}).get("offset", 0))
-        research = await research_for(optimizer, run)
-        user, shown = user_prompt(
-            ctx, operators, run, memory, offset, model.prompt_tokens, system, research
-        )
-        entry: dict[str, Any] = {
-            "at": utcnow().isoformat(),
-            "dataset": dataset,
-            "model": model.id,
-            "prompt": prompt_name,
-            "fields": shown,
-        }
         items: list[dict[str, Any]] = []
         answered = False
-        try:
-            answer = await optimizer.llm.generate(
-                system=system,
-                user=user,
-                model_ref=model.ref,
-                response_schema=SCHEMA,
-                temperature=1.0,
+        if shapes or model is None:
+            items, shown = ra_shapes.write(
+                ctx,
+                {str(o.get("name")) for o in operators},
+                random.Random(),
+                count=SHAPES_PER_CALL,
+                offset=offset,
+                scores=await shape_scores(optimizer, study_id),
             )
             answered = True
-            items = parse_alphas(answer.text)[:40]
-            entry["tokens"] = answer.total_tokens
+            entry: dict[str, Any] = {
+                "at": utcnow().isoformat(),
+                "dataset": dataset,
+                "model": "Built-in shapes (no LLM)",
+                "prompt": "",
+                "fields": shown,
+            }
             if not items:
-                entry["error"] = "The answer was not the JSON asked for: " + answer.text[:200]
-        except BudgetExhaustedError as exc:
-            _retry[study_id] = time.monotonic() + max(5.0, exc.retry_after)
-            if exc.daily:
-                await _note(optimizer, study_id, f"Waiting for LLM budget: {exc}")
-            return None
-        except LLMError as exc:
-            _retry[study_id] = time.monotonic() + 60.0
-            entry["error"] = str(exc)[:300]
-            llm["failed"] = int(llm.get("failed") or 0) + 1
-            if llm["failed"] >= 3:
-                await _pause(optimizer, study_id, f"The LLM failed 3 times in a row: {exc}")
+                entry["error"] = "None of the shapes fits these fields and your operators."
+        else:
+            prompt_name, system = await _system(optimizer, run)
+            memory = await memory_of(optimizer, study_id, dataset)
+            research = await research_for(optimizer, run)
+            user, shown = user_prompt(
+                ctx, operators, run, memory, offset, model.prompt_tokens, system, research
+            )
+            entry = {
+                "at": utcnow().isoformat(),
+                "dataset": dataset,
+                "model": model.id,
+                "prompt": prompt_name,
+                "fields": shown,
+            }
+            try:
+                answer = await optimizer.llm.generate(
+                    system=system,
+                    user=user,
+                    model_ref=model.ref,
+                    response_schema=SCHEMA,
+                    temperature=1.0,
+                )
+                answered = True
+                items = parse_alphas(answer.text)[:40]
+                entry["tokens"] = answer.total_tokens
+                if not items:
+                    entry["error"] = "The answer was not the JSON asked for: " + answer.text[:200]
+            except BudgetExhaustedError as exc:
+                _retry[study_id] = time.monotonic() + max(5.0, exc.retry_after)
+                if exc.daily:
+                    await _note(optimizer, study_id, f"Waiting for LLM budget: {exc}")
                 return None
+            except LLMError as exc:
+                _retry[study_id] = time.monotonic() + 60.0
+                entry["error"] = str(exc)[:300]
+                llm["failed"] = int(llm.get("failed") or 0) + 1
+                if llm["failed"] >= 3:
+                    await _pause(optimizer, study_id, f"The LLM failed 3 times in a row: {exc}")
+                    return None
 
         table = operator_table(operators)
         rng = random.Random()
@@ -866,7 +892,8 @@ async def _write(optimizer: Optimizer, study_id: int) -> None:
                                         "dataset": dataset,
                                         "group": group,
                                         "region": settings["region"],
-                                    },
+                                    }
+                                    | ({"shape": item["shape"]} if "shape" in item else {}),
                                     distributions={},
                                     expression=expression,
                                     settings=settings,
@@ -929,6 +956,30 @@ async def _write(optimizer: Optimizer, study_id: int) -> None:
     except Exception:
         log.exception("power_pool.write_failed", study_id=study_id)
         _retry[study_id] = time.monotonic() + 60.0
+
+
+#: Alphas the built-in shapes write a call, each a simulation per region.
+SHAPES_PER_CALL = 40
+
+
+async def shape_scores(optimizer: Optimizer, study_id: int) -> dict[str, float]:
+    """Each shape's mean score so far in this task, from the Alphas BRAIN has scored."""
+    shape = func.json_extract(Trial.params, "$.shape")
+    score = func.json_extract(Trial.values, "$[0]")
+    async with optimizer.db.session() as session:
+        rows = (
+            await session.execute(
+                select(shape, func.avg(score))
+                .where(
+                    Trial.study_id == study_id,
+                    Trial.state == TrialState.COMPLETE,
+                    score > FAILURE,
+                    shape.is_not(None),
+                )
+                .group_by(shape)
+            )
+        ).all()
+    return {str(name): float(mean) for name, mean in rows if mean is not None}
 
 
 async def _system(optimizer: Optimizer, run: PowerPoolParams) -> tuple[str, str]:

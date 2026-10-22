@@ -12,6 +12,7 @@ import structlog
 from fastapi import APIRouter
 
 from ..catalog.pyramids import LIT_AT, next_quarter_start, quarter_start
+from ..recent import Recent
 from ..schemas import Out
 from .deps import State
 
@@ -35,8 +36,20 @@ class QuarterStanding(Out):
     alphas_per_pyramid: int
 
 
+#: BRAIN's quarter counts move only when you submit: re-read at most every ten minutes.
+_recent = Recent(ttl=600)
+
+
 @router.get("")
 async def standing(state: State) -> QuarterStanding:
+    """This quarter's standing, from the last read; a fresh read follows in the background
+    once it is ten minutes old."""
+    who = state.auth.session.user_id or "-"
+    today = datetime.now(UTC).date()
+    return await _recent.get(f"{who}:{quarter_start(today)}", lambda: _standing(state))
+
+
+async def _standing(state: State) -> QuarterStanding:
     """Submitted Alphas and formulated pyramids for the quarter in progress.
 
     Two reads, run together. Neither is derivable from the other: an Alpha belongs to as

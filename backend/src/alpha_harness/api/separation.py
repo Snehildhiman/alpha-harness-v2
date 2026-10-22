@@ -812,22 +812,27 @@ async def next_to_submit(
     judged = await judge_vault(state)
     wanted = filters.dataset or filters.category or filters.theme
     data = await data_of(state, judged) if wanted else {}
-    submitted = [
-        str(i.row.get("alpha_id")) for i in judged if i.judgement.verdict == Verdict.SUBMITTED
-    ]
-    for item in judged:
-        if item.judgement.verdict == Verdict.SUBMITTED:
-            submitted.extend(str(c.get("alpha_id")) for c in item.children)
-    candidates = [
-        i
-        for i in judged
-        if in_tab(i, tab)
-        and i.judgement.verdict in (Verdict.SUBMITTABLE, Verdict.RECHECK)
-        and filters.keeps(i, data)
-        and (not filters.region or filters.region == i.row.get("region"))
-    ]
-    candidates.sort(key=lambda i: -(figure(i, "sharpe") or float("-inf")))
-    candidates = candidates[:NEXT_MAX]
+
+    def pick() -> tuple[list[str], list[Judged]]:
+        # Off the event loop: a pass over the whole vault.
+        submitted = [
+            str(i.row.get("alpha_id")) for i in judged if i.judgement.verdict == Verdict.SUBMITTED
+        ]
+        for item in judged:
+            if item.judgement.verdict == Verdict.SUBMITTED:
+                submitted.extend(str(c.get("alpha_id")) for c in item.children)
+        candidates = [
+            i
+            for i in judged
+            if in_tab(i, tab)
+            and i.judgement.verdict in (Verdict.SUBMITTABLE, Verdict.RECHECK)
+            and filters.keeps(i, data)
+            and (not filters.region or filters.region == i.row.get("region"))
+        ]
+        candidates.sort(key=lambda i: -(figure(i, "sharpe") or float("-inf")))
+        return submitted, candidates[:NEXT_MAX]
+
+    submitted, candidates = await asyncio.to_thread(pick)
     # An RA family has no series of its own: its passing children stand for it.
     stand_in = {
         str(i.row.get("alpha_id")): (

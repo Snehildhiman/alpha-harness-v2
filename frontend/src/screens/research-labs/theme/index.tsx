@@ -14,6 +14,7 @@ import { http } from '@/api/http'
 import { fmt } from '@/lib/format'
 import { useScopeOptions } from '@/lib/scope'
 import { NeutralizationPicker } from '@/screens/research-labs/neutralization'
+import { UniverseSetting } from '@/screens/research-labs/task-settings'
 import {
   Badge,
   Button,
@@ -44,9 +45,13 @@ interface Body {
   decay: number
   cores: number
   simulations: number
+  universes: string[]
+  randomUniverse: boolean
 }
 
 const wire = (b: Body) => ({
+  universes: b.universes,
+  random_universe: b.randomUniverse,
   vector_operators: b.vectorOperators,
   region: b.region,
   dataset_ids: b.datasetIds,
@@ -71,6 +76,8 @@ export function ThemeLabScreen() {
   const [decay, setDecay] = useState(0)
   const [cores, setCores] = useState(4)
   const [simulations, setSimulations] = useState(500)
+  const [universes, setUniverses] = useState<string[]>([])
+  const [randomUniverse, setRandomUniverse] = useState(false)
   // Vector fields (several values a day) need a vec_ operator to become one number; most
   // analyst and model data is vector, so vec_avg is on from the start.
   const lab = useQuery({
@@ -106,6 +113,8 @@ export function ThemeLabScreen() {
     decay,
     cores,
     simulations,
+    universes,
+    randomUniverse,
   }
   const preview = useQuery({
     queryKey: ['theme-lab', 'preview', body],
@@ -216,6 +225,16 @@ export function ThemeLabScreen() {
                     />
                   </Field>
                 )}
+                <UniverseSetting
+                  offered={preview.data?.offeredUniverses ?? []}
+                  value={universes}
+                  random={randomUniverse}
+                  onChange={(change) => {
+                    if (change.universes) setUniverses(change.universes)
+                    if (change.randomUniverse !== undefined)
+                      setRandomUniverse(change.randomUniverse)
+                  }}
+                />
                 <div className="flex flex-wrap items-end gap-4">
                   <Field label="Decay">
                     <Segmented

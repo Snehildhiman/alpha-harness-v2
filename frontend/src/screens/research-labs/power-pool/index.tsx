@@ -194,7 +194,7 @@ export function PowerPoolLabScreen() {
                 label="Model"
                 items={models.map((m) => ({
                   value: m.ref,
-                  label: `${m.id} · ${providerLabel(m.provider)} · ${fmt.int(m.remainingToday)} left today`,
+                  label: `${m.id} · ${providerLabel(m.provider)} · ${fmt.int(m.remainingToday)} left today${m.writes ? '' : ' · not for writing'}`,
                 }))}
                 value={model}
                 onChange={(v) => set({ model: v })}
@@ -211,6 +211,7 @@ export function PowerPoolLabScreen() {
           {scopeOptions.universes.length > 0 && (
             <Fieldset
               legend={draft.universes.length === 0 ? 'Universes · all downloaded' : 'Universes'}
+              hint="Random: each Alpha runs in one drawn at random among these (all downloaded when none is ticked) that hold its fields."
             >
               <Chips
                 label="Universes"

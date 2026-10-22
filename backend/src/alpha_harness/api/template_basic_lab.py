@@ -91,6 +91,8 @@ class BasicTemplatePreview(Out):
     fields: FieldCounts
     left_out: LeftOut
     universes: list[str]
+    #: Every downloaded universe of the market, to choose from.
+    offered_universes: list[str] = Field(default_factory=list)
     skeleton: str
     sample: list[SampleAlpha]
     #: Everything blocking a task; ``templateProblems`` are the ones about the blocks.
@@ -268,6 +270,7 @@ async def _plan(body: BasicTemplateTask, state: Any) -> dict[str, Any]:
         "vector": market["vector"],
         "neutralizations": market["neutralizations"],
         "variables": {name: list(values) for name, values in template.VARIABLES.items()},
+        "randomUniverse": body.random_universe,
     }
     sample: list[SampleAlpha] = []
     problems = list(dict.fromkeys(problems))
@@ -276,16 +279,20 @@ async def _plan(body: BasicTemplateTask, state: Any) -> dict[str, Any]:
             region=body.region, delay=body.delay, decay=body.decay, tree=doc, space=space
         )
         choices = search.field_choices(space)
+
         # A draw can land two FIELD tags on one field, so it is given a few more tries.
-        sample = preview_samples(
-            lambda rng: template.draw(search.RandomTrial(rng), run, choices)[1], tries=25
-        )
+        def draw(rng: Any) -> Any:
+            request = template.draw(search.RandomTrial(rng), run, choices)[1]
+            return search.reroll_universe(request, space, rng) if request else None
+
+        sample = preview_samples(draw, tries=25)
 
     return {
         "round": body.cores * 10,
         "fields": field_counts(pool.fields),
         "leftOut": {"vector": pool.vector_skipped},
         "universes": list(pool.universes),
+        "offeredUniverses": market["offered"],
         "skeleton": template.skeleton(doc) if doc is not None else "?",
         "sample": sample,
         "problems": problems,
