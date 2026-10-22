@@ -1038,6 +1038,10 @@ async def _write(optimizer: Optimizer, study_id: int) -> None:
                     await _pause(optimizer, study_id, f"The LLM failed 3 times in a row: {exc}")
                     return None
 
+        if ra is not None and items:
+            items, crowded = await screen_crowded(optimizer, items, ra)
+            if crowded:
+                entry["crowded"] = crowded
         table = operator_table(operators)
         dead = await families.dead(catalog)
         per_family: dict[str, int] = {}
@@ -1093,7 +1097,12 @@ async def _write(optimizer: Optimizer, study_id: int) -> None:
                                         "group": group,
                                         "region": settings["region"],
                                     }
-                                    | ({"shape": item["shape"]} if "shape" in item else {}),
+                                    | ({"shape": item["shape"]} if "shape" in item else {})
+                                    | (
+                                        {"predictedProd": item["predictedProd"]}
+                                        if "predictedProd" in item
+                                        else {}
+                                    ),
                                     distributions={},
                                     expression=expression,
                                     settings=settings,
@@ -1180,6 +1189,61 @@ async def shape_scores(optimizer: Optimizer, study_id: int) -> dict[str, float]:
             )
         ).all()
     return {str(name): float(mean) for name, mean in rows if mean is not None}
+
+
+#: Predicted prod correlation at or above which a region-agnostic candidate is not sent,
+#: unless some region expects less: BRAIN needs one passing child under 0.7.
+CROWDED = 0.6
+#: Share of the crowded ones sent anyway, so the models learn where they are wrong.
+CROWDED_EXPLORE = 0.2
+
+
+async def screen_crowded(
+    optimizer: Optimizer, items: list[dict[str, Any]], ra: RegionAgnosticParams
+) -> tuple[list[dict[str, Any]], int]:
+    """Candidates whose expected prod correlation is high in every region dropped, the
+    rest ordered quietest first. Untouched until the models have learned prod correlation."""
+    predictors = getattr(optimizer, "predictors", None)
+    if predictors is None:
+        return items, 0
+    models = await predictors.current()
+    if models is None or "prod_corr" not in getattr(models, "boosters", {}):
+        return items, 0
+    regions = list(ra.regions)
+    now = utcnow().replace(tzinfo=None)
+    rows = [
+        {
+            "expression": str(item.get("expression") or ""),
+            "region": region,
+            "delay": ra.delay,
+            "universe": ra.region_universes.get(region),
+            "neutralization": (ra.neutralizations or ["SUBINDUSTRY"])[0],
+            "decay": 0,
+            "truncation": search.TRUNCATION,
+            "power_pool": False,
+            "sim_type": "REGULAR",
+            "date_created": now,
+        }
+        for item in items
+        for region in regions
+    ]
+    predicted = await predictors.predict(rows)
+    rng = random.Random()
+    scored: list[tuple[float, dict[str, Any]]] = []
+    crowded = 0
+    for i, item in enumerate(items):
+        each = [
+            p.get("prod_corr")
+            for p in predicted[i * len(regions) : (i + 1) * len(regions)]
+            if p.get("prod_corr") is not None
+        ]
+        quietest = min(each) if each else 0.0
+        if quietest >= CROWDED and rng.random() >= CROWDED_EXPLORE:
+            crowded += 1
+            continue
+        scored.append((quietest, item | {"predictedProd": round(float(quietest), 3)}))
+    scored.sort(key=lambda qi: qi[0])
+    return [item for _, item in scored], crowded
 
 
 async def _system(optimizer: Optimizer, run: PowerPoolParams) -> tuple[str, str]:

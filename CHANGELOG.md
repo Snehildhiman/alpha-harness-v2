@@ -3,6 +3,23 @@
 What v2 adds on top of [alpha-harness-improved](https://github.com/residual-lab/alpha-harness)
 (MIT, © MiracleInvoker). How to use each part: [GUIDE.md](GUIDE.md).
 
+## 2026-10-23 (low prod correlation)
+
+- **Crowded candidates are not sent**: once the models have learned prod correlation, the
+  Region Agnostic Lab predicts it for each candidate in every chosen region and leaves out
+  those expected at 0.6 or more in all of them (a fifth are still sent, so the models keep
+  learning); the rest go quietest first.
+- **Unusual ideas, drawn twice as often**: co-movement of two datasets' fields, one field with
+  another's effect regressed out, how recently a figure changed, steadiness of its changes,
+  signals only on busy days, signals that flip in volatile markets, skew, the field against
+  returns, extremes only, analysts' disagreement (vector spread); partners from another dataset
+  first; half of all candidates neutralized within an industry or smoothed.
+- **Fields in one region only are skipped** by the built-in shapes (they could never pass in two).
+- **ARC panel**: every dataset in both lists is a tick box, with *Tick all* / *Untick these* per
+  list, the count chosen and *Clear*. **Fixed**: alphas per field read 0 for every dataset (the
+  All Regions market counts none); it is now the sum over USA, EUR, ASI and GLB, and the least
+  crowded list keeps datasets known in two or more regions.
+
 ## 2026-10-23 (ARC webinar)
 
 From the ARC webinar's Q&A:

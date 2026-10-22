@@ -470,9 +470,20 @@ function ArcPanel({
           . Alphas that rank an amount (sales, a price, market cap) across currencies are not sent:
           divide it by another amount or compare it with its own history.
         </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-body-compact text-ink-muted">
+            <span className="num text-ink">{fmt.int(chosen.length)}</span>{' '}
+            {chosen.length === 1 ? 'dataset' : 'datasets'} chosen
+          </span>
+          {chosen.length > 0 && (
+            <Button size="sm" variant="ghost" onClick={() => onDatasets([])}>
+              Clear
+            </Button>
+          )}
+        </div>
         <Fieldset
           legend="Datasets the community reports work for ARC"
-          hint="From the 1 October 2026 webinar and consultants' posts: pv1, fundamental17/23, other335, model38/110/138, analyst69, imbalance5, predictive_starmine, intraday_pv_feats, institutions6 and more. A starting point; the hypothesis matters more."
+          hint="Tick the ones to use. From the 1 October 2026 webinar and consultants' posts; the hypothesis matters more than the dataset. Alphas per field is the crowd on it, summed over USA, EUR, ASI and GLB."
         >
           {picks.isError && <ErrorNotice error={picks.error} title="Could not read the datasets" />}
           {data && community.length === 0 && (
@@ -483,31 +494,7 @@ function ArcPanel({
           )}
           {community.length > 0 && (
             <div className="flex flex-col gap-2">
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  size="sm"
-                  variant="primary"
-                  onClick={() => onDatasets(community.map((d) => d.datasetId))}
-                >
-                  Use these {community.length}
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() =>
-                    onDatasets([...new Set([...chosen, ...community.map((d) => d.datasetId)])])
-                  }
-                >
-                  Add to my datasets
-                </Button>
-              </div>
-              <span className="text-body-compact text-ink-muted">
-                {community
-                  .map(
-                    (d) =>
-                      `${d.datasetId}${d.crowding != null ? ` (${fmt.int(d.crowding)}/field)` : ''}`,
-                  )
-                  .join(' · ')}
-              </span>
+              <PickChips list={community} chosen={chosen} onDatasets={onDatasets} />
               {(data?.missing.length ?? 0) > 0 && (
                 <span className="text-caption text-ink-subtle">
                   Not in your catalog: {data?.missing.join(', ')}
@@ -518,28 +505,49 @@ function ArcPanel({
         </Fieldset>
         {roomy.length > 0 && (
           <Fieldset
-            legend="Least crowded datasets in every region"
-            hint="Fewest Alphas per field: where prod correlation has the most room."
+            legend="Least crowded datasets in two or more regions"
+            hint="Fewest Alphas per field: where prod correlation has the most room. Tick the ones to use."
           >
-            <div className="flex flex-col gap-2">
-              <div>
-                <Button
-                  size="sm"
-                  onClick={() => onDatasets(roomy.slice(0, 10).map((d) => d.datasetId))}
-                >
-                  Use the 10 least crowded
-                </Button>
-              </div>
-              <span className="text-body-compact text-ink-muted">
-                {roomy
-                  .slice(0, 20)
-                  .map((d) => `${d.datasetId} (${fmt.int(d.crowding)}/field)`)
-                  .join(' · ')}
-              </span>
-            </div>
+            <PickChips list={roomy} chosen={chosen} onDatasets={onDatasets} />
           </Fieldset>
         )}
       </div>
     </Panel>
+  )
+}
+
+/** A list of datasets to tick one by one, with all and none for the list. */
+function PickChips({
+  list,
+  chosen,
+  onDatasets,
+}: {
+  list: { datasetId: string; name?: string | null; crowding?: number | null }[]
+  chosen: string[]
+  onDatasets: (ids: string[]) => void
+}) {
+  const ids = list.map((d) => d.datasetId)
+  const outside = chosen.filter((id) => !ids.includes(id))
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" onClick={() => onDatasets([...new Set([...chosen, ...ids])])}>
+          Tick all {ids.length}
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => onDatasets(outside)}>
+          Untick these
+        </Button>
+      </div>
+      <Chips
+        label="Datasets"
+        items={list.map((d) => ({
+          value: d.datasetId,
+          label: `${d.datasetId}${d.crowding != null ? ` · ${fmt.int(d.crowding)}/field` : ''}`,
+          title: d.name ?? d.datasetId,
+        }))}
+        value={chosen.filter((id) => ids.includes(id))}
+        onChange={(next) => onDatasets([...outside, ...next])}
+      />
+    </div>
   )
 }

@@ -63,7 +63,49 @@ SHAPES: tuple[Shape, ...] = (
     # One amount over another: the currency cancels (the webinar's first cure).
     Shape("amount_ratio", "rank({b} / {c})"),
     Shape("amount_ratio_trend", "ts_rank({b} / {c}, {e})"),
+    # Unusual on purpose: what few Alphas are, so prod correlation stays low.
+    Shape("cross_comovement", "rank(ts_corr(ts_rank({b}, {d}), ts_rank({c}, {d}), {e}))"),
+    Shape(
+        "residual_of_partner",
+        "rank(ts_regression(ts_zscore({b}, {e}), ts_zscore({c}, {e}), {e}))",
+    ),
+    Shape("recency_of_change", "rank(-days_from_last_change({b}))"),
+    Shape(
+        "change_steadiness",
+        "rank(-ts_std_dev(ts_delta({b}, 1), {e}) / (ts_mean(abs(ts_delta({b}, 1)), {e}) + 0.0001))",
+    ),
+    Shape(
+        "busy_days_signal",
+        "trade_when(ts_rank(volume / adv20, {d}) > 0.5, ts_zscore({b}, {e}), -1)",
+    ),
+    Shape(
+        "volatility_regime",
+        "if_else(ts_std_dev(returns, {d}) > ts_std_dev(returns, {e}), "
+        "-ts_zscore({b}, {e}), ts_zscore({b}, {e}))",
+    ),
+    Shape("field_skew", "rank(ts_skewness({b}, {e}))"),
+    Shape("versus_returns", "-rank(ts_corr(ts_rank({b}, {d}), returns, {e}))"),
+    Shape("extremes_emphasised", "signed_power(ts_zscore({b}, {e}), 2)"),
+    Shape("extremes_only", "ts_zscore({b}, {e}) * (abs(ts_zscore({b}, {e})) > 1.5)"),
 )
+
+#: The unusual shapes, drawn twice as often as the rest: what the crowd rarely writes.
+UNIQUE = frozenset(
+    {
+        "cross_comovement",
+        "residual_of_partner",
+        "recency_of_change",
+        "change_steadiness",
+        "busy_days_signal",
+        "volatility_regime",
+        "field_skew",
+        "versus_returns",
+        "extremes_emphasised",
+        "extremes_only",
+        "spread_trend",
+    }
+)
+UNIQUE_WEIGHT = 2.0
 
 #: The hypotheses that suit each kind of data, by words in its dataset's id: analyst figures
 #: drift after revisions, scores built by models are signals already, fundamentals move slowly,
@@ -103,7 +145,7 @@ HYPOTHESES: tuple[tuple[tuple[str, ...], frozenset[str]], ...] = (
 FAVOUR = 3.0
 #: Share of expressions wrapped to move them away from the crowd: neutralized within an
 #: industry (what every region's peers share) or smoothed so they trade less.
-DECORRELATE = 0.35
+DECORRELATE = 0.5
 
 
 def favoured(dataset: str) -> frozenset[str]:
@@ -117,7 +159,7 @@ def favoured(dataset: str) -> frozenset[str]:
 
 
 _CALL = re.compile(r"([a-z_][a-z0-9_]*)\(")
-_PRICE = ("close", "volume")
+_PRICE = ("close", "volume", "adv20", "returns")
 #: The vector reductions tried, in order, when a field is a vector.
 VECTOR_OPS = ("vec_avg", "vec_sum", "vec_max", "vec_min", "vec_stddev")
 
@@ -162,8 +204,9 @@ def write(
     shapes = usable(operators, ctx.names)
     # Most regions first (two passing are what BRAIN needs), then the least crowded: a field
     # few Alphas use is where prod correlation stays low.
+    # A field only one chosen region has can never run in two: an Alpha on it is wasted.
     ordered = sorted(
-        ctx.fields,
+        (f for f in ctx.fields if len(ctx.held.get(f.id, ())) >= 2),
         key=lambda f: (-len(ctx.held.get(f.id, ())), f.alphas if f.alphas is not None else 0),
     )
     fields = [f.id for f in ordered]
@@ -171,7 +214,11 @@ def write(
     if not shapes or not fields:
         return [], 0
     vector = [v for v in VECTOR_OPS if v in operators]
-    weights = [1.0 + max(0.0, (scores or {}).get(s.name, 0.0)) for s in shapes]
+    weights = [
+        (1.0 + max(0.0, (scores or {}).get(s.name, 0.0)))
+        * (UNIQUE_WEIGHT if s.name in UNIQUE else 1.0)
+        for s in shapes
+    ]
     wrap = [w for w in ("group_neutralize", "ts_decay_linear") if w in operators]
     amount = currency.amounts_in([*ctx.fields, *ctx.basics])
     n = len(fields)
@@ -184,6 +231,19 @@ def write(
         b = _base(field, ctx, vector, rng)
         if b is None:
             continue
+        if (
+            ctx.types.get(field) == "VECTOR"
+            and {"vec_stddev", "vec_avg"} <= operators
+            and rng.random() < 0.3
+        ):
+            # Analysts or models disagreeing: the spread of a vector's values over its mean.
+            text = (
+                f"rank(-ts_backfill(vec_stddev({field}), 21) / "
+                f"(abs(ts_backfill(vec_avg({field}), 21)) + 0.0001))"
+            )
+            if text not in written:
+                written.add(text)
+                out.append({"expression": text, "shape": "disagreement"})
         likes = favoured(dataset_of.get(field) or "")
         mine = [
             w * (FAVOUR if s.name in likes else 1.0) for s, w in zip(shapes, weights, strict=True)
@@ -198,6 +258,10 @@ def write(
                     for f in fields
                     if f != field and ctx.held.get(f, frozenset()) & ctx.held[field]
                 ]
+                # Two datasets rarely put together are where unusual Alphas come from.
+                elsewhere = [p for p in partners if dataset_of.get(p) != dataset_of.get(field)]
+                if elsewhere and rng.random() < 0.7:
+                    partners = elsewhere
                 if not partners:
                     continue
                 c = _base(rng.choice(partners), ctx, vector, rng)

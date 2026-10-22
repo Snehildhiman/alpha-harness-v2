@@ -377,11 +377,30 @@ class DatasetPicks(Out):
 @router.get("/picks")
 async def picks(state: State) -> DatasetPicks:
     """Datasets to start ARC Alphas from: the community's picks and the least crowded."""
+    # The All Regions market reports no Alpha counts of its own: the crowd on a dataset is
+    # what its four regional markets count, added up.
+    marks = ", ".join("?" for _ in power_pool.RA_MARKETS)
     rows = await state.catalog.query(
-        "SELECT dataset_id, any_value(name) AS name, any_value(category_id) AS category, "
-        "max(field_count) AS fields, max(alpha_count) AS alphas FROM data_set "
-        "WHERE region = ? AND delay = 1 AND instrument_type = 'EQUITY' GROUP BY dataset_id",
-        [REGION_AGNOSTIC_REGION],
+        f"""
+        WITH ra AS (
+            SELECT dataset_id, any_value(name) AS name, any_value(category_id) AS category,
+                   max(field_count) AS fields
+            FROM data_set
+            WHERE region = ? AND delay = 1 AND instrument_type = 'EQUITY'
+            GROUP BY dataset_id
+        ),
+        regional AS (
+            SELECT dataset_id, region, max(alpha_count) AS alphas
+            FROM data_set
+            WHERE region IN ({marks}) AND delay = 1 AND instrument_type = 'EQUITY'
+            GROUP BY dataset_id, region
+        )
+        SELECT ra.*, (SELECT sum(alphas) FROM regional r WHERE r.dataset_id = ra.dataset_id)
+               AS alphas,
+               (SELECT count(*) FROM regional r WHERE r.dataset_id = ra.dataset_id) AS regions
+        FROM ra
+        """,  # noqa: S608
+        [REGION_AGNOSTIC_REGION, *power_pool.RA_MARKETS],
     )
 
     def item(r: dict[str, Any]) -> PickedDataset:
@@ -396,8 +415,13 @@ async def picks(state: State) -> DatasetPicks:
         )
 
     by_id = {str(r["dataset_id"]): r for r in rows}
+    # Known in two or more regional markets (so it can pass in two), and counted there.
     roomy = sorted(
-        (r for r in rows if (r["fields"] or 0) >= 5 and r["alphas"] is not None),
+        (
+            r
+            for r in rows
+            if (r["fields"] or 0) >= 5 and r["alphas"] is not None and (r["regions"] or 0) >= 2
+        ),
         key=lambda r: r["alphas"] / max(1, r["fields"]),
     )
     return DatasetPicks(

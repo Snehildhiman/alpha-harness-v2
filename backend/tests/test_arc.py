@@ -99,3 +99,54 @@ def test_shapes_never_rank_an_amount_raw() -> None:
     amount = currency.amounts_in([*ctx.fields, *ctx.basics])
     assert written
     assert all(currency.problem(w["expression"], amount) is None for w in written)
+
+
+def test_crowded_candidates_are_left_out() -> None:
+    import asyncio
+    from types import SimpleNamespace
+
+    from alpha_harness.labs import power_pool
+
+    class _Models:
+        def __init__(self) -> None:
+            self.boosters = {"prod_corr": object()}
+
+    class _Predictors:
+        async def current(self) -> _Models:
+            return _Models()
+
+        async def predict(self, rows: list[dict[str, object]]) -> list[dict[str, float]]:
+            # "quiet" is uncrowded in GLB only; "loud" is crowded everywhere.
+            return [
+                {
+                    "prod_corr": 0.4
+                    if "quiet" in str(r["expression"]) and r["region"] == "GLB"
+                    else 0.85
+                }
+                for r in rows
+            ]
+
+    run = RegionAgnosticParams(
+        region="ALL",
+        delay=1,
+        universes=[],
+        neutralizations=["MARKET"],
+        regions=["USA", "GLB"],
+        region_universes={"USA": "TOP3000", "GLB": "MINVOL1M"},
+    )
+    items = [{"expression": f"rank(loud{i})"} for i in range(50)] + [{"expression": "rank(quiet)"}]
+    optimizer = SimpleNamespace(predictors=_Predictors())
+    kept, crowded = asyncio.run(power_pool.screen_crowded(optimizer, items, run))  # type: ignore[arg-type]
+    assert kept[0]["expression"] == "rank(quiet)"
+    assert kept[0]["predictedProd"] == 0.4
+    assert crowded > 25  # most of the loud ones; a fifth go on to keep the models honest
+
+
+def test_single_region_fields_are_not_written_alone() -> None:
+    from dataclasses import replace
+
+    ctx = _ctx()
+    held = dict(ctx.held) | {"eps": frozenset({"USA"})}
+    one = replace(ctx, held=held)
+    written, _ = ra_shapes.write(one, NAMES, random.Random(2), count=40, offset=0)
+    assert all("eps" not in w["expression"] for w in written)
