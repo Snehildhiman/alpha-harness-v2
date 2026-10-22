@@ -37,6 +37,7 @@ from .api import (
     governor,
     lab_tasks,
     llm,
+    overview,
     portfolio,
     power_pool_lab,
     predictors,
@@ -201,6 +202,7 @@ def create_app() -> FastAPI:
     app.include_router(quarter.router)
     app.include_router(tasks.router)
     app.include_router(today.router)
+    app.include_router(overview.router)
     app.include_router(tools.router)
     app.include_router(search_lab.router)
     app.include_router(theme_lab.router)

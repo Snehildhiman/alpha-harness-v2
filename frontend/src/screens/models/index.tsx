@@ -39,6 +39,7 @@ import {
   type TargetReport,
   trainModels,
 } from './api'
+import { ModelHistory } from './history'
 
 /** New or re-checked Alphas that earn an automatic retrain (backend `models.service.AUTO_NEW`). */
 const AUTO_NEW = 100
@@ -425,6 +426,7 @@ export function ModelsScreen() {
           </Panel>
         </>
       )}
+      <ModelHistory />
       <ScreeningPanel />
       <PredictPanel ready={!!data?.trainedAt} reports={data?.reports ?? []} />
     </Page>

@@ -3,6 +3,36 @@
 What v2 adds on top of [alpha-harness-improved](https://github.com/residual-lab/alpha-harness)
 (MIT, © MiracleInvoker). How to use each part: [GUIDE.md](GUIDE.md).
 
+## 2026-10-22 (evening)
+
+- **Never the same failure twice**: a simulation BRAIN refused for good (an unknown field, an
+  operator not allowed, bad inputs) is not sent again with the same settings; exact repeats of
+  anything in the vault were already reused for free. Repair, transplants and SuperAlpha repair
+  no longer offer variants that were already simulated.
+- **Dead families skipped**: an expression shape (numbers aside) that failed 4+ times in a
+  region and never passed there is skipped by the Search, Template, Basic Template, Current
+  Theme, Evolution, Power Pool and Region Agnostic labs (Region Agnostic leaves out only that
+  region).
+- **Batch diversity**: a round sends at most 2 alphas of one shape; near-copies only fill a
+  round that found nothing more different. The LLM and built-in writers drop near-copies in a
+  batch.
+- **Health and Backup** screen: BRAIN session, catalog sync, models, tasks, last day's
+  simulations and errors, LLM keys, autopilot, disk and the last backup, each OK / Look / Fix
+  with a link. *Back up now* zips your alphas, their PnL, the crowd history, the models and the
+  app's database (saved passwords and keys stay locked); the newest 10 are kept and downloadable.
+- **Since yesterday** on the dashboard (24 h or 7 days): new alphas, new submittable, new
+  near-misses, simulated / errored / reused, per type, and the best new submittable.
+- **Model accuracy over time** on Models: each target's held-out score at every training, with
+  the change since the first; retrains that did worse are shown hollow.
+- **Check now before you submit**: on *What to submit next* and every submittable or re-check
+  row of Alpha Types, BRAIN's checks run again for that alpha (each region of an RA family) and
+  say *Passes now · submit on BRAIN* or which check fails. No simulations spent.
+- **More templates**: 18 more block templates in Basic Template Research (42 in all: trend
+  efficiency, days since the high, range position, year-over-year change, acceleration, back to
+  peers, volume-confirmed change, risk-scaled score, low-volatility tilt, sign persistence,
+  field-volume divergence, excess over returns, co-movement break, quantile shift, held-steady
+  rank, …) and 18 more families in the Template Lab gallery (30 in all).
+
 ## 2026-10-22 (afternoon)
 
 - **SuperAlpha library**: 67 selections (55 new: correlation caps, turnover bands, broad and

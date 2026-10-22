@@ -23,7 +23,7 @@ from ..llm.keys import BudgetExhaustedError, LLMError
 from ..llm.prompts import POWER_POOL_LAB, REGION_AGNOSTIC_LAB
 from ..llm.text import FENCE
 from ..tasks import spawn
-from . import ra_shapes, scheduler, search
+from . import families, ra_shapes, scheduler, search
 from .fastexpr import (
     GROUPING,
     MAX_FIELDS,
@@ -430,11 +430,18 @@ def draw(
 
 
 def draw_regions(
-    rng: random.Random, used: frozenset[str], ctx: Context, run: RegionAgnosticParams
+    rng: random.Random,
+    used: frozenset[str],
+    ctx: Context,
+    run: RegionAgnosticParams,
+    skip: frozenset[str] = frozenset(),
 ) -> list[dict[str, Any]]:
     """One simulation per chosen region that carries every field ``used``, alike but for the
     region and its universe: the settings are drawn once, so the regions can be compared."""
-    regions = [r for r in run.regions if all(r in ctx.held.get(f, ()) for f in used)]
+    # ``skip``: regions where this family keeps failing (:mod:`.families`).
+    regions = [
+        r for r in run.regions if r not in skip and all(r in ctx.held.get(f, ()) for f in used)
+    ]
     if len(regions) < MIN_REGIONS:
         where = ", ".join(regions) or "none"
         raise Rejected(
@@ -860,6 +867,8 @@ async def _write(optimizer: Optimizer, study_id: int) -> None:
                     return None
 
         table = operator_table(operators)
+        dead = await families.dead(catalog)
+        per_family: dict[str, int] = {}
         rng = random.Random()
         async with optimizer.lock(study_id), optimizer.db.session() as session:
             stored = await session.get(Study, study_id)
@@ -878,11 +887,27 @@ async def _write(optimizer: Optimizer, study_id: int) -> None:
                     expression, used = check(text, ctx, table, power_pool=ra is None)
                     if expression in seen:
                         raise Rejected("Already written in this task.")
+                    shape = families.skeleton(expression)
+                    if per_family.get(shape, 0) >= families.PER_ROUND:
+                        raise Rejected("A near-copy of another Alpha in this batch.")
+                    failing = frozenset(
+                        r
+                        for r in (ra.regions if ra else [run.region])
+                        if (shape, r.upper()) in dead
+                    )
+                    if ra is None and failing:
+                        raise Rejected(
+                            f"Alphas of this shape failed {families.MIN_FAILS}+ times in "
+                            f"{run.region} and never passed."
+                        )
+                    per_family[shape] = per_family.get(shape, 0) + 1
                     if ra is not None:
                         # One trial per region, filed under the first one's number: the group
                         # the results show together, and one Alpha to the rest of the task.
                         group = number
-                        for i, settings in enumerate(draw_regions(rng, used, ctx, ra)):
+                        for i, settings in enumerate(
+                            draw_regions(rng, used, ctx, ra, skip=failing)
+                        ):
                             number = group + i
                             session.add(
                                 Trial(

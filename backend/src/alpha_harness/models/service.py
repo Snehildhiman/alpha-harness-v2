@@ -6,6 +6,7 @@ synced catalog, runs off the event loop, and swaps the new set in only when it i
 
 import asyncio
 import contextlib
+import json
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -173,8 +174,11 @@ class ModelService:
                     verdict = await asyncio.to_thread(gate, old, models, by_id, fields)
                     self.last_gate = (datetime.now(UTC).isoformat(timespec="seconds"), verdict)
                     log.info("models.gate", accepted=verdict.accepted, reason=verdict.reason)
+                    self.record(models, accepted=verdict.accepted)
                     if not verdict.accepted:
                         return old
+                else:
+                    self.record(models, accepted=True)
                 await asyncio.to_thread(models.save, self.folder)
             finally:
                 self.progress = None
@@ -185,6 +189,43 @@ class ModelService:
                 targets=sum(r.trained for r in models.reports),
             )
             return models
+
+    @property
+    def history_path(self) -> Path:
+        # Beside the models folder, which is swapped whole on every save.
+        return self.folder.parent / "models-history.jsonl"
+
+    def record(self, models: ModelSet, *, accepted: bool) -> None:
+        """One line per training: each target's test score, so accuracy can be followed."""
+        line = {
+            "trainedAt": models.trained_at,
+            "alphas": models.alphas,
+            "accepted": accepted,
+            "targets": {
+                r.target: {"label": r.label, "kind": r.kind, "n": r.n_test, **r.metrics}
+                for r in models.reports
+                if r.trained
+            },
+        }
+        try:
+            self.history_path.parent.mkdir(parents=True, exist_ok=True)
+            with self.history_path.open("a", encoding="utf-8") as out:
+                out.write(json.dumps(line) + "\n")
+        except OSError:
+            log.warning("models.history_unwritten", exc_info=True)
+
+    def history(self, limit: int = 200) -> list[dict[str, Any]]:
+        try:
+            lines = self.history_path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return []
+        out = []
+        for line in lines[-limit:]:
+            try:
+                out.append(json.loads(line))
+            except ValueError:
+                continue
+        return out
 
     async def predict_post(self, rows: list[dict[str, Any]]) -> list[dict[str, float]]:
         """For simulated Alphas: the correlations expected from what BRAIN already reported

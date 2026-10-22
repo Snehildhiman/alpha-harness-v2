@@ -17,7 +17,7 @@ from ..brain.schemas import SimulationRequest, SimulationSettings, SimulationTyp
 from ..brain.settings_schema import validate_settings
 from ..db.models import SimStatus, SimulationRecord, Study, StudyStatus, Trial, TrialState, utcnow
 from ..engine.packer import MAX_BATCH
-from . import ga, screen, search, template, template_v1
+from . import families, ga, screen, search, template, template_v1
 from .objectives import StudyNotFoundError
 from .params import (
     CORRELATION_BREAKER,
@@ -182,12 +182,17 @@ def ask_points(
     seen: dict[tuple[str, str], float | bool],
     cover: list[str],
     schema: dict[str, Any] | None = None,
+    dead: frozenset[families.Family] = frozenset(),
 ) -> list[tuple[Any, dict[str, Any], SimulationRequest]]:
     """Ask for ``want`` new simulations. Runs off the event loop.
 
     A point this task already scored is answered with its score, one that failed is told as
     failed, and a repeat, or a point its lab cannot write, is pruned; each time another
     point is asked, so quota is only spent on Alphas the task has not seen.
+
+    A point of a family that keeps failing in its region (``dead``) is pruned too, and a
+    round holds at most :data:`families.PER_ROUND` of one family before near-copies fill
+    what is left of it (:mod:`.families`).
     """
     from optuna.trial import TrialState as OptunaState
 
@@ -199,6 +204,8 @@ def ask_points(
     choices = lab.field_choices(space)
     rng = random.Random()
     picked: list[tuple[Any, dict[str, Any], SimulationRequest]] = []
+    overflow: list[tuple[Any, dict[str, Any], SimulationRequest]] = []
+    per_family: dict[families.Family, int] = {}
     keys: set[tuple[str, str]] = set()
     for _ in range(want * 5):
         if len(picked) >= want:
@@ -233,8 +240,21 @@ def ask_points(
             else:
                 study.tell(trial, state=OptunaState.PRUNED)
             continue
+        fam = families.family(request.regular, request.settings.region)
+        if fam in dead:
+            study.tell(trial, state=OptunaState.PRUNED)
+            continue
         keys.add(key)
+        if per_family.get(fam, 0) >= families.PER_ROUND:
+            overflow.append((trial, params, request))
+            continue
+        per_family[fam] = per_family.get(fam, 0) + 1
         picked.append((trial, params, request))
+    # Near-copies only fill a round that found nothing more different to send.
+    room = max(0, want - len(picked))
+    picked += overflow[:room]
+    for trial, _, _ in overflow[room:]:
+        study.tell(trial, state=OptunaState.PRUNED)
     return picked
 
 
@@ -374,7 +394,9 @@ async def advance(optimizer: Optimizer, study_id: int) -> int:
         optimizer.screen_factor > 1 and predictors is not None and await predictors.current()
     )
     asked = want * optimizer.screen_factor if screening else want
-    picked = await asyncio.to_thread(ask_points, study, lab, run, asked, seen, cover, schema)
+    catalog = getattr(getattr(optimizer, "alphas", None), "catalog", None)
+    dead = await families.dead(catalog) if catalog is not None else frozenset()
+    picked = await asyncio.to_thread(ask_points, study, lab, run, asked, seen, cover, schema, dead)
     if screening and predictors is not None and len(picked) > want:
         picked = await _screened(optimizer, predictors, study, picked, want)
     if not picked:

@@ -29,6 +29,10 @@ How to run it, what each part does, how it learns, and how to change it yourself
 | Find new alphas | **Research Labs** | Search / Template / Evolution / LLM labs. Search and Template rounds are **screened** by the models (Settings → Model screening). |
 | Region-agnostic alphas without an LLM | **Research Labs → Region Agnostic** | *Writer: Built-in shapes · no LLM* (the default). Pick datasets in the All Regions market, the regions and a size (or *Random*). Nineteen shapes are written over fields two or more regions share; shapes whose alphas score better are written more often. |
 | Choose the universe | Every lab | Search, Basic Template, Current Theme: tick universes (none = all downloaded) and *Random* to draw each alpha's universe at random. Template and Power Pool: tick universes. Evolution: *Also run children in*. Region Agnostic: size *Random*. |
+| Check the app is healthy, back up | **Health and Backup** | Each line OK / Look / Fix with a link to the screen that fixes it. *Back up now* once a week. |
+| What happened overnight | **Dashboard → Since yesterday** | New alphas, new submittable and near-misses per type; switch to 7 days. |
+| Submit safely | **Alpha Types** or **What to submit next** → *Check now* | Re-runs BRAIN's checks for that alpha right now; submit on BRAIN only when it says *Passes now*. |
+| See the models improve | **Models → Accuracy over time** | Each target's score at every training. |
 | SuperAlphas | **Research Labs → Super Alpha** | Tick selections, combos and decays (none ticked = the proven defaults). Each pairing runs in Full mode. |
 | Fix a SuperAlpha near-miss | **Repair** | One change at a time to decay, truncation, selection limit, neutralization, activation, selection or combo, ordered by the failed check. |
 | Use papers | **Research** | Tick papers, then add an LLM Power Pool or Region Agnostic Lab task: each LLM call carries one paper's idea over to your fields. |
@@ -148,6 +152,9 @@ cd ..\frontend; pnpm check; pnpm build
   correlation labels fastest.
 * **Research says a feed could not be read**: check the address in Settings; arXiv is free and
   needs no account.
+* **A lab finishes early or writes fewer alphas**: it skips shapes that failed 4+ times in the
+  region and never passed, and requests BRAIN already refused; that is quota saved. Choose other
+  datasets or templates for more.
 * **A click does nothing until refresh**: update (`update.bat`). Screens now open at once and
   slow reads give up after 45 s; if one still hangs, the window behind it shows which.
 * **The LLM lab writes nothing**: a translation, speech or image model is chosen (marked *not

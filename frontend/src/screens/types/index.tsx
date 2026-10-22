@@ -42,6 +42,7 @@ import {
   type Verdict,
 } from './api'
 import { NextToSubmit } from './next'
+import { PresubmitButton } from './presubmit'
 import { ThemeCalendar } from './themes'
 
 const LIMIT = 100
@@ -164,22 +165,29 @@ const THEMES_COLUMN: Column<TabRow> = {
 const ACTION_COLUMN: Column<TabRow> = {
   key: 'action',
   header: '',
-  width: '84px',
+  width: 'minmax(84px,auto)',
   align: 'right',
   cell: (r) => (
-    <Link
-      to="/repair"
-      search={r.verdict === 'refused' ? { alpha: r.alphaId } : { alpha: r.alphaId, improve: true }}
-      className={LINK}
-      onClick={(e) => e.stopPropagation()}
-      title={
-        r.verdict === 'refused'
-          ? 'Variants ranked by their chance of passing'
-          : 'Variants ranked by predicted Sharpe, among those likely to pass'
-      }
-    >
-      {r.verdict === 'refused' ? 'Repair' : 'Improve'}
-    </Link>
+    <span className="flex items-center justify-end gap-3">
+      {(r.verdict === 'submittable' || r.verdict === 'recheck') && (
+        <PresubmitButton alphaId={r.alphaId} />
+      )}
+      <Link
+        to="/repair"
+        search={
+          r.verdict === 'refused' ? { alpha: r.alphaId } : { alpha: r.alphaId, improve: true }
+        }
+        className={LINK}
+        onClick={(e) => e.stopPropagation()}
+        title={
+          r.verdict === 'refused'
+            ? 'Variants ranked by their chance of passing'
+            : 'Variants ranked by predicted Sharpe, among those likely to pass'
+        }
+      >
+        {r.verdict === 'refused' ? 'Repair' : 'Improve'}
+      </Link>
+    </span>
   ),
 }
 

@@ -188,6 +188,9 @@ async def _super_plan(
     settings = dict(body.get("settings") or {})
     found = super_repair.variants(body) if body else []
     problems = [] if found else [f"{alpha_id} could not be read from BRAIN."]
+    if found:
+        tried = await state.engine.tried([_super_request(v) for v in found])
+        found = [v for v, done in zip(found, tried, strict=True) if not done]
     plan = RepairPlan(
         alpha_id=alpha_id,
         expression=super_repair.code_of(body, "combo"),
@@ -218,6 +221,15 @@ async def _super_plan(
     return plan, found, settings
 
 
+def _super_request(v: super_repair.SuperVariant) -> SimulationRequest:
+    return SimulationRequest(
+        type=SimulationType.SUPER,
+        settings=SimulationSettings.model_validate(v.settings | {"simulationMode": FULL_MODE}),
+        selection=v.selection,
+        combo=v.combo,
+    )
+
+
 async def _queue_super(
     state: State, alpha_id: str, take: int, cores: int, start: bool
 ) -> AddedTask:
@@ -230,14 +242,7 @@ async def _queue_super(
         super_alpha.Candidate(
             super_alpha.Recipe(v.edit, v.selection),
             super_alpha.Recipe("", v.combo),
-            SimulationRequest(
-                type=SimulationType.SUPER,
-                settings=SimulationSettings.model_validate(
-                    v.settings | {"simulationMode": FULL_MODE}
-                ),
-                selection=v.selection,
-                combo=v.combo,
-            ),
+            _super_request(v),
         )
         for v in picked
     ]
@@ -309,6 +314,20 @@ async def _plan(
             power_pool=power_pool,
             universes=universes,
         )
+    if candidates:
+        # Never offered again: a variant already simulated with these settings, or refused.
+        tried = await state.engine.tried(
+            [
+                SimulationRequest(
+                    settings=SimulationSettings.model_validate(
+                        settings | v.settings | {"simulationMode": FULL_MODE}
+                    ),
+                    regular=v.expression,
+                )
+                for v in candidates
+            ]
+        )
+        candidates = [v for v, done in zip(candidates, tried, strict=True) if not done]
     scored: list[tuple[Variant, Score | None]] = [(v, None) for v in candidates]
     per_region: dict[str, dict[str, float]] = {}
     ranked = await state.predictors.current() is not None
@@ -567,6 +586,15 @@ async def _markets_and_runs(state: State) -> tuple[Markets, frozenset[str], dict
 TransplantKind = Literal["regular", "power_pool"]
 
 
+def _transplant_request(t: Transplant) -> SimulationRequest:
+    return SimulationRequest(
+        settings=SimulationSettings.model_validate(
+            {k: v for k, v in t.settings.items() if v is not None} | {"simulationMode": FULL_MODE}
+        ),
+        regular=t.expression,
+    )
+
+
 async def transplant_rows(
     state: State,
     limit: int,
@@ -610,6 +638,9 @@ async def transplant_rows(
     if kind is not None:
         found = [t for t in found if t.power_pool == (kind == "power_pool")]
     pool = [] if count_only else found[:TRANSPLANT_POOL]
+    if pool:
+        tried = await state.engine.tried([_transplant_request(t) for t in pool])
+        pool = [t for t, done in zip(pool, tried, strict=True) if not done]
     ranked = await state.predictors.current() is not None
     scores: list[Score | None] = [None] * len(pool)
     if ranked and pool:
@@ -736,16 +767,7 @@ async def add_transplants(
     state: State, chosen: list[Transplant], *, cores: int, name: str, run: bool = False
 ) -> AddedTask:
     """One Full-mode task simulating these transplants, each at its own settings."""
-    requests = [
-        SimulationRequest(
-            settings=SimulationSettings.model_validate(
-                {k: v for k, v in t.settings.items() if v is not None}
-                | {"simulationMode": FULL_MODE}
-            ),
-            regular=t.expression,
-        )
-        for t in chosen
-    ]
+    requests = [_transplant_request(t) for t in chosen]
     first = chosen[0]
     regions = sorted({t.region for t in chosen})
     return await add_study(

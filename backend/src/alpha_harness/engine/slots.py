@@ -103,6 +103,47 @@ ORPHAN_SWEEP_SECONDS = 60.0
 ABANDON_AT_ONCE = 8
 
 
+#: Words in BRAIN's message for a refusal that would repeat: the expression or settings
+#: themselves are wrong. Anything else (throttling, a timeout, a server error) may pass later.
+_FOR_GOOD = (
+    "unknown variable",
+    "attempted to use",
+    "inaccessible",
+    "unexpected",
+    "syntax",
+    "invalid",
+    "not found",
+    "does not exist",
+    "not allowed",
+    "unsupported",
+    "incompatible",
+    "unit",
+    "no such",
+    "expected",
+)
+_PASSING = (
+    "timeout",
+    "timed out",
+    "throttl",
+    "rate",
+    "concurrent",
+    "try again",
+    "internal",
+    "server",
+    "unavailable",
+    "limit",
+    "gone",
+    "cancel",
+    "lost",
+)
+
+
+def errored_for_good(message: str) -> bool:
+    """Whether BRAIN's error says the request itself is wrong, so it would fail again."""
+    text = message.lower()
+    return any(w in text for w in _FOR_GOOD) and not any(w in text for w in _PASSING)
+
+
 class BatchEngine:
     """Keeps the concurrent slots full from a local queue."""
 
@@ -208,6 +249,36 @@ class BatchEngine:
 
     # -- queueing --------------------------------------------------------
 
+    async def tried(self, requests: list[SimulationRequest]) -> list[bool]:
+        """Whether each request was already simulated (here or in the vault), or refused by
+        BRAIN for good: sending it would only repeat a known result. Spends nothing."""
+        if not requests:
+            return []
+        stored = (
+            await self.vault.find(requests) if self.vault is not None else [None] * len(requests)
+        )
+        hashes = [request_hash(self._moded(r)) for r in requests]
+        done: set[str] = set()
+        async with self.db.session() as session:
+            for chunk in itertools.batched(set(hashes), ENQUEUE_CHUNK, strict=False):
+                done.update(
+                    await session.scalars(
+                        select(DedupEntry.request_hash).where(DedupEntry.request_hash.in_(chunk))
+                    )
+                )
+                for digest, message in (
+                    await session.execute(
+                        select(SimulationRecord.request_hash, SimulationRecord.message).where(
+                            SimulationRecord.request_hash.in_(chunk),
+                            SimulationRecord.status.in_((SimStatus.ERROR, SimStatus.FAILED)),
+                            SimulationRecord.alpha_id.is_(None),
+                        )
+                    )
+                ).tuples():
+                    if message and errored_for_good(message):
+                        done.add(digest)
+        return [a is not None or h in done for a, h in zip(stored, hashes, strict=True)]
+
     async def enqueue(
         self,
         requests: list[SimulationRequest],
@@ -247,6 +318,9 @@ class BatchEngine:
                 for r in pair
             }
             known: dict[str, str] = {}
+            #: Hash -> BRAIN's message the last time it refused this exact request for a
+            #: reason that does not pass (an unknown field, an operator not allowed).
+            refused: dict[str, str] = {}
             #: Hash -> an active row's id, or the row this call is adding for it.
             in_flight: dict[str, int | SimulationRecord] = {}
             # Looked up in bulk — a harvest enqueues thousands, and two reads per request
@@ -267,6 +341,17 @@ class BatchEngine:
                     )
                 ).tuples():
                     in_flight.setdefault(digest, record_id)
+                for digest, message in (
+                    await session.execute(
+                        select(SimulationRecord.request_hash, SimulationRecord.message).where(
+                            SimulationRecord.request_hash.in_(chunk),
+                            SimulationRecord.status.in_((SimStatus.ERROR, SimStatus.FAILED)),
+                            SimulationRecord.alpha_id.is_(None),
+                        )
+                    )
+                ).tuples():
+                    if message and errored_for_good(message):
+                        refused.setdefault(digest, message)
             for new, old in legacy.items():
                 if new not in known and old in known:
                     known[new] = known[old]
@@ -299,6 +384,20 @@ class BatchEngine:
                     )
                     session.add(record)
                     plan.append((index, digest, SimStatus.SKIPPED, stored[index], record))
+                elif digest in refused and digest not in in_flight:
+                    # Sent before with these exact settings and refused by BRAIN for good:
+                    # sending it again would spend a simulation on the same error.
+                    record = new_record(
+                        request,
+                        task=task,
+                        status=SimStatus.REJECTED,
+                        message=f"Not sent again: BRAIN refused it before. {refused[digest]}"[
+                            :1000
+                        ],
+                        finished_at=utcnow(),
+                    )
+                    session.add(record)
+                    plan.append((index, digest, SimStatus.SKIPPED, None, record))
                 elif digest in in_flight:
                     # Same payload still queued or running (possibly from earlier in this
                     # call): share that row, so its result reaches both callers for one run.

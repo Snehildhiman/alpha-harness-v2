@@ -40,7 +40,7 @@ from ..db.models import Study, Trial, TrialState
 from ..vault.metrics import MIN_OVERLAP
 from ..vault.store import EVOLVABLE_TYPES, SEEDABLE
 from ..vault.yields import IGNORED_CHECKS, SUBMITTED, checks_of, is_submitted
-from . import search
+from . import families, search
 from .fastexpr import (
     UNCOUNTED,
     Node,
@@ -651,6 +651,9 @@ async def breed(
     )
     rate = run.mutation_rate or MUTATION_RATE
     rng = random.Random()
+    dead = await families.dead(optimizer.alphas.catalog)
+    per_family: dict[families.Family, int] = {}
+    spare: list[tuple[dict[str, Any], SimulationRequest]] = []
     out: list[tuple[dict[str, Any], SimulationRequest]] = []
     for _ in range(want * 10):
         if len(out) >= want:
@@ -664,7 +667,17 @@ async def breed(
         if key in seen:
             continue
         seen.add(key)
-        out.append(({"parents": [a.alpha_id, b.alpha_id], "generation": generation}, request))
+        fam = families.family(request.regular, request.settings.region)
+        if fam in dead:
+            continue
+        bred_child = ({"parents": [a.alpha_id, b.alpha_id], "generation": generation}, request)
+        if per_family.get(fam, 0) >= families.PER_ROUND:
+            spare.append(bred_child)
+            continue
+        per_family[fam] = per_family.get(fam, 0) + 1
+        out.append(bred_child)
+    # Near-copies only fill a generation that found nothing more different.
+    out += spare[: max(0, want - len(out))]
     log.info("ga.bred", study_id=row.id, generation=generation, children=len(out))
     return out
 

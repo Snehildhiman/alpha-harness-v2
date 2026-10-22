@@ -13,6 +13,7 @@ import type { AlphaFilters } from '@/ui/alpha-filters'
 import { Button, ErrorNotice, Notice, Panel, Segmented, Skeleton } from '@/ui/kit'
 import { type Column, DataTable } from '@/ui/table'
 import { type Kind, type NextRow, nextToSubmit } from './api'
+import { PresubmitButton } from './presubmit'
 
 const delta = (v: number | null | undefined) =>
   v == null ? '—' : `${v >= 0 ? '+' : ''}${fmt.ratio(v, 3)}`
@@ -76,6 +77,12 @@ const COLUMNS: Column<NextRow>[] = [
         {fmt.ratio(r.maxCorrelation, 2)}
       </span>
     ),
+  },
+  {
+    key: 'check',
+    header: 'Before you submit',
+    width: 'minmax(200px,1.4fr)',
+    cell: (r) => <PresubmitButton alphaId={r.alphaId} />,
   },
 ]
 

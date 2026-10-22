@@ -346,3 +346,58 @@ async def screening(state: State) -> ScreenReport:
             for group, t in sorted(tally.items())
         ]
     )
+
+
+class HistoryTarget(Out):
+    target: str
+    label: str
+    kind: str
+    #: AUC for a check, rank correlation (Spearman) for a number: higher is better for both.
+    score: float | None
+    #: Held-out Alphas it was scored on.
+    n: int
+
+
+class HistoryPoint(Out):
+    trained_at: str
+    alphas: int
+    #: Kept in use: a retrain that did worse than the set in use is recorded but not kept.
+    accepted: bool
+    targets: list[HistoryTarget]
+
+
+def _score(metrics: dict[str, Any]) -> float | None:
+    for key in ("auc", "spearman"):
+        value = metrics.get(key)
+        if isinstance(value, int | float):
+            return float(value)
+    return None
+
+
+@router.get("/history")
+async def history(state: State) -> list[HistoryPoint]:
+    """Each training's test score per target, oldest first: whether the models improve."""
+    lines = state.predictors.history()
+    current = await state.predictors.current()
+    if not lines and current is not None:
+        # Trained before the history was kept: the set in use is its first point.
+        state.predictors.record(current, accepted=True)
+        lines = state.predictors.history()
+    return [
+        HistoryPoint(
+            trained_at=str(line.get("trainedAt") or ""),
+            alphas=int(line.get("alphas") or 0),
+            accepted=bool(line.get("accepted")),
+            targets=[
+                HistoryTarget(
+                    target=target,
+                    label=str(m.get("label") or target),
+                    kind=str(m.get("kind") or ""),
+                    score=_score(m),
+                    n=int(m.get("n") or 0),
+                )
+                for target, m in (line.get("targets") or {}).items()
+            ],
+        )
+        for line in lines
+    ]

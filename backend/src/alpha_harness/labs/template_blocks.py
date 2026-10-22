@@ -815,4 +815,168 @@ PRESETS: tuple[Preset, ...] = (
             ),
         ),
     ),
+    # Published, well-tested signal shapes over any field: trend quality, position in the
+    # range, seasonality, acceleration, confirmation by volume, risk scaling, persistence.
+    Preset(
+        "trend_efficiency",
+        "Trend Efficiency",
+        "How straight the field's path has been: net change over the sum of daily changes.",
+        _op(
+            "group_rank",
+            _op(
+                "divide",
+                _op("ts_delta", _F, _SLOW),
+                _op("ts_sum", _op("abs", _op("ts_delta", _F, _num(1))), _SLOW),
+            ),
+            _G,
+        ),
+    ),
+    Preset(
+        "days_since_high",
+        "Days Since the High",
+        "Favours stocks whose field set its high most recently, within peers.",
+        _op("group_rank", _op("reverse", _op("ts_arg_max", _F, _LB)), _G),
+    ),
+    Preset(
+        "range_position",
+        "Range Position",
+        "Where the field sits between its own low and high, within peers.",
+        _op("group_rank", _op("ts_scale", _F, _LB), _G),
+    ),
+    Preset(
+        "year_over_year_change",
+        "Year-over-Year Change",
+        "The change on a year ago, in the field's own yearly swings, within peers.",
+        _op(
+            "group_rank",
+            _op("divide", _op("ts_delta", _F, _num(252)), _op("ts_std_dev", _F, _num(252))),
+            _G,
+        ),
+    ),
+    Preset(
+        "acceleration",
+        "Acceleration",
+        "Whether the field's recent change is speeding up.",
+        _op("group_rank", _op("ts_delta", _op("ts_delta", _F, _FAST), _FAST), _G),
+    ),
+    Preset(
+        "back_to_peers",
+        "Back to Peers",
+        "Leans against a field that ran far from its own average, compared within peers.",
+        _op(
+            "reverse",
+            _op("group_zscore", _op("subtract", _F, _op("ts_mean", _F, _SLOW)), _G),
+        ),
+    ),
+    Preset(
+        "volume_confirmed_change",
+        "Volume-Confirmed Change",
+        "A change in the field, weighted up when trading is heavier than usual.",
+        _op(
+            "multiply",
+            _op("group_rank", _op("ts_delta", _F, _FAST), _G),
+            _op("ts_rank", _op("divide", _data("volume"), _data("adv20")), _FAST),
+        ),
+    ),
+    Preset(
+        "risk_scaled_score",
+        "Risk-Scaled Score",
+        "An own-history score divided by the stock's return volatility, within peers.",
+        _op(
+            "group_rank",
+            _op("divide", _op("ts_zscore", _F, _LB), _op("ts_std_dev", _data("returns"), _SLOW)),
+            _G,
+        ),
+    ),
+    Preset(
+        "low_volatility_tilt",
+        "Low-Volatility Tilt",
+        "A peer rank on the field, leaning towards calmer stocks.",
+        _op(
+            "multiply",
+            _op("group_rank", _F, _G),
+            _op("reverse", _op("rank", _op("ts_std_dev", _data("returns"), _SLOW))),
+        ),
+    ),
+    Preset(
+        "sign_persistence",
+        "Sign Persistence",
+        "How many recent days the field rose rather than fell, within peers.",
+        _op("group_rank", _op("ts_sum", _op("sign", _op("ts_delta", _F, _num(1))), _LB), _G),
+    ),
+    Preset(
+        "field_volume_divergence",
+        "Field-Volume Divergence",
+        "The field climbing its history while trading activity does not, smoothed.",
+        _op(
+            "ts_decay_linear",
+            _op(
+                "group_neutralize",
+                _op("subtract", _op("ts_rank", _F, _LB), _op("ts_rank", _data("volume"), _LB)),
+                _G,
+            ),
+            _FAST,
+        ),
+    ),
+    Preset(
+        "excess_over_returns",
+        "Excess Over Returns",
+        "The field's own-history score beyond what the stock's returns already show.",
+        _op(
+            "group_neutralize",
+            _op("subtract", _op("ts_zscore", _F, _LB), _op("ts_zscore", _data("returns"), _LB)),
+            _G,
+        ),
+    ),
+    Preset(
+        "smoothed_two_field_spread",
+        "Smoothed Two-Field Spread",
+        "One field's rank over another's, smoothed so it trades less.",
+        _op("ts_decay_linear", _op("subtract", _op("rank", _F), _op("rank", _F2)), _FAST),
+    ),
+    Preset(
+        "co_movement_break",
+        "Co-Movement Break",
+        "Favours stocks where two fields' daily changes stopped moving together.",
+        _op(
+            "reverse",
+            _op("ts_corr", _op("ts_delta", _F, _FAST), _op("ts_delta", _F2, _FAST), _SLOW),
+        ),
+    ),
+    Preset(
+        "quantile_shift",
+        "Quantile Shift",
+        "The field's recent distribution against its longer one.",
+        _op("rank", _op("subtract", _op("ts_quantile", _F, _FAST), _op("ts_quantile", _F, _SLOW))),
+    ),
+    Preset(
+        "held_steady_rank",
+        "Held-Steady Rank",
+        "A peer score that only moves on a real change, so it trades little.",
+        _op("hump", _op("group_rank", _op("ts_zscore", _F, _LB), _G), hump=0.01),
+    ),
+    Preset(
+        "surprise_in_return_units",
+        "Surprise in Return Units",
+        "A recent change in the field, measured in the stock's return swings.",
+        _op(
+            "group_rank",
+            _op(
+                "divide",
+                _op("ts_av_diff|ts_delta", _F, _FAST),
+                _op("ts_std_dev", _data("returns"), _SLOW),
+            ),
+            _G,
+        ),
+    ),
+    Preset(
+        "peer_rank_momentum",
+        "Peer-Rank Momentum",
+        "The average of a stock's recent peer ranks against its longer average.",
+        _op(
+            "subtract",
+            _op("ts_mean", _op("group_rank", _F, _G), _FAST),
+            _op("ts_mean", _op("group_rank", _F, _G), _SLOW),
+        ),
+    ),
 )

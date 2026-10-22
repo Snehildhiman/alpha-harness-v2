@@ -1459,6 +1459,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/models/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * History
+         * @description Each training's test score per target, oldest first: whether the models improve.
+         */
+        get: operations["history_api_models_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/models/predict": {
         parameters: {
             query?: never;
@@ -1517,6 +1537,107 @@ export interface paths {
          * @description Train every model on the whole vault in the background. A minute or two for 50k Alphas.
          */
         post: operations["train_api_models_train_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/overview/backups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Backups */
+        get: operations["backups_api_overview_backups_get"];
+        put?: never;
+        /**
+         * Make Backup
+         * @description Zip the vault (every Alpha and its daily PnL), the crowd history, the models and the
+         *     app's database. The catalog's fields are left out (a sync rebuilds them), and so is the
+         *     key to saved credentials.
+         */
+        post: operations["make_backup_api_overview_backups_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/overview/backups/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Backup */
+        get: operations["download_backup_api_overview_backups__name__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/overview/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Health
+         * @description Everything that keeps the app finding alphas, each ok, worth a look, or broken.
+         */
+        get: operations["health_api_overview_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/overview/presubmit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Presubmit
+         * @description BRAIN's submission checks, run again now for one Alpha, so a correlation that rose
+         *     since the last check is caught before you submit. Spends no simulations.
+         */
+        post: operations["presubmit_api_overview_presubmit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/overview/since": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Since
+         * @description What the last ``hours`` brought, by Alpha type. Reads only what is stored.
+         */
+        get: operations["since_api_overview_since_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3448,6 +3569,13 @@ export interface components {
             /** Year */
             year: string;
         };
+        /** AppHealth */
+        AppHealth: {
+            /** Items */
+            items: components["schemas"]["HealthItem"][];
+            /** Ok */
+            ok: boolean;
+        };
         /** Assistant */
         Assistant: {
             /** Budget */
@@ -3563,6 +3691,15 @@ export interface components {
              * @enum {string}
              */
             state: "running" | "done" | "failed" | "cancelled";
+        };
+        /** Backup */
+        Backup: {
+            /** Bytes */
+            bytes: number;
+            /** Createdat */
+            createdAt: string;
+            /** Name */
+            name: string;
         };
         /** Bar */
         Bar: {
@@ -3731,6 +3868,11 @@ export interface components {
              * @enum {string}
              */
             rankBy: "pass" | "sharpe" | "fitness";
+        };
+        /** Body_presubmit_api_overview_presubmit_post */
+        Body_presubmit_api_overview_presubmit_post: {
+            /** Alphaid */
+            alphaId: string;
         };
         /** Body_queue_api_repair_tasks_post */
         Body_queue_api_repair_tasks_post: {
@@ -4133,6 +4275,17 @@ export interface components {
             title: string;
             /** Updatedat */
             updatedAt: string | null;
+        };
+        /** CheckLine */
+        CheckLine: {
+            /** Limit */
+            limit?: number | null;
+            /** Name */
+            name: string;
+            /** Result */
+            result: string;
+            /** Value */
+            value?: number | null;
         };
         /**
          * CheckResult
@@ -4777,6 +4930,47 @@ export interface components {
             version: string;
             /** Websocketclients */
             websocketClients: number;
+        };
+        /** HealthItem */
+        HealthItem: {
+            /** Detail */
+            detail?: string | null;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Level */
+            level: string;
+            /** Link */
+            link?: string | null;
+            /** Ok */
+            ok: boolean;
+            /** Value */
+            value: string;
+        };
+        /** HistoryPoint */
+        HistoryPoint: {
+            /** Accepted */
+            accepted: boolean;
+            /** Alphas */
+            alphas: number;
+            /** Targets */
+            targets: components["schemas"]["HistoryTarget"][];
+            /** Trainedat */
+            trainedAt: string;
+        };
+        /** HistoryTarget */
+        HistoryTarget: {
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+            /** N */
+            n: number;
+            /** Score */
+            score: number | null;
+            /** Target */
+            target: string;
         };
         /** Issue */
         Issue: {
@@ -5857,6 +6051,25 @@ export interface components {
              */
             updateCheckHours: 0 | 1 | 6 | 24;
         };
+        /** Presubmit */
+        Presubmit: {
+            /** Alphaid */
+            alphaId: string;
+            /** Checked */
+            checked: string[];
+            /** Checkedat */
+            checkedAt: string;
+            /** Checks */
+            checks: components["schemas"]["CheckLine"][];
+            /** Failed */
+            failed: components["schemas"]["CheckLine"][];
+            /** Link */
+            link: string;
+            /** Ok */
+            ok: boolean;
+            /** Verdict */
+            verdict: string;
+        };
         /** Preview */
         Preview: {
             fields: components["schemas"]["FieldCounts"];
@@ -6697,6 +6910,51 @@ export interface components {
             task: string;
             /** Universe */
             universe: string | null;
+        };
+        /** Since */
+        Since: {
+            /** Best */
+            best: components["schemas"]["SinceAlpha"][];
+            /** Bykind */
+            byKind: components["schemas"]["SinceKind"][];
+            /** Hours */
+            hours: number;
+            /** Nearmisses */
+            nearMisses: number;
+            /** New */
+            new: number;
+            /** Simulations */
+            simulations: {
+                [key: string]: number;
+            };
+            /** Submittable */
+            submittable: number;
+        };
+        /** SinceAlpha */
+        SinceAlpha: {
+            /** Alphaid */
+            alphaId: string;
+            /** Expression */
+            expression: string | null;
+            /** Fitness */
+            fitness: number | null;
+            /** Kind */
+            kind: string;
+            /** Region */
+            region: string | null;
+            /** Sharpe */
+            sharpe: number | null;
+        };
+        /** SinceKind */
+        SinceKind: {
+            /** Kind */
+            kind: string;
+            /** Nearmisses */
+            nearMisses: number;
+            /** New */
+            new: number;
+            /** Submittable */
+            submittable: number;
         };
         /** SourceSettings */
         SourceSettings: {
@@ -10200,6 +10458,26 @@ export interface operations {
             };
         };
     };
+    history_api_models_history_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryPoint"][];
+                };
+            };
+        };
+    };
     predict_api_models_predict_post: {
         parameters: {
             query?: never;
@@ -10269,6 +10547,161 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TrainStarted"];
+                };
+            };
+        };
+    };
+    backups_api_overview_backups_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Backup"][];
+                };
+            };
+        };
+    };
+    make_backup_api_overview_backups_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Backup"];
+                };
+            };
+        };
+    };
+    download_backup_api_overview_backups__name__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    health_api_overview_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppHealth"];
+                };
+            };
+        };
+    };
+    presubmit_api_overview_presubmit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Body_presubmit_api_overview_presubmit_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Presubmit"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    since_api_overview_since_get: {
+        parameters: {
+            query?: {
+                hours?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Since"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

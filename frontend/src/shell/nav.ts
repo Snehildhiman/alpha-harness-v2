@@ -7,6 +7,7 @@ import {
   GaugeIcon,
   Grid3x3Icon,
   HammerIcon,
+  HeartPulseIcon,
   LayersIcon,
   LayoutGridIcon,
   ListChecksIcon,
@@ -84,6 +85,12 @@ export const NAV = [
     group: '',
     label: 'Simulation Matrix',
     icon: Grid3x3Icon,
+  },
+  {
+    to: '/health',
+    group: '',
+    label: 'Health and Backup',
+    icon: HeartPulseIcon,
   },
   {
     to: '/sync',
