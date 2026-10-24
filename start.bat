@@ -9,5 +9,5 @@ if not exist "src\alpha_harness\web\index.html" (
 )
 start "" http://localhost:8000
 echo Alpha Harness is running. Keep this window open; close it (or press Ctrl+C) to stop.
-uv run uvicorn alpha_harness.main:app --port 8000
+uv run uvicorn alpha_harness.main:app --port 8000 --timeout-keep-alive 75
 pause

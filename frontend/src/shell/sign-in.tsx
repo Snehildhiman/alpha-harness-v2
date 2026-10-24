@@ -12,6 +12,8 @@ import { Button, ErrorNotice, Field, Input, Notice } from '@/ui/kit'
 
 /** How often the app asks BRAIN whether the identity check has been accepted. */
 const VERIFY_EVERY_MS = 2_500
+/** Failed asks in a row (about a minute) before the wait is given up. */
+const GIVE_UP_AFTER = 24
 
 /** Larger than the in-app controls: this screen is the whole page and is read from arm's length. */
 const FIELD = '[&>span:first-child]:text-body'
@@ -193,34 +195,52 @@ function Verification({
   const [waiting, setWaiting] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   const popup = useRef<Window | null>(null)
+  // Held in a ref: the parent makes a new callback every render, which would restart the wait.
+  const verified = useRef(onVerified)
+  verified.current = onVerified
 
   useEffect(() => {
     if (!waiting) return
     let stopped = false
-    const timer = setInterval(async () => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let misses = 0
+    // One ask at a time: the next is scheduled only once this one has answered, so a slow
+    // BRAIN never piles asks up behind the sign-in lock.
+    const ask = async () => {
       try {
         const session = await auth.verify(inquiry)
         if (stopped) return
+        misses = 0
+        setProblem(null)
         if (session.authenticated) {
           stopped = true
-          clearInterval(timer)
           popup.current?.close()
-          onVerified()
+          verified.current()
+          return
         }
       } catch (error) {
-        // Asking early is normal and answers unauthenticated; a real failure stops the wait
-        // rather than polling BRAIN forever.
-        stopped = true
-        clearInterval(timer)
-        setWaiting(false)
-        setProblem(error instanceof ApiError ? error.message : 'The check could not be read.')
+        if (stopped) return
+        // A dropped connection or a slow answer is passing (the app is busy, or the browser
+        // reused a connection the app had just closed): keep asking. Only a refusal, or the
+        // app gone for a good while, stops the wait rather than polling forever.
+        const passing = !(error instanceof ApiError) || error.status === 0 || error.retryable
+        misses += 1
+        if (!passing || misses >= GIVE_UP_AFTER) {
+          stopped = true
+          setWaiting(false)
+          setProblem(error instanceof ApiError ? error.message : 'The check could not be read.')
+          return
+        }
+        setProblem('Lost touch with the app for a moment; still trying…')
       }
-    }, VERIFY_EVERY_MS)
+      timer = setTimeout(ask, VERIFY_EVERY_MS)
+    }
+    timer = setTimeout(ask, VERIFY_EVERY_MS)
     return () => {
       stopped = true
-      clearInterval(timer)
+      clearTimeout(timer)
     }
-  }, [waiting, inquiry, onVerified])
+  }, [waiting, inquiry])
 
   const open = () => {
     setProblem(null)

@@ -3,6 +3,15 @@
 What v2 adds on top of [alpha-harness-improved](https://github.com/residual-lab/alpha-harness)
 (MIT, © MiracleInvoker). How to use each part: [GUIDE.md](GUIDE.md).
 
+## 2026-10-24 (sign-in identity check)
+
+- **Fixed "Cannot reach Alpha Harness: it is not running" while verifying identity**: one
+  dropped connection during the wait for BRAIN's check ended the wait. It now keeps asking
+  through brief drops (saying "still trying") and gives up only after about a minute, asks one
+  at a time, and no longer restarts the wait on every redraw. The app also keeps idle
+  connections for 75 s instead of 5 s, so the browser no longer sends a sign-in request down a
+  connection the app has just closed.
+
 ## 2026-10-23 (fixes from the refusals list)
 
 - **Fixed "Incompatible unit … Unit[Group:1]"**: fields that are labels (a cluster, sector or

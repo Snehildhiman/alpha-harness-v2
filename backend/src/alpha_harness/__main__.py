@@ -14,6 +14,9 @@ from .window import open_window
 
 HOST = "127.0.0.1"
 PORT = 8000
+#: Idle connections are kept this long. uvicorn's 5 s let a browser reuse a connection the app
+#: had just closed, and a POST lost that way is not retried (it read as "not running").
+KEEP_ALIVE_SECONDS = 75
 #: A port another program holds: POSIX's number, and Windows' own (WSAEADDRINUSE).
 PORT_TAKEN = frozenset({errno.EADDRINUSE, 10048})
 #: How long a start straight after an update waits for the page that asked for it to return.
@@ -26,7 +29,9 @@ async def _serve() -> str | None:
     listening = _listen()
     from .main import app
 
-    server = uvicorn.Server(uvicorn.Config(app, host=HOST, port=PORT))
+    server = uvicorn.Server(
+        uvicorn.Config(app, host=HOST, port=PORT, timeout_keep_alive=KEEP_ALIVE_SECONDS)
+    )
     # The one handle that can stop this process gracefully. Reached by the update route, which
     # has to close the app so the launcher can replace it while nothing holds the files open.
     app.state.server = server
