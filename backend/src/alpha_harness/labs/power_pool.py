@@ -18,6 +18,7 @@ from sqlalchemy import func, or_, select
 
 from ..brain.schemas import FULL_MODE, REGION_AGNOSTIC_REGION, SimulationSettings
 from ..catalog.queries import CatalogQueries, FieldFilter, Tuple4
+from ..db.duck import AMONG, packed
 from ..db.models import Study, StudyStatus, Trial, TrialState, utcnow
 from ..llm import library
 from ..llm.keys import BudgetExhaustedError, LLMError
@@ -238,8 +239,9 @@ async def chosen_context(
 
     A field no downloaded universe has is left out; ``None`` when none is left.
     """
-    marks = ", ".join("?" for _ in field_ids)
-    rows = await _rows(catalog, region, delay, universes, f"field_id IN ({marks})", field_ids)
+    rows = await _rows(
+        catalog, region, delay, universes, f"field_id IN {AMONG}", [packed(field_ids)]
+    )
     held, info = _best(rows, universes)
     wanted = [f for f in dict.fromkeys(field_ids) if f in info and not group_like(f, info[f])]
     if not wanted:
@@ -298,7 +300,7 @@ async def ra_context(
     if not chosen:
         return None
     column = "dataset_id" if whole else "field_id"
-    pick = f"{column} IN ({', '.join('?' for _ in chosen)})"
+    pick = f"{column} IN {AMONG}"
     pairs = " OR ".join("(region = ? AND universe = ?)" for _ in regions)
     rows = await catalog.query(
         f"""
@@ -308,7 +310,7 @@ async def ra_context(
           AND field_type IN ('MATRIX', 'VECTOR', 'GROUP')
           AND ({pick} OR field_id IN ({", ".join("?" for _ in extra)}))
         """,  # noqa: S608
-        [delay, *(v for r in regions for v in (r, markets[r])), *chosen, *extra],
+        [delay, *(v for r in regions for v in (r, markets[r])), packed(chosen), *extra],
     )
     held: dict[str, set[str]] = {}
     info: dict[str, dict[str, Any]] = {}

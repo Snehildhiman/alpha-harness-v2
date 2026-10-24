@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 
+from ..db.duck import AMONG, packed
 from .features import FieldInfo, read_expression
 from .train import MIN_LABELS, Gate, ModelSet, gate, train_all
 
@@ -44,14 +45,14 @@ async def field_infos(catalog: Catalog, expressions: list[str | None]) -> dict[s
     if not wanted:
         return {}
     rows = await catalog.query(
-        "SELECT field_id, any_value(dataset_id) AS dataset, any_value(category_id) AS category, "
+        "SELECT field_id, any_value(dataset_id) AS dataset, any_value(category_id) AS category, "  # noqa: S608
         "max(alpha_count) AS alphas, max(user_count) AS users "
-        "FROM data_field WHERE field_id IN (SELECT unnest(?)) GROUP BY field_id",
-        [sorted(wanted)],
+        f"FROM data_field WHERE field_id IN {AMONG} GROUP BY field_id",
+        [packed(sorted(wanted))],
     )
     growth = {
         r["field_id"]: float(r["per_day"])
-        for r in await catalog.query(_GROWTH, [sorted(wanted)])
+        for r in await catalog.query(_GROWTH, [packed(sorted(wanted))])
         if r["per_day"] is not None
     }
     return {
@@ -68,17 +69,17 @@ async def field_infos(catalog: Catalog, expressions: list[str | None]) -> dict[s
 
 #: Each field's fastest market: new Alphas a day between its first and last snapshot of the
 #: past month. Snapshots keep a row only when a count changed, so two rows mean it moved.
-_GROWTH = """
+_GROWTH = f"""
 SELECT field_id, max(per_day) AS per_day FROM (
     SELECT field_id,
            (arg_max(alpha_count, snapshot_date) - arg_min(alpha_count, snapshot_date))
              / greatest(date_diff('day', min(snapshot_date), max(snapshot_date)), 1) AS per_day
     FROM field_snapshot
-    WHERE field_id IN (SELECT unnest(?)) AND snapshot_date >= current_date - 30
+    WHERE field_id IN {AMONG} AND snapshot_date >= current_date - 30
     GROUP BY field_id, instrument_type, region, delay, universe
     HAVING count(*) >= 2
 ) GROUP BY field_id
-"""
+"""  # noqa: S608
 
 
 #: Seconds between looks for enough new results to retrain on.

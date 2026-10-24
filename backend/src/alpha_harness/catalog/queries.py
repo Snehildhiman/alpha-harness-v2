@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from pydantic import BaseModel, Field
 
 from ..brain.schemas import REGION_AGNOSTIC_REGION
+from ..db.duck import AMONG, packed
 from .search import MATCH, TABLE, query_terms
 from .search import ready as search_ready
 
@@ -185,9 +186,8 @@ class FieldFilter(BaseModel):
             ("field_type", self.field_types),
         ):
             if values:
-                placeholders = ", ".join("?" for _ in values)
-                clauses.append(f"{column} IN ({placeholders})")
-                params.extend(values)
+                clauses.append(f"{column} IN {AMONG}")
+                params.append(packed(values))
 
         for column, value, op in (
             ("coverage", self.coverage_min, ">="),
@@ -218,9 +218,8 @@ class FieldFilter(BaseModel):
             params.extend(words)
 
         if self.exclude_dataset_ids:
-            placeholders = ", ".join("?" for _ in self.exclude_dataset_ids)
-            clauses.append(f"(dataset_id IS NULL OR dataset_id NOT IN ({placeholders}))")
-            params.extend(self.exclude_dataset_ids)
+            clauses.append(f"(dataset_id IS NULL OR dataset_id NOT IN {AMONG})")
+            params.append(packed(self.exclude_dataset_ids))
         window = [
             (op, value)
             for op, value in ((">=", self.exclude_date_min), ("<=", self.exclude_date_max))
@@ -415,9 +414,9 @@ class CatalogQueries:
             FROM data_field f
             LEFT JOIN data_set d ON d.dataset_id = f.dataset_id AND {on_scope}
             WHERE f.instrument_type = ? AND f.region = ? AND f.delay = ? AND f.universe = ?
-              AND {column} IN ({", ".join("?" for _ in field_ids)})
+              AND {column} IN {AMONG}
             """,  # noqa: S608
-            [*scope.params, *field_ids],
+            [*scope.params, packed(field_ids)],
         )
 
     async def field_availability(self, field_id: str) -> list[dict[str, Any]]:
@@ -449,9 +448,9 @@ class CatalogQueries:
             f"""
             SELECT field_id, universe FROM data_field
             WHERE instrument_type = 'EQUITY' AND region = ? AND delay = ?
-              AND field_id IN ({", ".join("?" for _ in field_ids)})
+              AND field_id IN {AMONG}
             """,  # noqa: S608 - placeholders only
-            [region, delay, *field_ids],
+            [region, delay, packed(field_ids)],
         )
 
     # -- datasets & facets -----------------------------------------------

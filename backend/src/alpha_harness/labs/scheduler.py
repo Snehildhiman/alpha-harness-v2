@@ -100,7 +100,18 @@ scheduling = asyncio.Lock()
 
 
 def cores_of(row: Study) -> int:
-    return task_params(row).cores
+    """Cores a task holds, read straight from its stored parameters.
+
+    Not through :func:`task_params`: validating a task's whole parameters (a search space can
+    list thousands of fields) for one number cost the task list and the scheduler that much on
+    every call, and an old row that no longer validates took the list, and every task waiting
+    to start, down with it.
+    """
+    raw = (row.sampler_params or {}).get("cores")
+    try:
+        return max(1, int(raw)) if raw is not None else 1
+    except TypeError, ValueError:
+        return 1
 
 
 def to_start(waiting: list[tuple[int, int]], used: int, slots: int) -> list[int]:

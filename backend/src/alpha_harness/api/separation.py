@@ -23,6 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from .. import preferences
 from ..crowding import crowdmap
 from ..crowding.crowdmap import Floor
+from ..db.duck import AMONG, packed
 from ..recent import Memo
 from ..schemas import Out
 from ..separation import (
@@ -90,10 +91,10 @@ async def _categories(state: State, rows: list[dict[str, Any]], rule: ThemeRule)
     by_field: dict[str, str] = {}
     if wanted:
         found = await state.catalog.query(
-            "SELECT field_id, region, delay, any_value(category_id) AS cat "
-            "FROM data_field WHERE field_id IN (SELECT unnest(?)) AND category_id IS NOT NULL "
+            "SELECT field_id, region, delay, any_value(category_id) AS cat "  # noqa: S608
+            f"FROM data_field WHERE field_id IN {AMONG} AND category_id IS NOT NULL "
             "GROUP BY field_id, region, delay",
-            [sorted(wanted)],
+            [packed(sorted(wanted))],
         )
         for f in found:
             by_scope[(f["field_id"], f["region"], int(f["delay"]))] = f["cat"]
@@ -214,9 +215,9 @@ async def crowd_floors(state: State, judged: list[Judged]) -> dict[str, Floor]:
             arrived = {
                 str(r["alpha_id"])
                 for r in await state.catalog.query(
-                    "SELECT alpha_id FROM alpha WHERE alpha_id IN (SELECT unnest(?)) "
+                    f"SELECT alpha_id FROM alpha WHERE alpha_id IN {AMONG} "  # noqa: S608
                     "AND coalesce(pnl_version, series_version) = ?",
-                    [retry, SERIES_VERSION],
+                    [packed(retry), SERIES_VERSION],
                 )
             }
             for alpha_id in arrived:

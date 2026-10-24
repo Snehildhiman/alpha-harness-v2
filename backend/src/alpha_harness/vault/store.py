@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import structlog
 
-from ..db.duck import ALPHA_COLUMNS, TRAIN_COLUMNS, Catalog
+from ..db.duck import ALPHA_COLUMNS, AMONG, TRAIN_COLUMNS, Catalog, packed
 from . import metrics
 from .yields import SUBMITTED, without_quota_checks
 
@@ -654,14 +654,13 @@ class AlphaVault:
         """Each Alpha's stored daily PnL by date, oldest first. Alphas without one are absent."""
         if not alpha_ids:
             return {}
-        placeholders = ", ".join("?" for _ in alpha_ids)
         rows = await self.catalog.query(
             f"""
             SELECT alpha_id, date, pnl FROM alpha_pnl
-            WHERE alpha_id IN ({placeholders})
+            WHERE alpha_id IN {AMONG}
             ORDER BY alpha_id, date
             """,  # noqa: S608
-            list(alpha_ids),
+            [packed(alpha_ids)],
         )
         grouped: dict[str, dict[date, float]] = {}
         for row in rows:
@@ -673,16 +672,15 @@ class AlphaVault:
         which has no turnover, are absent."""
         if not alpha_ids:
             return {}
-        placeholders = ", ".join("?" for _ in alpha_ids)
         # Arrow, not a dict per row: building a few hundred thousand row objects holds
         # Python's lock and stalls every other request while it runs.
         table = await self.catalog.arrow(
             f"""
             SELECT alpha_id, date, pnl, turnover FROM alpha_pnl
-            WHERE alpha_id IN ({placeholders}) AND turnover IS NOT NULL
+            WHERE alpha_id IN {AMONG} AND turnover IS NOT NULL
             ORDER BY alpha_id, date
             """,  # noqa: S608
-            list(alpha_ids),
+            [packed(alpha_ids)],
         )
         return await asyncio.to_thread(_group_series, table)
 
@@ -696,13 +694,12 @@ class AlphaVault:
         """
         if not alpha_ids:
             return [], [], np.empty((0, 0))
-        placeholders = ", ".join("?" for _ in alpha_ids)
         table = await self.catalog.arrow(
             f"""
             SELECT alpha_id, date, coalesce(pnl, 0) AS pnl FROM alpha_pnl
-            WHERE alpha_id IN ({placeholders}) AND alpha_id IN ({PNL_STORED})
+            WHERE alpha_id IN {AMONG} AND alpha_id IN ({PNL_STORED})
             """,  # noqa: S608
-            [*alpha_ids, SERIES_VERSION],
+            [packed(alpha_ids), SERIES_VERSION],
         )
         ids = table.column("alpha_id").combine_chunks().dictionary_encode()
         days, row = np.unique(table.column("date").to_numpy(), return_inverse=True)
@@ -736,13 +733,12 @@ class AlphaVault:
         """Those of these Alphas with no PnL and turnover stored, in the order given."""
         if not alpha_ids:
             return []
-        placeholders = ", ".join("?" for _ in alpha_ids)
         rows = await self.catalog.query(
             f"""
             SELECT alpha_id FROM alpha
-            WHERE alpha_id IN ({placeholders}) AND series_version = ?
+            WHERE alpha_id IN {AMONG} AND series_version = ?
             """,  # noqa: S608
-            [*alpha_ids, SERIES_VERSION],
+            [packed(alpha_ids), SERIES_VERSION],
         )
         stored = {str(r["alpha_id"]) for r in rows}
         return [a for a in alpha_ids if a not in stored]
@@ -751,10 +747,9 @@ class AlphaVault:
         """Those of these Alphas with no daily PnL stored, turnover or not, in the order given."""
         if not alpha_ids:
             return []
-        placeholders = ", ".join("?" for _ in alpha_ids)
         rows = await self.catalog.query(
-            f"SELECT alpha_id FROM ({PNL_STORED}) WHERE alpha_id IN ({placeholders})",  # noqa: S608
-            [SERIES_VERSION, *alpha_ids],
+            f"SELECT alpha_id FROM ({PNL_STORED}) WHERE alpha_id IN {AMONG}",  # noqa: S608
+            [SERIES_VERSION, packed(alpha_ids)],
         )
         stored = {str(r["alpha_id"]) for r in rows}
         return [a for a in alpha_ids if a not in stored]
@@ -766,17 +761,16 @@ class AlphaVault:
         """
         if not alpha_ids:
             return {}
-        placeholders = ", ".join("?" for _ in alpha_ids)
         rows = await self.catalog.query(
             f"""
             SELECT p.alpha_id, p.date, p.pnl FROM alpha_pnl p
             JOIN (
                 SELECT alpha_id, max(date) - INTERVAL 2 YEAR AS cutoff FROM alpha_pnl
-                WHERE alpha_id IN ({placeholders}) GROUP BY alpha_id
+                WHERE alpha_id IN {AMONG} GROUP BY alpha_id
             ) c ON p.alpha_id = c.alpha_id
             WHERE p.date < c.cutoff
             """,  # noqa: S608
-            list(alpha_ids),
+            [packed(alpha_ids)],
         )
         out: dict[str, dict[date, float]] = {}
         for row in rows:
@@ -788,13 +782,12 @@ class AlphaVault:
         parents = {str(r["alpha_id"]): r for r in rows if r.get("sim_type") == "RA_PARENT"}
         if not parents:
             return {}
-        placeholders = ", ".join("?" for _ in parents)
         found = await self.catalog.query(
             f"""
             SELECT p.alpha_id AS parent_of, c.* FROM alpha p JOIN alpha c ON {family_of("p")}
-            WHERE p.alpha_id IN ({placeholders})
+            WHERE p.alpha_id IN {AMONG}
             """,  # noqa: S608
-            list(parents),
+            [packed(parents)],
         )
         children: dict[str, list[dict[str, Any]]] = {}
         for row in found:
@@ -825,10 +818,9 @@ class AlphaVault:
         """Look several alphas up at once, keyed by id."""
         if not alpha_ids:
             return {}
-        placeholders = ", ".join("?" for _ in alpha_ids)
         rows = await self.catalog.query(
-            f"SELECT * FROM alpha WHERE alpha_id IN ({placeholders})",  # noqa: S608
-            list(alpha_ids),
+            f"SELECT * FROM alpha WHERE alpha_id IN {AMONG}",  # noqa: S608
+            [packed(alpha_ids)],
         )
         return {str(r["alpha_id"]): r for r in rows}
 

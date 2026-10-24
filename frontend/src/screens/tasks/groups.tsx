@@ -171,8 +171,10 @@ export function AlphaGroups({
         <h3 className="text-title font-medium text-ink">Alpha groups</h3>
         {data && (
           <span className="num text-body-compact text-ink-subtle">
-            {fmt.int(data.groups.length)} Alphas · {fmt.int(data.complete)} regional runs back ·{' '}
-            {fmt.int(data.calibrated)} calibrated
+            {data.total > data.groups.length
+              ? `Best ${fmt.int(data.groups.length)} of ${fmt.int(data.total)} Alphas`
+              : `${fmt.int(data.total)} Alphas`}{' '}
+            · {fmt.int(data.complete)} regional runs back · {fmt.int(data.calibrated)} calibrated
           </span>
         )}
         <Button

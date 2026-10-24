@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any
 import structlog
 from sqlalchemy import select
 
+from .db.duck import AMONG, packed
 from .db.models import Study, StudyStatus, Trial, TrialState
 from .labs.params import TASK_SAMPLERS, task_params
 from .labs.scheduler import cores_of, resize_task
@@ -108,9 +109,9 @@ async def yields(optimizer: Optimizer, catalog: Catalog) -> list[TaskYield]:
         stored = {
             str(r["alpha_id"]): r
             for r in await catalog.query(
-                "SELECT alpha_id, sim_type, status, checks, classifications, simulation_mode "
-                "FROM alpha WHERE alpha_id IN (SELECT unnest(?))",
-                [ids],
+                "SELECT alpha_id, sim_type, status, checks, classifications, simulation_mode "  # noqa: S608
+                f"FROM alpha WHERE alpha_id IN {AMONG}",
+                [packed(ids)],
             )
         }
     out: list[TaskYield] = []

@@ -12,14 +12,16 @@ import itertools
 import json
 import math
 import re
+import time
 from typing import Annotated, Any, Literal
 
 import structlog
 from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import and_, case, func, literal_column, or_, select, update
 
 from ..brain.errors import BrainError, BrainRateLimited
+from ..db.duck import AMONG, packed
 from ..db.models import (
     BrainCache,
     SimStatus,
@@ -318,59 +320,51 @@ async def _progress(state: Any, ids: list[int]) -> dict[int, dict[str, Any]]:
     if not ids:
         return out
     value = func.json_extract(Trial.values, "$[0]")
+    told = Trial.state.in_([TrialState.COMPLETE, TrialState.FAIL])
+    free = and_(told, Trial.message == scheduler.FREE)
+    # One pass over each task's trials, not five: a running task is counted on every update
+    # of the list, every two seconds, and its trials are tens of thousands.
+    counted = (
+        select(
+            Trial.study_id,
+            Trial.state,
+            case((free, 1), else_=0),
+            case((and_(told, scheduler.full_run()), 1), else_=0),
+            case((Trial.state == TrialState.FAIL, Trial.message), else_=None),
+            func.count(),
+            # An Alpha that returned no value is scored at the failure value, so it is not a
+            # best; nor is a seed, which was scored before the task began.
+            func.max(
+                case(
+                    (
+                        and_(
+                            Trial.state == TrialState.COMPLETE,
+                            value > FAILURE,
+                            or_(Trial.generation.is_(None), Trial.generation != 0),
+                        ),
+                        value,
+                    ),
+                    else_=None,
+                )
+            ),
+        )
+        .where(Trial.study_id.in_(ids))
+        .group_by(literal_column("1"), literal_column("2"), literal_column("3"))
+        .group_by(literal_column("4"), literal_column("5"))
+    )
     async with state.db.session() as session:
-        states = await session.execute(
-            select(Trial.study_id, Trial.state, func.count())
-            .where(Trial.study_id.in_(ids))
-            .group_by(Trial.study_id, Trial.state)
-        )
-        for study_id, trial_state, n in states.all():
-            out[study_id]["states"][str(trial_state)] = int(n)
-        free = await session.execute(
-            select(Trial.study_id, func.count())
-            .where(
-                Trial.study_id.in_(ids),
-                Trial.state.in_([TrialState.COMPLETE, TrialState.FAIL]),
-                Trial.message == scheduler.FREE,
-            )
-            .group_by(Trial.study_id)
-        )
-        for study_id, n in free.all():
-            out[study_id]["free"] = int(n)
-        failures = await session.execute(
-            select(Trial.study_id, Trial.message, func.count())
-            .where(Trial.study_id.in_(ids), Trial.state == TrialState.FAIL)
-            .group_by(Trial.study_id, Trial.message)
-        )
-        for study_id, message, n in failures.all():
-            found = out[study_id]["failures"]
-            found[_reason(message)] = found.get(_reason(message), 0) + int(n)
-        full_runs = await session.execute(
-            select(Trial.study_id, func.count())
-            .where(
-                Trial.study_id.in_(ids),
-                Trial.state.in_([TrialState.COMPLETE, TrialState.FAIL]),
-                or_(Trial.message.is_(None), Trial.message != scheduler.FREE),
-                scheduler.full_run(),
-            )
-            .group_by(Trial.study_id)
-        )
-        for study_id, n in full_runs.all():
-            out[study_id]["fullRuns"] = int(n)
-        # An Alpha that returned no value is scored at the failure value, so it is not a best;
-        # nor is a seed, which was scored before the task began.
-        best = await session.execute(
-            select(Trial.study_id, func.max(value))
-            .where(
-                Trial.study_id.in_(ids),
-                Trial.state == TrialState.COMPLETE,
-                value > FAILURE,
-                or_(Trial.generation.is_(None), Trial.generation != 0),
-            )
-            .group_by(Trial.study_id)
-        )
-        for study_id, value in best.all():
-            out[study_id]["best"] = None if value is None else float(value)
+        rows = (await session.execute(counted)).all()
+    for study_id, trial_state, is_free, is_full, why, n, best in rows:
+        task = out[study_id]
+        task["states"][str(trial_state)] = task["states"].get(str(trial_state), 0) + int(n)
+        if is_free:
+            task["free"] += int(n)
+        elif is_full:
+            task["fullRuns"] += int(n)
+        if trial_state == TrialState.FAIL:
+            task["failures"][_reason(why)] = task["failures"].get(_reason(why), 0) + int(n)
+        if best is not None and (task["best"] is None or float(best) > task["best"]):
+            task["best"] = float(best)
     return out
 
 
@@ -1120,9 +1114,9 @@ async def info(task_id: int, state: State) -> TaskInfo:
         found = await state.catalog.query(
             f"""
             SELECT DISTINCT field_id, dataset_id FROM data_field
-            WHERE region = ? AND delay = ? AND field_id IN ({", ".join("?" for _ in unmapped)})
+            WHERE region = ? AND delay = ? AND field_id IN {AMONG}
             """,  # noqa: S608
-            [params.get("region"), params.get("delay"), *unmapped],
+            [params.get("region"), params.get("delay"), packed(unmapped)],
         )
         field_to_dataset = {str(f["field_id"]): str(f["dataset_id"]) for f in found}
     per: dict[str, dict[str, Any]] = {}
@@ -1233,7 +1227,9 @@ class AlphaGroup(Out):
 
 
 class AlphaGroups(Out):
+    #: The best groups, ranked; ``total`` counts them all.
     groups: list[AlphaGroup]
+    total: int
     calibrating: bool
     #: Alphas back from BRAIN whose checks were ever read, of those back.
     calibrated: int
@@ -1265,68 +1261,90 @@ def _check_counts(raw: Any) -> tuple[int, int, int, list[str]]:
     return passed, failed, pending, failing
 
 
-async def _group_rows(state: Any, task_id: int) -> list[Trial]:
+#: Groups sent to the page at most, the best first. A long task writes thousands, and sending
+#: them all on every four-second update was megabytes a time, rebuilt from every trial and
+#: every Alpha the task ever wrote.
+GROUPS_SHOWN = 300
+#: How long one ranking answers the page's updates before it is built again.
+GROUPS_FRESH = 8.0
+
+#: Task → (built at, ranked groups, regional runs back, of those calibrated).
+_ranked: dict[int, tuple[float, list[AlphaGroup], int, int]] = {}
+#: The ranking being built, per task, which every request arriving meanwhile waits on.
+_ranking: dict[int, asyncio.Future[tuple[float, list[AlphaGroup], int, int]]] = {}
+
+
+def _setting(key: str) -> Any:
+    return func.json_extract(Trial.settings, f"$.{key}")
+
+
+async def _group_rows(state: Any, task_id: int) -> list[Any]:
+    """What the groups show of each trial, and nothing else: a whole trial carries its BRAIN
+    result, and reading tens of thousands of them took seconds."""
     async with state.db.session() as session:
-        return list(
-            (
-                await session.scalars(
-                    select(Trial)
-                    .where(
-                        Trial.study_id == task_id,
-                        func.json_extract(Trial.params, "$.group").is_not(None),
-                        or_(Trial.state != TrialState.PRUNED, Trial.message == pool_lab.PROPOSED),
-                    )
-                    .order_by(Trial.number)
-                )
-            ).all()
+        found = await session.execute(
+            select(
+                Trial.id,
+                Trial.number,
+                func.json_extract(Trial.params, "$.group"),
+                func.coalesce(_setting("region"), func.json_extract(Trial.params, "$.region")),
+                _setting("universe"),
+                _setting("neutralization"),
+                _setting("decay"),
+                _setting("truncation"),
+                Trial.state,
+                Trial.alpha_id,
+                Trial.expression,
+            )
+            .where(
+                Trial.study_id == task_id,
+                func.json_extract(Trial.params, "$.group").is_not(None),
+                or_(Trial.state != TrialState.PRUNED, Trial.message == pool_lab.PROPOSED),
+            )
+            .order_by(Trial.number)
         )
+        return list(found.all())
 
 
-@router.get("/{task_id}/groups")
-async def groups(task_id: int, state: State) -> AlphaGroups:
-    """Region Agnostic Lab's results: each expression once, with its run in every region.
+def _rank_groups(
+    rows: list[Any], stored: dict[str, dict[str, Any]]
+) -> tuple[list[AlphaGroup], int, int]:
+    """Every group, ranked, with the regional runs back and how many of those are calibrated.
 
-    Runs come back at different times; each lands in its expression's group as it does.
-    Groups are ranked by the share of their Alphas' submission checks that pass, then by how
-    many pass, then best Sharpe — so after Calibrate, the most submittable come first.
+    By the share of its checks passed, not the count: an Alpha that ran in four regions would
+    otherwise outrank a cleaner one that ran in three.
     """
-    row = await _one(state, task_id)
-    if row.sampler != REGION_AGNOSTIC_SAMPLER:
-        raise refuse(422, "not_region_agnostic", "Only a Region Agnostic Lab task has groups.")
-    trials = await _group_rows(state, task_id)
-    stored = await state.alphas.by_ids([t.alpha_id for t in trials if t.alpha_id])
-    by_group: dict[int, list[Trial]] = {}
-    for t in trials:
+    by_group: dict[int, list[Any]] = {}
+    for row in rows:
         # ``is None``, not ``or``: the first Alpha a task writes is group 0.
-        group = (t.params or {}).get("group")
-        by_group.setdefault(t.number if group is None else int(group), []).append(t)
-    out: list[AlphaGroup] = []
+        group = row[2]
+        by_group.setdefault(row[1] if group is None else int(group), []).append(row)
     complete = calibrated = 0
+    out: list[AlphaGroup] = []
     for group, members in by_group.items():
         alphas: list[GroupAlpha] = []
-        for t in members:
-            a = stored.get(t.alpha_id or "") or {}
+        for trial_id, _, _, region, universe, _, _, _, trial_state, alpha_id, _ in members:
+            a = stored.get(alpha_id or "") or {}
             passed, failed, pending, failing = _check_counts(a.get("checks"))
             state_ = (
                 "complete"
-                if t.state == TrialState.COMPLETE
+                if trial_state == TrialState.COMPLETE
                 else "failed"
-                if t.state == TrialState.FAIL
+                if trial_state == TrialState.FAIL
                 else "running"
-                if t.state in (TrialState.QUEUED, TrialState.RUNNING)
+                if trial_state in (TrialState.QUEUED, TrialState.RUNNING)
                 else "waiting"
             )
             if state_ == "complete":
                 complete += 1
                 calibrated += bool(passed + failed) and not pending
-            settings = t.settings or {}
             alphas.append(
-                GroupAlpha(
-                    trial_id=t.id,
-                    region=settings.get("region") or (t.params or {}).get("region"),
-                    universe=settings.get("universe"),
+                GroupAlpha.model_construct(
+                    trial_id=trial_id,
+                    region=region,
+                    universe=universe,
                     state=state_,
-                    alpha_id=t.alpha_id,
+                    alpha_id=alpha_id,
                     sharpe=a.get("sharpe"),
                     fitness=a.get("fitness"),
                     turnover=a.get("turnover"),
@@ -1337,15 +1355,15 @@ async def groups(task_id: int, state: State) -> AlphaGroups:
                     failing=failing,
                 )
             )
-        first = (members[0].settings or {}) if members else {}
+        first = members[0]
         sharpes = [a.sharpe for a in alphas if a.sharpe is not None]
         out.append(
-            AlphaGroup(
+            AlphaGroup.model_construct(
                 group=group,
-                expression=members[0].expression if members else None,
-                neutralization=first.get("neutralization"),
-                decay=first.get("decay"),
-                truncation=first.get("truncation"),
+                expression=first[10],
+                neutralization=first[5],
+                decay=first[6],
+                truncation=first[7],
                 alphas=alphas,
                 passed=sum(a.passed for a in alphas),
                 failed=sum(a.failed for a in alphas),
@@ -1354,8 +1372,6 @@ async def groups(task_id: int, state: State) -> AlphaGroups:
             )
         )
 
-    # By the share of its checks passed, not the count: an Alpha that ran in four regions
-    # would otherwise outrank a cleaner one that ran in three.
     def score(g: AlphaGroup) -> tuple[float, int, float, int]:
         judged = g.passed + g.failed
         return (
@@ -1366,10 +1382,74 @@ async def groups(task_id: int, state: State) -> AlphaGroups:
         )
 
     out.sort(key=score)
+    return out, complete, int(calibrated)
+
+
+async def _build_ranking(state: Any, task_id: int) -> tuple[float, list[AlphaGroup], int, int]:
+    rows = await _group_rows(state, task_id)
+    ids = list({r[9] for r in rows if r[9]})
+    stored = (
+        {
+            str(r["alpha_id"]): r
+            for r in await state.catalog.query(
+                "SELECT alpha_id, sharpe, fitness, turnover, returns, checks FROM alpha "  # noqa: S608
+                f"WHERE alpha_id IN {AMONG}",
+                [packed(ids)],
+            )
+        }
+        if ids
+        else {}
+    )
+    # Off the event loop: tens of thousands of check lists are parsed here.
+    ranked, complete, calibrated = await asyncio.to_thread(_rank_groups, rows, stored)
+    built = (time.monotonic(), ranked, complete, calibrated)
+    _ranked[task_id] = built
+    return built
+
+
+async def _ranking_of(state: Any, task_id: int) -> tuple[float, list[AlphaGroup], int, int]:
+    """The task's groups, ranked, at once: the last ranking is answered while an older one is
+    rebuilt behind it, and only the first is waited for. One build at a time, shared by every
+    request arriving meanwhile, so the page's updates never stack up behind each other."""
+    hit = _ranked.get(task_id)
+    busy = _ranking.get(task_id)
+    stale = hit is None or time.monotonic() - hit[0] >= GROUPS_FRESH
+    if stale and (busy is None or busy.done()):
+        busy = _ranking[task_id] = asyncio.ensure_future(_build_ranking(state, task_id))
+        busy.add_done_callback(_ranking_failed)
+    if hit is not None or busy is None:
+        return hit or (0.0, [], 0, 0)
+    return await asyncio.shield(busy)
+
+
+def _ranking_failed(done: asyncio.Future[Any]) -> None:
+    """A rebuild nobody waited on still says why it failed; the last ranking stays."""
+    if not done.cancelled() and (exc := done.exception()) is not None:
+        log.warning("lab_tasks.groups_rebuild_failed", exc_info=exc)
+
+
+@router.get("/{task_id}/groups")
+async def groups(
+    task_id: int,
+    state: State,
+    limit: Annotated[int, Query(ge=1, le=5000)] = GROUPS_SHOWN,
+) -> AlphaGroups:
+    """Region Agnostic Lab's results: each expression once, with its run in every region.
+
+    Runs come back at different times; each lands in its expression's group as it does.
+    Groups are ranked by the share of their Alphas' submission checks that pass, then by how
+    many pass, then best Sharpe — so after Calibrate, the most submittable come first. Only
+    the best ``limit`` are sent; ``total`` says how many there are.
+    """
+    row = await _one(state, task_id)
+    if row.sampler != REGION_AGNOSTIC_SAMPLER:
+        raise refuse(422, "not_region_agnostic", "Only a Region Agnostic Lab task has groups.")
+    _, ranked, complete, calibrated = await _ranking_of(state, task_id)
     return AlphaGroups(
-        groups=out,
+        groups=ranked[:limit],
+        total=len(ranked),
         calibrating=task_id in _calibrating,
-        calibrated=int(calibrated),
+        calibrated=calibrated,
         complete=complete,
     )
 

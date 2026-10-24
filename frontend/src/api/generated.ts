@@ -1177,7 +1177,8 @@ export interface paths {
          *
          *     Runs come back at different times; each lands in its expression's group as it does.
          *     Groups are ranked by the share of their Alphas' submission checks that pass, then by how
-         *     many pass, then best Sharpe — so after Calibrate, the most submittable come first.
+         *     many pass, then best Sharpe — so after Calibrate, the most submittable come first. Only
+         *     the best ``limit`` are sent; ``total`` says how many there are.
          */
         get: operations["groups_api_lab_tasks__task_id__groups_get"];
         put?: never;
@@ -3409,6 +3410,8 @@ export interface components {
             complete: number;
             /** Groups */
             groups: components["schemas"]["AlphaGroup"][];
+            /** Total */
+            total: number;
         };
         /**
          * AlphaIds
@@ -10265,7 +10268,9 @@ export interface operations {
     };
     groups_api_lab_tasks__task_id__groups_get: {
         parameters: {
-            query?: never;
+            query?: {
+                limit?: number;
+            };
             header?: never;
             path: {
                 task_id: number;

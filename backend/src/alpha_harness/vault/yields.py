@@ -23,6 +23,7 @@ import structlog
 from sqlalchemy import select
 
 from ..brain.schemas import QUICK_MODE
+from ..db.duck import AMONG, packed
 from ..db.models import SimulationRecord
 
 if TYPE_CHECKING:
@@ -209,12 +210,11 @@ async def submittable(
         alphas, f"{' AND '.join(clauses)} AND a.checks IS NOT NULL", params
     )
     total = len(ready_ids)
-    placeholders = ", ".join("?" for _ in ready_ids)
     ready = (
         await alphas.catalog.query(
-            f"SELECT a.* FROM alpha a WHERE a.alpha_id IN ({placeholders}) "  # noqa: S608
+            f"SELECT a.* FROM alpha a WHERE a.alpha_id IN {AMONG} "  # noqa: S608
             "ORDER BY a.sharpe DESC NULLS LAST",
-            ready_ids,
+            [packed(ready_ids)],
         )
         if ready_ids
         else []
@@ -365,10 +365,9 @@ async def _tally(alphas: AlphaVault, where: str, params: list[Any]) -> tuple[lis
     if len(stale) > _RESCAN:
         rows = await alphas.catalog.query(f"SELECT {columns} FROM alpha a WHERE {where}", params)  # noqa: S608
     elif stale:
-        marks = ", ".join("?" for _ in stale)
         rows = await alphas.catalog.query(
-            f"SELECT {columns} FROM alpha a WHERE a.alpha_id IN ({marks})",  # noqa: S608
-            stale,
+            f"SELECT {columns} FROM alpha a WHERE a.alpha_id IN {AMONG}",  # noqa: S608
+            [packed(stale)],
         )
     else:
         rows = []

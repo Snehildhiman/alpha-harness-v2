@@ -5,6 +5,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Body
 from sqlalchemy import func, select
 
+from ..db.duck import AMONG, packed
 from ..db.models import Trial, TrialState
 from ..labs.fastexpr import (
     MAX_FIELDS,
@@ -204,10 +205,11 @@ async def expression_problems(state: State, candidate: Candidate) -> list[str]:
     types = {
         str(r["field_id"]): str(r["t"])
         for r in await state.catalog.query(
-            "SELECT field_id, any_value(field_type) AS t FROM data_field "
-            "WHERE region = ? AND delay = ? AND universe = ? AND field_id IN (SELECT unnest(?)) "
+            "SELECT field_id, any_value(field_type) AS t FROM data_field "  # noqa: S608
+            "WHERE region = ? AND delay = ? AND universe = ? "
+            f"AND field_id IN {AMONG} "
             "AND field_type IS NOT NULL GROUP BY field_id",
-            [candidate.region, candidate.delay, candidate.universe, names],
+            [candidate.region, candidate.delay, candidate.universe, packed(names)],
         )
     }
     for path, node in walk(tree):
@@ -307,9 +309,9 @@ async def screening(state: State) -> ScreenReport:
         str(r["alpha_id"]): r
         for r in (
             await state.catalog.query(
-                "SELECT alpha_id, sim_type, status, checks, classifications, simulation_mode "
-                "FROM alpha WHERE alpha_id IN (SELECT unnest(?))",
-                [ids],
+                "SELECT alpha_id, sim_type, status, checks, classifications, simulation_mode "  # noqa: S608
+                f"FROM alpha WHERE alpha_id IN {AMONG}",
+                [packed(ids)],
             )
             if ids
             else []

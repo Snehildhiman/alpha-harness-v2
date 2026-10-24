@@ -3,6 +3,21 @@
 What v2 adds on top of [alpha-harness-improved](https://github.com/residual-lab/alpha-harness)
 (MIT, © MiracleInvoker). How to use each part: [GUIDE.md](GUIDE.md).
 
+## 2026-10-24 (Tasks page speed)
+
+- **Region Agnostic results load in about a second, not ten or more**: the Alpha groups were
+  rebuilt from every trial and every Alpha the task ever wrote, on every four-second update,
+  and sent whole (9 MB for 12,000 groups). Now only the columns shown are read, the best 300
+  groups are sent ("Best 300 of 12,000"), one ranking is shared by every update for a few
+  seconds, and the last one is shown at once while a fresh one is built behind it.
+- **Looking up many Alphas or fields at once is about 50 times faster** everywhere (vault,
+  submittable list, models, governor, task details, labs): DuckDB took 2.8 s just to accept
+  36,000 ids as separate parameters; they now go as one.
+- **The task list counts each running task in one pass** instead of five, every two seconds.
+- **One old task with settings the app no longer accepts no longer breaks the Tasks list**
+  (or stops waiting tasks from starting): a task's cores are read without re-checking all
+  its settings, which was also slow for tasks searching thousands of fields.
+
 ## 2026-10-24 (sign-in identity check)
 
 - **Fixed "Cannot reach Alpha Harness: it is not running" while verifying identity**: one
