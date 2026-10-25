@@ -7,7 +7,7 @@ import { useQuery } from '@tanstack/react-query'
 import type { components } from '@/api/generated'
 import { http, qs } from '@/api/http'
 import { fmt } from '@/lib/format'
-import { Badge, Button, Checkbox, Field, Switch } from '@/ui/kit'
+import { Badge, Button, Checkbox, ErrorNotice, Field, Skeleton, Switch } from '@/ui/kit'
 
 type Info = components['schemas']['ThemeTemplateInfo']
 
@@ -27,6 +27,9 @@ export function ThemeTemplatePicker({
   const list = useQuery({
     queryKey: ['theme-lab', 'templates', theme],
     queryFn: () => http.get<Info[]>(`/api/theme-lab/templates${qs({ theme })}`),
+    // Pass rates fill in once counted in the background.
+    staleTime: 60_000,
+    refetchInterval: (q) => (q.state.data?.some((t) => t.tried > 0) ? false : 30_000),
   })
   const all = list.data ?? []
   const available = all.filter((t) => t.available)
@@ -66,6 +69,15 @@ export function ThemeTemplatePicker({
             Also search the lab’s own shapes
           </div>
         </div>
+        {list.isPending && <Skeleton label="Reading the templates" />}
+        {list.isError && (
+          <div className="flex flex-col gap-2">
+            <ErrorNotice error={list.error} title="Could not read the templates" />
+            <Button size="sm" variant="secondary" onClick={() => void list.refetch()}>
+              Try again
+            </Button>
+          </div>
+        )}
         <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
           {all.map((t) => (
             <div

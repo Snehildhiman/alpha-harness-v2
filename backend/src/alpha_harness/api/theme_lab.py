@@ -33,6 +33,7 @@ from ..labs.launch import (
     startup_trials,
 )
 from ..labs.params import SEARCH_SAMPLER, SearchParams
+from ..recent import Recent, StillReading
 from ..schemas import Out
 from ..separation import Kind, Verdict
 from ..themes import ThemeRule, current, grouping_in, normalise, sub_region_sharpe
@@ -306,13 +307,18 @@ class ThemeTemplateInfo(Out):
 async def templates(state: State, theme: str | None = None) -> list[ThemeTemplateInfo]:
     """The templates the lab can simulate, the suggested ones first."""
     rule = await _theme(state, theme)
-    names = {str(o.get("name")) for o in await account_operators(state, refresh=False)}
+    # The stored list only, never a fetch from BRAIN: this list must show at once.
+    names = {str(o.get("name")) for o in await state.metadata.cached_operators() or []}
     grouping = rule is None or not rule.no_grouping
     # Operators not read yet (signed out): every template is offered, and the plan says why
     # it cannot run until they are.
     every = {o for t in theme_templates.TEMPLATES for o in t.operators()}
     ok = {t.name for t in theme_templates.usable(names or every, grouping=grouping)}
-    rates = await _template_rates(state)
+    try:
+        rates = await _rates.get("rates", lambda: _template_rates(state), wait=RATES_WAIT)
+    except StillReading:
+        # Counted in the background: shown on the next visit, never waited for.
+        rates = {}
     return sorted(
         (
             ThemeTemplateInfo(
@@ -329,6 +335,12 @@ async def templates(state: State, theme: str | None = None) -> list[ThemeTemplat
         ),
         key=lambda t: (not t.available, not t.suggested),
     )
+
+
+#: Pass rates per template are counted over every trial: kept five minutes, and waited for
+#: at most this long before the list is shown without them.
+RATES_WAIT = 1.5
+_rates = Recent(ttl=300)
 
 
 async def _template_rates(state: State) -> dict[str, tuple[float | None, int]]:

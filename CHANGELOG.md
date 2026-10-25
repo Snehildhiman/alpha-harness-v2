@@ -17,6 +17,10 @@ What v2 adds on top of [alpha-harness-improved](https://github.com/residual-lab/
   Templates an account lacks an operator for, or that read a group field the theme forbids,
   are shown but cannot be ticked. On GLB each is still standardised within its country. The
   template leaderboard names them.
+- **Templates show at once**: the list waited on reading your operators (which could go to
+  BRAIN) and on counting every past trial for pass rates, and showed nothing meanwhile or on
+  a failure. It now reads the stored operator list only, counts pass rates in the background
+  (filled in when ready), and says when it is loading or why it failed, with *Try again*.
 
 ## 2026-10-25 (GLB/D1 Power Pool Nov`26 theme)
 
