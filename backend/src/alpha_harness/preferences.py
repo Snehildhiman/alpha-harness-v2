@@ -4,9 +4,10 @@ Every choice has a default, so an install that never opens Settings runs as the 
 out of the box.
 """
 
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from sqlalchemy import select
 
 from . import updates
@@ -105,6 +106,25 @@ class Preferences(Out):
         kept = [r for r in rules if r.name != LEGACY_THEME]
         have = {r.name for r in kept}
         return kept + [r.model_copy() for r in DEFAULT_THEMES if r.name not in have]
+
+    #: Names of the built-in themes this calendar has been given, so a theme announced after
+    #: the calendar was first saved still arrives, and one the user removed stays removed.
+    themes_offered: list[str] = Field(default_factory=list, max_length=200)
+
+    @model_validator(mode="after")
+    def _newly_announced(self) -> Preferences:
+        """Built-in themes the saved calendar has never been offered, and that have not ended,
+        are added to it; every built-in name then counts as offered."""
+        offered = set(self.themes_offered)
+        have = {r.name for r in self.power_pool_themes}
+        today = datetime.now(UTC).date()
+        self.power_pool_themes = self.power_pool_themes + [
+            r.model_copy()
+            for r in DEFAULT_THEMES
+            if r.name not in offered and r.name not in have and r.end >= today
+        ]
+        self.themes_offered = sorted(offered | {r.name for r in DEFAULT_THEMES})
+        return self
 
 
 async def load(db: Database) -> Preferences:

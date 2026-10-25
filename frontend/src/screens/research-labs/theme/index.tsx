@@ -32,12 +32,14 @@ import {
   Segmented,
   Skeleton,
 } from '@/ui/kit'
+import { ThemeComboPanel } from './combo'
 
 type Schemas = components['schemas']
 type Options = Schemas['ThemeLabOptions']
 type Preview = Schemas['ThemeLabPreview']
 
 interface Body {
+  theme: string | null
   vectorOperators: string[]
   region: string
   datasetIds: string[]
@@ -50,6 +52,7 @@ interface Body {
 }
 
 const wire = (b: Body) => ({
+  theme: b.theme,
   universes: b.universes,
   random_universe: b.randomUniverse,
   vector_operators: b.vectorOperators,
@@ -64,10 +67,18 @@ const wire = (b: Body) => ({
 const DECAYS = [0, 3, 5, 7, 10]
 
 export function ThemeLabScreen() {
+  // null: the latest-starting theme running today or opening within the week.
+  const [themeName, setThemeName] = useState<string | null>(null)
   const options = useQuery({
-    queryKey: ['theme-lab', 'options'],
-    queryFn: () => http.get<Options>('/api/theme-lab/options'),
+    queryKey: ['theme-lab', 'options', themeName],
+    queryFn: () =>
+      http.get<Options>(
+        `/api/theme-lab/options${themeName ? `?theme=${encodeURIComponent(themeName)}` : ''}`,
+      ),
+    placeholderData: keepPreviousData,
   })
+  const themes = options.data?.themes ?? []
+  const theme = options.data?.theme ?? null
   const markets = options.data?.markets ?? []
   const [region, setRegion] = useState<string>('')
   const market = markets.find((m) => m.region === region) ?? markets[0]
@@ -104,8 +115,12 @@ export function ThemeLabScreen() {
     }
   }, [scopeOptions.neutralizations, neutralizations.length])
   const all = (market?.datasets ?? []).map((d) => d.datasetId)
-  const chosen = picked ?? all
+  const recommended = (market?.datasets ?? [])
+    .filter((d) => d.recommended || d.lessCrowded)
+    .map((d) => d.datasetId)
+  const chosen = picked ?? (recommended.length ? recommended : all)
   const body: Body = {
+    theme: theme?.name ?? null,
     vectorOperators,
     region: market?.region ?? '',
     datasetIds: chosen,
@@ -131,7 +146,7 @@ export function ThemeLabScreen() {
     <Page>
       <PageHeader
         title="Current Theme Lab"
-        description="Simulates only Alphas that fit the running Power Pool theme, no LLM needed: the theme's delay, only datasets of its categories, one field per Alpha, no PV1 group fields (industry, sector...), inside the Power Pool limits."
+        description="Simulates only Alphas that fit a Power Pool theme running now or opening this week, no LLM needed: the theme's delay and region, its datasets (the recommended ones first), one field per Alpha, no PV1 group fields where the theme forbids them, inside the Power Pool limits."
         actions={
           <Button
             variant="primary"
@@ -158,7 +173,41 @@ export function ThemeLabScreen() {
       {options.data?.theme && (
         <Panel title={options.data.theme.name}>
           <div className="flex flex-col gap-4">
-            <p className="num text-body-compact text-ink-muted">{options.data.rule}</p>
+            {themes.length > 1 && (
+              <Segmented
+                label="Theme"
+                items={themes.map((t) => ({
+                  value: t.name,
+                  label: `${t.name} (${t.start} – ${t.end})`,
+                }))}
+                value={theme?.name ?? ''}
+                onChange={(name) => {
+                  setThemeName(name)
+                  setRegion('')
+                  setPicked(null)
+                }}
+              />
+            )}
+            <p className="num text-body-compact text-ink-muted">
+              {options.data.rule}
+              {options.data.theme.multiplier ? ` · ${options.data.theme.multiplier}x` : ''} · runs{' '}
+              {options.data.theme.start} to {options.data.theme.end}
+            </p>
+            {Object.keys(options.data.theme.subRegionSharpe ?? {}).length > 0 && (
+              <p className="text-body-compact text-pretty text-ink-subtle">
+                Judged on your theme Alphas combined (BC and AC Combo IR, OS Score). Each Alpha is
+                scored on its train-years Sharpe before and after a 5 bps trading cost, so the
+                held-out years show whether it holds up, and loses score when its{' '}
+                {Object.entries(options.data.theme.subRegionSharpe ?? {})
+                  .map(([area, floor]) => `${area} Sharpe is ${floor} or less`)
+                  .join(', ')}
+                . On GLB every Alpha is also ranked or z-scored within its country, so no market’s
+                larger raw values carry the book, fields under 70% coverage are left out, and an
+                Alpha loses score when AMER, APAC or EMEA is 1 or less or when one sub-region
+                carries it. A higher decay lowers turnover, which lifts the after-cost figures.
+                Below, “What to submit next” picks the Alphas that lift the combination most.
+              </p>
+            )}
             {markets.length === 0 ? (
               <Empty icon={<TargetIcon />} title="No dataset of the theme is downloaded">
                 Sync your markets at delay {delay} on{' '}
@@ -179,6 +228,19 @@ export function ThemeLabScreen() {
                   }}
                 />
                 <Field label={`Datasets (${fmt.int(chosen.length)} of ${fmt.int(all.length)})`}>
+                  {recommended.length > 0 && (
+                    <div className="mb-2 flex flex-wrap gap-2">
+                      <Button size="sm" variant="secondary" onClick={() => setPicked(recommended)}>
+                        Recommended only ({fmt.int(recommended.length)})
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setPicked(all)}>
+                        All
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setPicked([])}>
+                        Clear
+                      </Button>
+                    </div>
+                  )}
                   <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
                     {(market?.datasets ?? []).map((d) => (
                       <Checkbox
@@ -196,6 +258,8 @@ export function ThemeLabScreen() {
                               {d.category} · {fmt.int(d.alphas)} alphas
                             </span>
                             {d.themed && <Badge tone="profit">theme ×</Badge>}
+                            {d.recommended && <Badge>recommended</Badge>}
+                            {d.lessCrowded && <Badge tone="profit">less crowded</Badge>}
                           </span>
                         }
                       />
@@ -284,6 +348,7 @@ export function ThemeLabScreen() {
           . Its passing Alphas land on Alpha Types → Current Theme.
         </Notice>
       )}
+      {theme && <ThemeComboPanel theme={theme.name} />}
       {preview.data && preview.data.sample.length > 0 && (
         <Panel title="Example Alphas this task will send">
           <ul className="flex flex-col gap-1">

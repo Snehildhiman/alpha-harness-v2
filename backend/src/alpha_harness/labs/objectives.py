@@ -48,7 +48,92 @@ OBJECTIVES: dict[str, Objective] = {
     # Over the train years only, so the held-out test years stay unseen by the search.
     "train_sharpe": Objective("train_sharpe", "Train Sharpe"),
     "train_fitness": Objective("train_fitness", "Train Fitness"),
+    # For a Power Pool theme judged on its combination (BC and AC Combo IR, OS Score): see
+    # :func:`theme_combo`.
+    "theme_combo": Objective("theme_combo", "Theme combo score"),
 }
+
+#: Annual returns a turnover of 1 (the whole book a day) costs at 5 bps: returns are quoted on
+#: half the book over 250 days, so 250 x 5e-4 x 2.
+COST_PER_TURNOVER = 0.25
+#: Sub-region Sharpe a GLB Alpha must clear: BRAIN's GLB cutoff is 1 in each of AMER, APAC and
+#: EMEA, and the Nov`26 theme names AMER > 1 again.
+SUB_REGION_FLOORS = {"AMER": 1.0, "APAC": 1.0, "EMEA": 1.0}
+#: Sharpe taken off per unit of spread between the best and worst sub-region: a signal one
+#: region carries is fragile out of sample (BRAIN's GLB notes: "find balanced signal first").
+IMBALANCE_COST = 0.25
+
+
+def theme_combo(
+    *,
+    train_sharpe: float | None,
+    sharpe: float | None,
+    turnover: float | None,
+    returns: float | None,
+    checks: Any = None,
+) -> float | None:
+    """One number for an Alpha meant for a Power Pool theme scored on its combination.
+
+    The theme ranks the combination of a user's theme Alphas on four figures: Combo IR before
+    cost (BC) and after cost (AC), and an out-of-sample score, before and after cost. So:
+
+    * **Out of sample**: the train-years Sharpe, never the whole period's, so the test years
+      the search never sees say whether it holds up (whole-period Sharpe only without a split).
+    * **After cost**: half the score is the Sharpe left once 5 bps is charged on its turnover,
+      ``sharpe x (returns - 0.25 x turnover) / returns``; a fast Alpha that only pays before
+      cost scores half.
+    * **The theme's rule and GLB's cutoff**: each of AMER, APAC and EMEA at or below a Sharpe of
+      1 costs its shortfall and half a Sharpe more, so the search leaves Alphas that cannot
+      count; and the spread between the best and worst sub-region costs a quarter of itself,
+      so a balanced signal beats one a single region carries.
+
+    Diversity, the rest of a Combo IR, is a property of the set, not of one Alpha: the
+    Current Theme Lab's "What to submit next" ranks candidates on what they add to it.
+    """
+    bc = train_sharpe if train_sharpe is not None else sharpe
+    if bc is None:
+        return None
+    ac = bc
+    if turnover is not None and returns is not None and returns > 0:
+        ac = bc * max(-1.0, (returns - COST_PER_TURNOVER * turnover) / returns)
+    score = (bc + ac) / 2
+    from ..themes import sub_region_sharpe
+
+    seen: list[float] = []
+    for area, floor in SUB_REGION_FLOORS.items():
+        found = sub_region_sharpe(checks, area)
+        if found is None:
+            continue
+        seen.append(found)
+        if found <= floor:
+            score -= (floor - found) + 0.5
+    if len(seen) > 1:
+        score -= IMBALANCE_COST * (max(seen) - min(seen))
+    return score
+
+
+#: Objectives worked out from other figures rather than read from BRAIN's statistics.
+COMPUTED = frozenset({"theme_combo"})
+
+
+def from_row(row: dict[str, Any], objectives: list[Objective]) -> list[float] | None:
+    """Objective values from a stored Alpha row; ``None`` when one of them is missing."""
+    values: list[float] = []
+    for o in objectives:
+        if o.key == "theme_combo":
+            found = theme_combo(
+                train_sharpe=row.get("train_sharpe"),
+                sharpe=row.get("sharpe"),
+                turnover=row.get("turnover"),
+                returns=row.get("returns"),
+                checks=row.get("checks"),
+            )
+        else:
+            found = row.get(o.key)
+        if found is None:
+            return None
+        values.append(float(found))
+    return values
 
 
 def resolve(keys: list[str]) -> list[Objective]:
@@ -76,7 +161,15 @@ def extract(
     """
     values: list[float] = []
     for objective in objectives:
-        if extra is not None and objective.key in extra:
+        if objective.key == "theme_combo":
+            raw = theme_combo(
+                train_sharpe=(extra or {}).get("train_sharpe"),
+                sharpe=_value(stats, "sharpe"),
+                turnover=_value(stats, "turnover"),
+                returns=_value(stats, "returns"),
+                checks=[c.model_dump(by_alias=True) for c in stats.checks] if stats else None,
+            )
+        elif extra is not None and objective.key in extra:
             raw = extra[objective.key]
         else:
             raw = _value(stats, objective.key)
@@ -97,10 +190,12 @@ def train_extra(alpha: Alpha, objectives: list[Objective]) -> dict[str, float | 
     A simulation with a test period reports its train years there, while ``is`` stays the
     whole period.
     """
+    keys = {o.key for o in objectives if o.key.startswith("train_")}
+    if any(o.key == "theme_combo" for o in objectives):
+        keys.add("train_sharpe")
     return {
-        o.key: getattr(alpha.train, o.key.removeprefix("train_"), None) if alpha.train else None
-        for o in objectives
-        if o.key.startswith("train_")
+        key: getattr(alpha.train, key.removeprefix("train_"), None) if alpha.train else None
+        for key in keys
     }
 
 

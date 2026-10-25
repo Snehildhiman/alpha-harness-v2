@@ -141,7 +141,20 @@ def base(field_id: str, vector_op: str | None = None) -> str:
 
 
 def render(params: dict[str, Any]) -> str:
-    """The Fast Expression for one point of the search."""
+    """The Fast Expression for one point of the search.
+
+    ``within_op`` (GLB) standardises the whole signal within each country last, unless the
+    shape already groups by that country: neutralizing by country removes each country's
+    mean but not its spread, so a market whose raw values run larger would carry the capital.
+    """
+    shape = _shape(params)
+    within, group = params.get("within_op"), params.get("within")
+    if within and group and params.get("group") != group:
+        return f"{within}({shape}, {group})"
+    return shape
+
+
+def _shape(params: dict[str, Any]) -> str:
     b = base(params["field"], params.get("vector_op"))
     match params["family"]:
         case "cs":
@@ -221,6 +234,9 @@ def suggest(trial: Any, space: dict[str, Any], choices: dict[str, list[str]]) ->
     if family in ("group", "group_ts"):
         params["group_op"] = trial.suggest_categorical("group_op", list(space["group"]))
         params["group"] = trial.suggest_categorical("group", list(space["groups"]))
+    if within := space.get("within"):
+        params["within"] = within["group"]
+        params["within_op"] = trial.suggest_categorical("within_op", list(within["ops"]))
     neutralizations = list(space["neutralizations"])
     params["neutralization"] = (
         neutralizations[0]

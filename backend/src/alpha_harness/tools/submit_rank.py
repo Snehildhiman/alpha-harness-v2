@@ -137,3 +137,143 @@ def rank(
         )
     )
     return {"ir": base_ir, "ir_after_cost": base_after, "alphas": k}, out
+
+
+# -- a theme's combination ----------------------------------------------------------------
+
+#: The most recent days the out-of-sample figures are read over: BRAIN's two test years.
+OS_DAYS = 2 * metrics.YEAR
+
+
+@dataclass(frozen=True, slots=True)
+class Combo:
+    """A set of Alphas combined at equal weight, on the four figures a theme ranks by."""
+
+    #: Combo IR over the whole history, before and after cost.
+    bc_ir: float | None
+    ac_ir: float | None
+    #: The same over the last :data:`OS_DAYS` only: what an out-of-sample score sees.
+    os_ir: float | None
+    ac_os_ir: float | None
+
+    def values(self) -> tuple[float | None, ...]:
+        return (self.bc_ir, self.ac_ir, self.os_ir, self.ac_os_ir)
+
+
+@dataclass(frozen=True, slots=True)
+class ComboPick:
+    alpha_id: str
+    #: The set's figures with this Alpha added (to the pool and every earlier pick).
+    combo: Combo
+    #: Each figure's change from the set without it, and their mean, the order picks come in.
+    delta: Combo
+    score: float | None
+    #: Highest daily PnL correlation with an Alpha already in the set, and which.
+    max_correlation: float | None
+    max_correlation_with: str | None
+
+
+def _combo(book: Floats, traded: Floats, live: Floats, cost_bps: float) -> Combo:
+    on = np.flatnonzero(live > 0)
+    if not on.size:
+        return Combo(None, None, None, None)
+    book, traded = book[on[0] :], traded[on[0] :]
+    recent = slice(max(0, book.size - OS_DAYS), None)
+    return Combo(
+        _ir(book, traded, None),
+        _ir(book, traded, cost_bps),
+        _ir(book[recent], traded[recent], None),
+        _ir(book[recent], traded[recent], cost_bps),
+    )
+
+
+def _less(a: Combo, b: Combo) -> Combo:
+    pairs = zip(a.values(), b.values(), strict=True)
+    found = [None if x is None or y is None else x - y for x, y in pairs]
+    return Combo(*found)
+
+
+def _mean(c: Combo) -> float | None:
+    known = [v for v in c.values() if v is not None]
+    return sum(known) / len(known) if known else None
+
+
+def theme_combo(
+    series: dict[str, dict[date, tuple[float, float]]],
+    meta: dict[str, dict[str, Any]],
+    pool: list[str],
+    candidates: list[str],
+    *,
+    picks: int = 10,
+    cost_bps: float = metrics.DEFAULT_COST_BPS,
+) -> tuple[Combo, list[ComboPick], list[ComboPick]]:
+    """A theme's combination now, the best order to add candidates in, and every candidate's
+    effect on the combination as it stands.
+
+    A theme ranks a user's Alphas as one equal-weight book: Combo IR before and after cost,
+    and an out-of-sample score before and after cost. Each candidate is scored on the mean
+    change of those four; ``picks`` are then chosen greedily, each judged against the pool
+    *and the picks before it*, so two candidates that repeat each other are not both picked.
+    The out-of-sample figures here are the last two years held out of nothing: a proxy for
+    the score BRAIN keeps for after submission, which no stored series can show.
+    """
+    kept = [a for a in dict.fromkeys(pool) if series.get(a)]
+    wanted = [a for a in dict.fromkeys(candidates) if series.get(a) and a not in kept]
+    ids = kept + wanted
+    if not ids:
+        return Combo(None, None, None, None), [], []
+    _, pnl, turnover, _ = portfolio.frame(series, meta, ids)
+    filled = np.nan_to_num(pnl)
+    started = np.maximum.accumulate((filled != 0) | (turnover != 0), axis=0).astype(float)
+
+    def score_all(chosen: list[int], left: list[int]) -> tuple[Combo, list[ComboPick]]:
+        total = filled[:, chosen].sum(axis=1)
+        traded = turnover[:, chosen].sum(axis=1)
+        live = started[:, chosen].sum(axis=1)
+        div = np.maximum(live, 1)
+        base = _combo(total / div, traded / div, live, cost_bps)
+        out: list[ComboPick] = []
+        for col in left:
+            with_live = live + started[:, col]
+            div_new = np.maximum(with_live, 1)
+            combo = _combo(
+                (total + filled[:, col]) / div_new,
+                (traded + turnover[:, col]) / div_new,
+                with_live,
+                cost_bps,
+            )
+            delta = _less(combo, base) if chosen else combo
+            best: tuple[float, str] | None = None
+            for j in chosen:
+                c, _ = _corr(pnl[:, col], pnl[:, j])
+                if c is not None and (best is None or c > best[0]):
+                    best = (c, ids[j])
+            out.append(
+                ComboPick(
+                    alpha_id=ids[col],
+                    combo=combo,
+                    delta=delta,
+                    score=_mean(delta),
+                    max_correlation=best[0] if best else None,
+                    max_correlation_with=best[1] if best else None,
+                )
+            )
+        out.sort(key=lambda p: -(p.score if p.score is not None else float("-inf")))
+        return base, out
+
+    pool_cols = list(range(len(kept)))
+    left = list(range(len(kept), len(ids)))
+    base, each = score_all(pool_cols, left)
+    order: list[ComboPick] = []
+    chosen = list(pool_cols)
+    while left and len(order) < picks:
+        _, ranked = score_all(chosen, left)
+        top = ranked[0]
+        # A pick that lowers the set on average is not worth submitting for the theme.
+        if top.score is None or (chosen and top.score <= 0):
+            break
+        order.append(top)
+        col = ids.index(top.alpha_id)
+        chosen.append(col)
+        left.remove(col)
+    return base, order, each

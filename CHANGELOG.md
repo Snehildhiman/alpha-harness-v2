@@ -3,6 +3,33 @@
 What v2 adds on top of [alpha-harness-improved](https://github.com/residual-lab/alpha-harness)
 (MIT, © MiracleInvoker). How to use each part: [GUIDE.md](GUIDE.md).
 
+## 2026-10-25 (GLB/D1 Power Pool Nov`26 theme)
+
+- **The new theme is in the calendar**: GLB, Delay 1, AMER Sharpe > 1, 26 Oct to 22 Nov, 1x,
+  with BRAIN's 33 recommended datasets. A calendar saved earlier receives it by itself (and a
+  theme you remove stays removed). The calendar editor gained *Sub-region Sharpe above* and
+  *Recommended datasets*; the AMER floor is read from BRAIN's own GLB_AMER_SHARPE check.
+- **Current Theme Lab looks a week ahead**: a theme opening within seven days can be chosen,
+  so Alphas for Nov`26 can be simulated before it opens. It starts from the recommended
+  datasets (*Recommended only*, *All*, *Clear*).
+- **Scored for the combination**: a theme with a sub-region floor is searched on a new *Theme
+  combo score*: the train-years Sharpe (held-out years untouched, for the OS Score), half of
+  it after a 5 bps trading cost on its turnover (for the AC figures), less any shortfall
+  below AMER Sharpe 1.
+- **What to submit next for this theme**: ranks your submittable theme Alphas by what each
+  adds to the combination of your theme Alphas: BC Combo IR, AC Combo IR, and both over the
+  last two years (the OS proxy). Picks come in order, each judged against what you submitted
+  in the theme's dates and the picks above it, so two Alphas that trade alike are not both
+  picked. Missing daily PnL is downloaded in the background; no quota is spent.
+- **BRAIN's GLB notes applied** (sub-geography cutoff, regional imbalance, less crowded
+  datasets): on GLB every Alpha the lab writes is ranked or z-scored within its country (the
+  search tries both), and country joins the group choices; fields under 70% coverage are left
+  out, since a thin field leans the Alpha toward the region that has it; the combo score
+  charges AMER, APAC or EMEA at 1 or below (GLB's own cutoff) and a quarter of the spread
+  between the best and worst sub-region; tech_chart_model, predictive_starmine, model135 and
+  analyst_consensus are offered as *less crowded* and start selected. The ranking table shows
+  all three sub-region Sharpes.
+
 ## 2026-10-24 (Tasks page speed)
 
 - **Region Agnostic results load in about a second, not ten or more**: the Alpha groups were

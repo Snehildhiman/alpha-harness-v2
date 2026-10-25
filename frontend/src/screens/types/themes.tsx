@@ -164,7 +164,48 @@ function RuleRow({
             }
           />
         </Field>
+        <Field
+          label="Sub-region Sharpe above"
+          hint="GLB only, e.g. AMER 1 for “AMER Sharpe > 1”; empty: none"
+        >
+          <Input
+            className="w-40"
+            placeholder="AMER 1"
+            defaultValue={Object.entries(rule.subRegionSharpe ?? {})
+              .map(([area, floor]) => `${area} ${floor}`)
+              .join(', ')}
+            onBlur={(e) =>
+              onChange({
+                ...rule,
+                subRegionSharpe: Object.fromEntries(
+                  e.target.value
+                    .split(',')
+                    .map((part) => part.trim().split(/\s+/))
+                    .filter(([area, floor]) => area && floor && !Number.isNaN(Number(floor)))
+                    .map(([area, floor]) => [String(area).toUpperCase(), Number(floor)]),
+                ),
+              })
+            }
+          />
+        </Field>
       </div>
+      <Field
+        label="Recommended datasets"
+        hint="Comma-separated dataset ids from the announcement; the Current Theme Lab starts from these"
+      >
+        <Input
+          defaultValue={(rule.datasets ?? []).join(', ')}
+          onBlur={(e) =>
+            onChange({
+              ...rule,
+              datasets: e.target.value
+                .split(',')
+                .map((d) => d.trim())
+                .filter(Boolean),
+            })
+          }
+        />
+      </Field>
     </div>
   )
 }

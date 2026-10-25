@@ -95,7 +95,11 @@ def test_running_theme_follows_the_calendar() -> None:
     oct20 = current(DEFAULT_THEMES, date(2026, 10, 20))
     assert oct20 is not None
     assert oct20.categories == ["analyst", "model", "news"]
-    assert current(DEFAULT_THEMES, date(2026, 10, 28)) is None
+    nov = current(DEFAULT_THEMES, date(2026, 10, 28))
+    assert nov is not None
+    assert nov.regions == ["GLB"]
+    assert nov.sub_region_sharpe == {"AMER": 1.0}
+    assert current(DEFAULT_THEMES, date(2026, 12, 1)) is None
     assert normalise("fundamnetal") == "fundamental"
 
 

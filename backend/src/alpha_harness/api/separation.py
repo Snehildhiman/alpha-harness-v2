@@ -111,9 +111,15 @@ async def _categories(state: State, rows: list[dict[str, Any]], rule: ThemeRule)
             region=row.get("region"),
             delay=row.get("delay"),
             category_of=category_of,
+            checks=row.get("checks"),
         )
 
     return theme
+
+
+#: The theme check for any rule, not only the one running today (the Current Theme Lab
+#: also looks ahead to a theme about to open).
+theme_check = _categories
 
 
 async def judge_vault(state: State, *, force: bool = False) -> list[Judged]:
@@ -663,6 +669,7 @@ def fitting(item: Judged, rules: list[ThemeRule]) -> list[str]:
                 delay=row.get("delay"),
                 category_of=lambda *_: None,
                 turnover=row.get("turnover"),
+                checks=row.get("checks"),
             )
             if ok:
                 out.append(f"{rule.name} x{rule.multiplier:g}" if rule.multiplier else rule.name)

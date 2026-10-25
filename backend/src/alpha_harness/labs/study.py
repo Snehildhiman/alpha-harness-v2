@@ -266,7 +266,7 @@ class Optimizer:
 
         objective_list = obj.resolve(list(row.objectives or []))
         saved: dict[str, dict[str, Any]] = {}
-        if all(o.key in VAULT_STATS for o in objective_list):
+        if all(o.key in VAULT_STATS or o.key in obj.COMPUTED for o in objective_list):
             wanted = [
                 (
                     records[t.simulation_record_id].alpha_id
@@ -322,10 +322,10 @@ class Optimizer:
             stored_alpha = saved.get(alpha_id)
             # Every objective, not just Sharpe: a row stored without its train block has
             # Sharpe but no Train Fitness, and scoring it would fail the trial for good.
-            if stored_alpha is not None and all(
-                stored_alpha.get(o.key) is not None for o in objective_list
-            ):
-                values = [float(stored_alpha[o.key]) for o in objective_list]
+            values = (
+                obj.from_row(stored_alpha, objective_list) if stored_alpha is not None else None
+            )
+            if stored_alpha is not None and values is not None:
                 summary = vault_summary(stored_alpha)
                 finished.append((live.get(trial.number), trial, values, summary))
                 continue

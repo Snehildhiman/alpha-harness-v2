@@ -2935,6 +2935,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/theme-lab/combo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Combo
+         * @description Your submittable Alphas that fit the theme, ranked by what each adds to the theme's
+         *     combination: Combo IR before and after cost, and the same over the last two years (the
+         *     out-of-sample proxy), before and after cost. Spends no quota; a missing daily PnL is
+         *     downloaded in the background for the next visit.
+         */
+        get: operations["combo_api_theme_lab_combo_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/theme-lab/options": {
         parameters: {
             query?: never;
@@ -2944,7 +2967,8 @@ export interface paths {
         };
         /**
          * Options
-         * @description The running theme and, per downloaded region, the datasets it allows.
+         * @description The running (or chosen upcoming) theme and, per downloaded region, the datasets it
+         *     allows, the recommended ones first.
          */
         get: operations["options_api_theme_lab_options_get"];
         put?: never;
@@ -4495,6 +4519,47 @@ export interface components {
             run: boolean;
             /** Simulations */
             simulations?: number | null;
+        };
+        /**
+         * ComboFigures
+         * @description A combination's four figures, as a theme ranks it.
+         */
+        ComboFigures: {
+            /** Acir */
+            acIr: number | null;
+            /** Acosir */
+            acOsIr: number | null;
+            /** Bcir */
+            bcIr: number | null;
+            /** Osir */
+            osIr: number | null;
+        };
+        /** ComboRow */
+        ComboRow: {
+            /** Alphaid */
+            alphaId: string;
+            /** Amersharpe */
+            amerSharpe: number | null;
+            /** Apacsharpe */
+            apacSharpe: number | null;
+            combo: components["schemas"]["ComboFigures"];
+            delta: components["schemas"]["ComboFigures"];
+            /** Emeasharpe */
+            emeaSharpe: number | null;
+            /** Expression */
+            expression: string | null;
+            /** Maxcorrelation */
+            maxCorrelation: number | null;
+            /** Maxcorrelationwith */
+            maxCorrelationWith: string | null;
+            /** Score */
+            score: number | null;
+            /** Sharpe */
+            sharpe: number | null;
+            /** Turnover */
+            turnover: number | null;
+            /** Verdict */
+            verdict: string;
         };
         /** Competition */
         Competition: {
@@ -6291,6 +6356,8 @@ export interface components {
              * @default true
              */
             screenSteer: boolean;
+            /** Themesoffered */
+            themesOffered?: string[];
             /**
              * Updatecheckhours
              * @default 1
@@ -8144,6 +8211,24 @@ export interface components {
             problem?: string | null;
             tree?: components["schemas"]["TreeNode"] | null;
         };
+        /** ThemeCombo */
+        ThemeCombo: {
+            /** Candidates */
+            candidates: number;
+            /** Costbps */
+            costBps: number;
+            /** Downloading */
+            downloading: number;
+            now: components["schemas"]["ComboFigures"];
+            /** Picks */
+            picks: components["schemas"]["ComboRow"][];
+            /** Pool */
+            pool: number;
+            /** Rows */
+            rows: components["schemas"]["ComboRow"][];
+            /** Theme */
+            theme: string | null;
+        };
         /** ThemeDataset */
         ThemeDataset: {
             /** Alphas */
@@ -8154,8 +8239,18 @@ export interface components {
             datasetId: string;
             /** Fields */
             fields: number | null;
+            /**
+             * Lesscrowded
+             * @default false
+             */
+            lessCrowded: boolean;
             /** Name */
             name: string | null;
+            /**
+             * Recommended
+             * @default false
+             */
+            recommended: boolean;
             /** Themed */
             themed: boolean;
         };
@@ -8168,6 +8263,8 @@ export interface components {
             /** Rule */
             rule: string | null;
             theme: components["schemas"]["ThemeRule"] | null;
+            /** Themes */
+            themes?: components["schemas"]["ThemeRule"][];
         };
         /** ThemeLabPreview */
         ThemeLabPreview: {
@@ -8213,6 +8310,8 @@ export interface components {
              * @default 0
              */
             simulations: number;
+            /** Theme */
+            theme?: string | null;
             /** Universe */
             universe?: string | null;
             /** Universes */
@@ -8234,6 +8333,8 @@ export interface components {
         ThemeRule: {
             /** Categories */
             categories?: string[];
+            /** Datasets */
+            datasets?: string[];
             /**
              * Delay
              * @default 1
@@ -8270,6 +8371,10 @@ export interface components {
              * Format: date
              */
             start: string;
+            /** Subregionsharpe */
+            subRegionSharpe?: {
+                [key: string]: number;
+            };
             /** Turnovermax */
             turnoverMax?: number | null;
             /** Turnovermin */
@@ -13137,9 +13242,44 @@ export interface operations {
             };
         };
     };
+    combo_api_theme_lab_combo_get: {
+        parameters: {
+            query?: {
+                theme?: string | null;
+                costBps?: number;
+                picks?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThemeCombo"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     options_api_theme_lab_options_get: {
         parameters: {
-            query?: never;
+            query?: {
+                theme?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -13153,6 +13293,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ThemeLabOptions"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

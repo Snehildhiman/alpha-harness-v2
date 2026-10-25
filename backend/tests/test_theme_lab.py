@@ -13,7 +13,7 @@ RULE = ThemeRule(
 
 
 def test_group_shapes_are_dropped_and_samples_fit(monkeypatch: Any) -> None:
-    async def theme(_state: Any) -> ThemeRule:
+    async def theme(_state: Any, _name: str | None = None) -> ThemeRule:
         return RULE
 
     async def allowed(_state: Any, _rule: Any, _region: Any) -> list[dict[str, Any]]:

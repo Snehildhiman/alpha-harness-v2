@@ -29,6 +29,7 @@ How to run it, what each part does, how it learns, and how to change it yourself
 | Find new alphas | **Research Labs** | Search / Template / Evolution / LLM labs. Search and Template rounds are **screened** by the models (Settings → Model screening). |
 | ARC / region-agnostic alphas | **Research Labs → Region Agnostic** | Delay 1, regions USA EUR ASI GLB. In the ARC panel: *Use these* (community datasets) or *Use the 10 least crowded*, keep *Run as region-agnostic: near*. Writer: built-in shapes or an LLM. Passing two-region alphas are run as real RA Parents in the same task and land on Alpha Types → Region Agnostic. |
 | Region-agnostic alphas without an LLM | **Research Labs → Region Agnostic** | *Writer: Built-in shapes · no LLM* (the default). Pick datasets in the All Regions market, the regions and a size (or *Random*). Nineteen shapes are written over fields two or more regions share; shapes whose alphas score better are written more often. |
+| Make Alphas for a Power Pool theme judged on its combination (GLB/D1 Nov`26: BC and AC Combo IR, OS Score) | **Research Labs → Current Theme** | Pick the theme (one opening this week is offered), keep *Recommended only*, choose decay 5+ for lower turnover, add and start. Each Alpha is scored on its train-years Sharpe before and after a 5 bps cost and loses score with AMER Sharpe ≤ 1. Then *Rank for the theme combo*: submit in the order shown; each pick is chosen against what you submitted in the theme's dates and the picks above it. |
 | Choose the universe | Every lab | Search, Basic Template, Current Theme: tick universes (none = all downloaded) and *Random* to draw each alpha's universe at random. Template and Power Pool: tick universes. Evolution: *Also run children in*. Region Agnostic: size *Random*. |
 | Check the app is healthy, back up | **Health and Backup** | Each line OK / Look / Fix with a link to the screen that fixes it. Backups are automatic (weekly); *Back up now* any time. |
 | Restore, or move to a new computer | **Health and Backup** | On the new computer: *Add a backup file*, then *Restore* on it (tick models and tasks/settings to bring those too; settings come back after a restart). Saved passwords and API keys must be entered again on a new computer. |
@@ -57,7 +58,7 @@ How to run it, what each part does, how it learns, and how to change it yourself
 | Regular | standard checks, self-correlation, prod correlation (< 0.7, or BRAIN's PASS) |
 | Region agnostic | the regular rules in at least 2 regions |
 | Power Pool | standard checks, self-correlation, Power Pool correlation (prod does not apply) |
-| Current theme | Power Pool rules + the running theme's rule (delay, data categories, single category), checked locally (`themes.py`) |
+| Current theme | Power Pool rules + the running theme's rule (delay, region, data categories, single category, sub-region Sharpe such as AMER > 1), checked locally (`themes.py`) |
 | SuperAlpha | its own checks, self- and prod correlation |
 
 A passing correlation result older than *Trust a correlation pass for* (default 1 day) moves to

@@ -1,0 +1,117 @@
+"""The GLB/D1 Power Pool Nov`26 theme: its rule, the combo objective and what to submit next."""
+
+import json
+from datetime import date, timedelta
+
+import numpy as np
+
+from alpha_harness.labs.objectives import theme_combo
+from alpha_harness.preferences import Preferences
+from alpha_harness.themes import DEFAULT_THEMES, check, sub_region_sharpe
+from alpha_harness.tools import submit_rank
+
+RULE = next(r for r in DEFAULT_THEMES if r.name == "GLB/D1 Power Pool Nov`26")
+
+
+def _checks(amer: float) -> str:
+    return json.dumps([{"name": "GLB_AMER_SHARPE", "result": "PASS", "value": amer, "limit": 1}])
+
+
+def test_rule_needs_glb_delay_1_and_amer_sharpe_above_1() -> None:
+    def fits(region: str, delay: int, checks: str | None) -> tuple[bool, str]:
+        return check(
+            RULE,
+            expression="rank(ts_rank(mdl110_score, 20))",
+            region=region,
+            delay=delay,
+            category_of=lambda *_: "model",
+            checks=checks,
+        )
+
+    assert fits("GLB", 1, _checks(1.4))[0]
+    assert not fits("GLB", 1, _checks(0.9))[0]
+    assert "AMER Sharpe 0.90" in fits("GLB", 1, _checks(0.9))[1]
+    assert not fits("USA", 1, _checks(1.4))[0]
+    assert not fits("GLB", 0, _checks(1.4))[0]
+    # Checks not read yet: judged on the rest.
+    assert fits("GLB", 1, None)[0]
+    assert "AMER Sharpe > 1" in RULE.describe()
+    assert "model110" in RULE.datasets
+    assert sub_region_sharpe([{"name": "LOW_GLB_AMER_SHARPE", "value": 1.2}], "AMER") == 1.2
+
+
+def test_new_theme_reaches_a_saved_calendar_once() -> None:
+    saved = {"power_pool_themes": [{"name": "mine", "start": "2026-10-01", "end": "2027-01-01"}]}
+    first = Preferences.model_validate(saved)
+    assert RULE.name in {r.name for r in first.power_pool_themes}
+    # Removed by the user and saved: it stays removed.
+    again = Preferences.model_validate(saved | {"themes_offered": first.themes_offered})
+    assert RULE.name not in {r.name for r in again.power_pool_themes}
+
+
+def test_combo_objective_rewards_after_cost_and_the_amer_floor() -> None:
+    slow = theme_combo(train_sharpe=1.5, sharpe=1.6, turnover=0.05, returns=0.10)
+    fast = theme_combo(train_sharpe=1.5, sharpe=1.6, turnover=0.40, returns=0.10)
+    assert slow is not None and fast is not None and slow > fast
+    weak_amer = theme_combo(
+        train_sharpe=1.5, sharpe=1.6, turnover=0.05, returns=0.10, checks=_checks(0.8)
+    )
+    assert weak_amer is not None and weak_amer < slow - 0.5
+    assert theme_combo(train_sharpe=None, sharpe=None, turnover=0.1, returns=0.1) is None
+
+
+def test_combo_picks_do_not_repeat_each_other() -> None:
+    rng = np.random.default_rng(0)
+    days = [date(2018, 1, 1) + timedelta(days=i) for i in range(1500)]
+    signal = rng.normal(0.2, 1, 1500)
+
+    def series(pnl: np.ndarray) -> dict[date, tuple[float, float]]:
+        return {d: (float(p) * 1e4, 0.1) for d, p in zip(days, pnl, strict=True)}
+
+    store = {
+        "twin_a": series(signal + rng.normal(0, 0.1, 1500)),
+        "twin_b": series(signal + rng.normal(0, 0.1, 1500)),
+        "other": series(rng.normal(0.2, 1, 1500)),
+    }
+    _, order, each = submit_rank.theme_combo(store, {}, [], list(store), picks=3)
+    picked = [p.alpha_id for p in order]
+    assert "other" in picked[:2]
+    assert not {"twin_a", "twin_b"} <= set(picked[:2])
+    assert len(each) == 3
+
+
+def test_glb_alphas_are_standardised_within_country() -> None:
+    from alpha_harness.labs import search
+
+    point = {
+        "field": "mdl110_score",
+        "family": "ts",
+        "ts": "ts_rank",
+        "d": 21,
+        "within": "country",
+        "within_op": "group_zscore",
+    }
+    assert search.render(point) == (
+        "group_zscore(ts_rank(ts_backfill(mdl110_score, 21), 21), country)"
+    )
+    grouped = point | {"family": "group", "group_op": "group_rank", "group": "country"}
+    assert search.render(grouped) == "group_rank(ts_backfill(mdl110_score, 21), country)"
+    plain = {k: v for k, v in point.items() if not k.startswith("within")}
+    assert search.render(plain) == "ts_rank(ts_backfill(mdl110_score, 21), 21)"
+
+
+def test_combo_objective_prefers_balanced_sub_regions() -> None:
+    def regions(amer: float, apac: float, emea: float) -> str:
+        return json.dumps(
+            [
+                {"name": f"GLB_{area}_SHARPE", "value": value}
+                for area, value in (("AMER", amer), ("APAC", apac), ("EMEA", emea))
+            ]
+        )
+
+    base = {"train_sharpe": 1.5, "sharpe": 1.5, "turnover": 0.1, "returns": 0.1}
+    balanced = theme_combo(**base, checks=regions(1.4, 1.3, 1.35))
+    lopsided = theme_combo(**base, checks=regions(2.6, 1.05, 1.1))
+    weak_emea = theme_combo(**base, checks=regions(1.6, 1.5, 0.7))
+    assert balanced is not None and lopsided is not None and weak_emea is not None
+    assert balanced > lopsided > weak_emea

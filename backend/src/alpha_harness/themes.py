@@ -11,8 +11,10 @@ Rules are entered by the user (Settings, or the Current Theme tab) because BRAIN
 calendar is a page, not an API.
 """
 
+import json
 from collections.abc import Callable
 from datetime import date
+from typing import Any
 
 from pydantic import Field
 
@@ -54,6 +56,12 @@ class ThemeRule(Out):
     turnover_max: float | None = None
     #: The pyramid multiplier BRAIN announced, shown beside the rule.
     multiplier: float | None = None
+    #: Datasets BRAIN recommends for the theme. A recommendation, not a rule: the Current
+    #: Theme Lab starts from them, and an Alpha reading other data still fits.
+    datasets: list[str] = Field(default_factory=list)
+    #: Sub-region Sharpe floors a GLB Alpha must clear, e.g. ``{"AMER": 1.0}`` for "AMER Sharpe
+    #: > 1", read from BRAIN's own sub-region check (``GLB_AMER_SHARPE``).
+    sub_region_sharpe: dict[str, float] = Field(default_factory=dict)
 
     def describe(self) -> str:
         parts = []
@@ -71,8 +79,18 @@ class ThemeRule(Out):
             low = f"{self.turnover_min:.0%}" if self.turnover_min is not None else "0%"
             high = f"{self.turnover_max:.0%}" if self.turnover_max is not None else "any"
             parts.append(f"turnover {low}-{high}")
+        parts += [f"{area} Sharpe > {floor:g}" for area, floor in self.sub_region_sharpe.items()]
         return " & ".join(parts) or "any Alpha"
 
+
+#: The datasets BRAIN recommends for the GLB/D1 Power Pool Nov`26 theme, in its order.
+NOV_26_DATASETS = (
+    "pv1", "model110", "model77", "model26", "model109", "risk70", "model38", "model50",
+    "analyst69", "model264", "other460", "fundamental23", "other455", "model138",
+    "fundamental17", "model30", "fundamental28", "analyst15", "risk68", "fundamental72",
+    "fundamental6", "pv37", "risk60", "pv96", "model262", "other432", "other496", "analyst14",
+    "fundamental44", "analyst11", "pv53", "other553", "analyst10",
+)  # fmt: skip
 
 #: The October 2026 calendar, as published: D1, two categories the first fortnight, three
 #: the second, one category per Alpha throughout.
@@ -94,6 +112,20 @@ DEFAULT_THEMES = [
         delay=1,
         categories=["analyst", "model", "news"],
         multiplier=1.0,
+    ),
+    # As BRAIN announced it: GLB, Delay 1, AMER Sharpe > 1, any data. Multiplier 1x.
+    ThemeRule(
+        name="GLB/D1 Power Pool Nov`26",
+        start=date(2026, 10, 26),
+        end=date(2026, 11, 22),
+        delay=1,
+        regions=["GLB"],
+        categories=[],
+        single_category=False,
+        no_grouping=False,
+        multiplier=1.0,
+        datasets=list(NOV_26_DATASETS),
+        sub_region_sharpe={"AMER": 1.0},
     ),
     # For regular Alphas: GLB delay 1 with turnover between 15% and 30%, at 2.5x.
     ThemeRule(
@@ -152,6 +184,26 @@ def grouping_in(expression: str) -> str | None:
 CategoryOf = Callable[[str, str, int], str | None]
 
 
+def sub_region_sharpe(checks: Any, area: str) -> float | None:
+    """A GLB Alpha's Sharpe in one sub-region (AMER, EMEA, APAC), from BRAIN's own check on it
+    (``GLB_AMER_SHARPE``, with or without a ``LOW_`` prefix); ``None`` when not reported."""
+    if isinstance(checks, str):
+        try:
+            checks = json.loads(checks)
+        except ValueError:
+            return None
+    for c in checks if isinstance(checks, list) else []:
+        if not isinstance(c, dict):
+            continue
+        name = str(c.get("name") or "").upper()
+        if area.upper() in name and "SHARPE" in name:
+            try:
+                return float(c["value"])
+            except KeyError, TypeError, ValueError:
+                return None
+    return None
+
+
 def check(
     rule: ThemeRule,
     *,
@@ -160,12 +212,24 @@ def check(
     delay: int | None,
     category_of: CategoryOf,
     turnover: float | None = None,
+    checks: Any = None,
 ) -> tuple[bool, str]:
-    """Whether an Alpha fits ``rule``, and a short reason when it does not."""
+    """Whether an Alpha fits ``rule``, and a short reason when it does not.
+
+    ``checks`` are the Alpha's submission checks, for a rule with sub-region Sharpe floors;
+    an Alpha whose checks have not been read yet is not judged on them.
+    """
     if rule.delay is not None and delay != rule.delay:
         return False, f"delay {delay}, theme needs {rule.delay}"
     if rule.regions and region not in rule.regions:
         return False, f"region {region} not in theme"
+    if checks is not None:
+        for area, floor in rule.sub_region_sharpe.items():
+            found = sub_region_sharpe(checks, area)
+            if found is None:
+                return False, f"{area} Sharpe not reported yet; the theme needs it above {floor:g}"
+            if found <= floor:
+                return False, f"{area} Sharpe {found:.2f}, theme needs above {floor:g}"
     if rule.turnover_min is not None or rule.turnover_max is not None:
         if turnover is None:
             return False, "turnover unknown"
