@@ -69,6 +69,8 @@ class TaskParams(Out):
 class SearchParams(TaskParams):
     space: dict[str, Any]
     decay: int = 0
+    #: ``QUICK`` or ``FULL`` for every Alpha the task sends; ``None``: as Settings choose.
+    simulation_mode: str | None = None
     dataset_ids: list[str] = Field(default_factory=list)
     #: The single fields it was told to use, if it was; the space holds them either way.
     field_ids: list[str] = Field(default_factory=list)

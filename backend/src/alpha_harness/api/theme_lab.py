@@ -10,21 +10,24 @@ what the rule allows, so nothing that breaks the theme is spent on.
 
 import asyncio
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
+from sqlalchemy import func, select
 
 from .. import preferences
+from ..brain.schemas import FULL_MODE, QUICK_MODE
 from ..catalog.queries import FieldFilter
-from ..db.models import utcnow
-from ..labs import search
+from ..db.models import Trial, TrialState, utcnow
+from ..labs import search, theme_templates
 from ..labs.launch import (
     NO_SIMULATIONS,
     AddedTask,
     FieldCounts,
     SampleAlpha,
     SearchRequest,
+    account_operators,
     add_study,
     preview_samples,
     startup_trials,
@@ -86,6 +89,13 @@ class ThemeLabRequest(BaseModel):
     cores: int = Field(default=search.MAX_CORES, ge=1, le=search.MAX_CORES)
     simulations: int = Field(default=0, ge=0, le=search.MAX_SIMULATIONS)
     vector_operators: list[str] = Field(default_factory=list)
+    #: Templates to simulate, by name (``GET /templates``); empty: the built-in shapes only.
+    templates: list[str] = Field(default_factory=list, max_length=len(theme_templates.TEMPLATES))
+    #: Also search the lab's own shapes beside the chosen templates.
+    search_shapes: bool = True
+    #: ``FULL`` (a normal simulation, BRAIN's whole check list), ``QUICK`` (fewer checks,
+    #: faster; a passing Alpha is re-run in Full), or ``AUTO``: as Settings choose per region.
+    simulation_mode: Literal["FULL", "QUICK", "AUTO"] = "FULL"
 
 
 class ThemeLabPreview(Out):
@@ -235,9 +245,13 @@ async def _plan(body: ThemeLabRequest, state: State) -> tuple[dict[str, Any], Th
             f"{len(outside)} chosen datasets are outside the theme and are left out."
         )
     space = plan.get("space")
+    if space is not None:
+        await _templates_into(space, plan, body, rule, state)
     if space is not None and rule.no_grouping:
         # One field per shape keeps one category; dropping the group shapes keeps the rest.
-        space["families"] = [f for f in space["families"] if not f.startswith("group")]
+        space["families"] = [
+            f for f in space["families"] if not f.startswith("group") and f != "tpl"
+        ] + (["tpl"] if "tpl" in space["families"] else [])
         space["group"] = []
         space["groups"] = []
         if not space["families"]:
@@ -246,7 +260,13 @@ async def _plan(body: ThemeLabRequest, state: State) -> tuple[dict[str, Any], Th
         _country_first(space, plan)
     if space is not None and not plan["problems"]:
         # Drawn again from the space as narrowed, so the sample shows what will be sent.
-        run = SearchParams(region=body.region, delay=rule.delay or 0, decay=body.decay, space=space)
+        run = SearchParams(
+            region=body.region,
+            delay=rule.delay or 0,
+            decay=body.decay,
+            space=space,
+            simulation_mode=MODES[body.simulation_mode],
+        )
         choices = search.field_choices(space)
         plan["sample"] = [
             s
@@ -263,6 +283,118 @@ async def _plan(body: ThemeLabRequest, state: State) -> tuple[dict[str, Any], Th
             if not rule.no_grouping or grouping_in(s.expression) is None
         ]
     return plan, rule
+
+
+#: The request's mode as the simulation settings name it; ``None`` leaves it to Settings.
+MODES: dict[str, str | None] = {"FULL": FULL_MODE, "QUICK": QUICK_MODE, "AUTO": None}
+
+
+class ThemeTemplateInfo(Out):
+    name: str
+    expression: str
+    about: str
+    low_turnover: bool
+    suggested: bool
+    #: Every operator it calls is on your account (and it reads no group field the theme forbids).
+    available: bool
+    #: Of its Alphas back from BRAIN, the share that passed, and how many came back.
+    pass_rate: float | None = None
+    tried: int = 0
+
+
+@router.get("/templates")
+async def templates(state: State, theme: str | None = None) -> list[ThemeTemplateInfo]:
+    """The templates the lab can simulate, the suggested ones first."""
+    rule = await _theme(state, theme)
+    names = {str(o.get("name")) for o in await account_operators(state, refresh=False)}
+    grouping = rule is None or not rule.no_grouping
+    # Operators not read yet (signed out): every template is offered, and the plan says why
+    # it cannot run until they are.
+    every = {o for t in theme_templates.TEMPLATES for o in t.operators()}
+    ok = {t.name for t in theme_templates.usable(names or every, grouping=grouping)}
+    rates = await _template_rates(state)
+    return sorted(
+        (
+            ThemeTemplateInfo(
+                name=t.name,
+                expression=t.expression,
+                about=t.about,
+                low_turnover=t.low_turnover,
+                suggested=t.suggested,
+                available=t.name in ok,
+                pass_rate=rates.get(t.expression, (None, 0))[0],
+                tried=rates.get(t.expression, (None, 0))[1],
+            )
+            for t in theme_templates.TEMPLATES
+        ),
+        key=lambda t: (not t.available, not t.suggested),
+    )
+
+
+async def _template_rates(state: State) -> dict[str, tuple[float | None, int]]:
+    """Per template expression: the share of its Alphas back that passed, and how many."""
+    template = func.json_extract(Trial.params, "$.template")
+    async with state.db.session() as session:
+        rows = (
+            await session.execute(
+                select(template, Trial.state, func.count())
+                .where(
+                    func.json_extract(Trial.params, "$.family") == "tpl",
+                    Trial.state.in_([TrialState.COMPLETE, TrialState.FAIL]),
+                )
+                .group_by(template, Trial.state)
+            )
+        ).all()
+        passed = (
+            await session.execute(
+                select(template, func.count())
+                .where(
+                    func.json_extract(Trial.params, "$.family") == "tpl",
+                    Trial.state == TrialState.COMPLETE,
+                    Trial.feasible.is_(True),
+                )
+                .group_by(template)
+            )
+        ).all()
+    feasible: dict[str, int] = {str(e): int(n) for e, n in passed}
+    tried: dict[str, int] = {}
+    for expression, _, n in rows:
+        tried[str(expression)] = tried.get(str(expression), 0) + int(n)
+    return {e: ((feasible.get(e, 0) / n) if n else None, n) for e, n in tried.items()}
+
+
+async def _templates_into(
+    space: dict[str, Any],
+    plan: dict[str, Any],
+    body: ThemeLabRequest,
+    rule: ThemeRule,
+    state: State,
+) -> None:
+    """The chosen templates into the space, beside the built-in shapes or instead of them."""
+    # Read only when templates are chosen: the built-in shapes have checked the operators.
+    names = (
+        {str(o.get("name")) for o in await account_operators(state, refresh=False)}
+        if body.templates
+        else set[str]()
+    )
+    usable = {t.name: t for t in theme_templates.usable(names, grouping=not rule.no_grouping)}
+    chosen = [usable[n] for n in dict.fromkeys(body.templates) if n in usable]
+    if skipped := [n for n in body.templates if n not in usable]:
+        plan["warnings"].append(
+            f"{len(skipped)} chosen templates need an operator your account lacks (or a group "
+            "field the theme forbids) and are left out: " + ", ".join(skipped) + "."
+        )
+    shapes = list(space["families"]) if body.search_shapes else []
+    if chosen:
+        space["templates"] = [t.expression for t in chosen]
+        shapes.append("tpl")
+    if not shapes:
+        plan["problems"].append("Choose at least one template, or keep the built-in shapes on.")
+    space["families"] = shapes
+    if body.simulation_mode == "QUICK" and not state.engine.quick_allowed:
+        plan["warnings"].append(
+            "Your account has no Quick mode, so BRAIN may refuse these; choose Full."
+        )
 
 
 def _country_first(space: dict[str, Any], plan: dict[str, Any]) -> None:
@@ -322,6 +454,7 @@ async def add_task(body: ThemeLabRequest, state: State) -> AddedTask:
             decay=body.decay,
             cores=body.cores,
             dataset_ids=body.dataset_ids,
+            simulation_mode=MODES[body.simulation_mode],
             n_startup_trials=startup_trials(
                 len(plan["space"]["fields"]), body.simulations, per_round
             ),

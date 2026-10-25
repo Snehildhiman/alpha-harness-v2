@@ -124,3 +124,51 @@ def test_combo_reports_merged_pnl_and_weights_bc_ac_first() -> None:
     assert now.pnl is None
     assert order[0].combo.pnl is not None and order[0].combo.pnl > 0
     assert submit_rank.WEIGHTS[0] == submit_rank.WEIGHTS[1] > submit_rank.WEIGHTS[2]
+
+
+def test_chosen_templates_render_and_check_operators() -> None:
+    from alpha_harness.labs import search, theme_templates
+
+    smooth = theme_templates.BY_NAME["Smoothed change"]
+    assert smooth.operators() == {"rank", "ts_decay_linear", "ts_delta"}
+    point = {
+        "field": "mdl110_score",
+        "family": "tpl",
+        "template": smooth.expression,
+        "d": 63,
+        "within": "country",
+        "within_op": "group_rank",
+    }
+    assert search.render(point) == (
+        "group_rank(rank(ts_decay_linear(ts_delta(ts_backfill(mdl110_score, 21), 63), 10)), "
+        "country)"
+    )
+    country = theme_templates.BY_NAME["Country, then sector"]
+    assert country.groups() == {"country", "sector"}
+    ops = {"rank", "ts_rank", "group_rank", "group_neutralize"}
+    names = {t.name for t in theme_templates.usable(ops, grouping=True)}
+    assert {"Rank", "Own history", "Country, then sector"} <= names
+    assert "Smoothed change" not in names
+    assert "Country, then sector" not in {
+        t.name for t in theme_templates.usable(ops, grouping=False)
+    }
+    # Every template stays inside Power Pool's eight operators with the GLB country step.
+    from alpha_harness.labs.fastexpr import operator_count, parse
+
+    for t in theme_templates.TEMPLATES:
+        point = {"field": "f", "vector_op": "vec_avg", "family": "tpl", "template": t.expression}
+        point |= {"d": 21, "within": "country", "within_op": "group_zscore"}
+        assert operator_count(parse(search.render(point))) <= 8, t.name
+
+
+def test_search_requests_carry_the_chosen_mode() -> None:
+    from alpha_harness.labs import search
+    from alpha_harness.labs.params import SearchParams
+
+    space = {"neutralizations": ["MARKET"]}
+    point = {"field": "f", "family": "cs", "cs": "rank", "universe": "MINVOL1M"}
+    point["neutralization"] = "MARKET"
+    run = SearchParams(region="GLB", delay=1, space=space, simulation_mode="FULL")
+    assert search.request_for(point, run).settings.simulation_mode == "FULL"
+    auto = SearchParams(region="GLB", delay=1, space=space)
+    assert search.request_for(point, auto).settings.simulation_mode is None

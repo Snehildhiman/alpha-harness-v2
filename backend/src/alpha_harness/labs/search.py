@@ -170,6 +170,10 @@ def _shape(params: dict[str, Any]) -> str:
             return f"{params['ts_outer']}({inner}, {params['d_outer']})"
         case "group_ts":
             return f"{params['group_op']}({params['ts']}({b}, {params['d']}), {params['group']})"
+        case "tpl":
+            # A template the user chose (``labs.theme_templates``): ``{x}`` the field as every
+            # shape reads it, ``{d}`` the lookback drawn.
+            return str(params["template"]).replace("{x}", b).replace("{d}", str(params.get("d")))
         case _:
             raise ValueError(f"Unknown shape {params['family']!r}")
 
@@ -223,6 +227,10 @@ def suggest(trial: Any, space: dict[str, Any], choices: dict[str, list[str]]) ->
         params["vector_op"] = trial.suggest_categorical("vector_op", list(space["vector"]))
     family = trial.suggest_categorical("family", list(space["families"]))
     params["family"] = family
+    if family == "tpl":
+        params["template"] = trial.suggest_categorical("template", list(space["templates"]))
+        if "{d}" in params["template"]:
+            params["d"] = trial.suggest_categorical("d", list(space["lookbacks"]))
     if family in ("cs", "cs_ts"):
         params["cs"] = trial.suggest_categorical("cs", list(space["cs"]))
     if family in ("ts", "cs_ts", "ts_ts", "group_ts"):
@@ -308,6 +316,8 @@ def request_for(params: dict[str, Any], run: SearchParams) -> SimulationRequest:
             neutralization=params["neutralization"],
             decay=run.decay,
             truncation=TRUNCATION,
+            # ``None``: whatever Settings choose for the region (Quick mode or not).
+            simulation_mode=run.simulation_mode,
         ),
         regular=render(params),
     )

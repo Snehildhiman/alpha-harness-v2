@@ -3,6 +3,21 @@
 What v2 adds on top of [alpha-harness-improved](https://github.com/residual-lab/alpha-harness)
 (MIT, © MiracleInvoker). How to use each part: [GUIDE.md](GUIDE.md).
 
+## 2026-10-25 (Current Theme Lab: Full checks and templates)
+
+- **Full or Quick, per task**: the lab used whatever Settings chose for the region, and
+  Settings had Quick mode on, so its Alphas ran Quick. A new *Check* choice: **Full** (the
+  default: a normal simulation with BRAIN's whole check list), **Quick** (fewer checks, faster;
+  a passing Alpha is re-run in Full) or **As in Settings**.
+- **Choose the templates to simulate**: twelve one-field templates (rank, own history, z-score
+  over time, smoothed level, decayed rank, change, smoothed change, industry relative and its
+  history, industry-neutral change, country then sector, stability), each with what it does,
+  *suggested* and *low turnover* badges and its pass rate so far. Pick several (*Suggested*,
+  *Low turnover only*, *All*, *Clear*) and keep or turn off the lab's own shapes beside them.
+  Templates an account lacks an operator for, or that read a group field the theme forbids,
+  are shown but cannot be ticked. On GLB each is still standardised within its country. The
+  template leaderboard names them.
+
 ## 2026-10-25 (GLB/D1 Power Pool Nov`26 theme)
 
 - **The new theme is in the calendar**: GLB, Delay 1, AMER Sharpe > 1, 26 Oct to 22 Nov, 1x,

@@ -38,6 +38,7 @@ from ..db.models import (
 )
 from ..engine.slots import errored_for_good
 from ..labs.params import TASK_SAMPLERS
+from ..labs.theme_templates import TEMPLATES
 from ..recent import Recent
 from ..repair.rank import near_miss
 from ..schemas import Out
@@ -697,6 +698,9 @@ def _template_of(
         return "Region Agnostic shapes", str(p["shape"])
     if p.get("recipe"):
         return "Super Alpha", str(p["recipe"]).split(" · Decay")[0]
+    if sampler == "search" and p.get("family") == "tpl":
+        found = next((t.name for t in TEMPLATES if t.expression == p.get("template")), None)
+        return "Theme template", found or str(p.get("template"))
     if sampler == "search" and p.get("family"):
         return "Search Lab shape", str(p["family"])
     first = next((line for line in source.splitlines() if line.strip()), "")
@@ -718,11 +722,12 @@ async def _templates(state: State) -> list[TemplateScore]:
     shape = func.json_extract(Trial.params, "$.shape")
     recipe = func.json_extract(Trial.params, "$.recipe")
     family = func.json_extract(Trial.params, "$.family")
+    template = func.json_extract(Trial.params, "$.template")
     async with state.db.session() as db:
         rows = (
             await db.execute(
                 # Only the three names, never whole rows: a long task holds 100,000 trials.
-                select(Trial.study_id, shape, recipe, family, Trial.alpha_id)
+                select(Trial.study_id, shape, recipe, family, template, Trial.alpha_id)
                 .where(Trial.state == TrialState.COMPLETE, Trial.alpha_id.is_not(None))
                 .distinct()
             )
@@ -754,9 +759,14 @@ async def _templates(state: State) -> list[TemplateScore]:
                 sharpe[key] = figure(item, "sharpe")
         tally: dict[tuple[str, str], list[Any]] = {}
         seen: set[tuple[tuple[str, str], str]] = set()
-        for study_id, shape_of, recipe_of, family_of, alpha_id in rows:
+        for study_id, shape_of, recipe_of, family_of, template_of, alpha_id in rows:
             sampler, name, label, source = studies.get(study_id, ("", None, None, ""))
-            params = {"shape": shape_of, "recipe": recipe_of, "family": family_of}
+            params = {
+                "shape": shape_of,
+                "recipe": recipe_of,
+                "family": family_of,
+                "template": template_of,
+            }
             key = _template_of(str(sampler), name, label, str(source or ""), params)
             if (key, alpha_id) in seen or alpha_id not in verdict:
                 continue

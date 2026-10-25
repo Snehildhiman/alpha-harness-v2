@@ -3019,6 +3019,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/theme-lab/templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Templates
+         * @description The templates the lab can simulate, the suggested ones first.
+         */
+        get: operations["templates_api_theme_lab_templates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/today": {
         parameters: {
             query?: never;
@@ -8308,10 +8328,23 @@ export interface components {
             /** Region */
             region: string;
             /**
+             * Search Shapes
+             * @default true
+             */
+            search_shapes: boolean;
+            /**
+             * Simulation Mode
+             * @default FULL
+             * @enum {string}
+             */
+            simulation_mode: "FULL" | "QUICK" | "AUTO";
+            /**
              * Simulations
              * @default 0
              */
             simulations: number;
+            /** Templates */
+            templates?: string[];
             /** Theme */
             theme?: string | null;
             /** Universe */
@@ -8381,6 +8414,28 @@ export interface components {
             turnoverMax?: number | null;
             /** Turnovermin */
             turnoverMin?: number | null;
+        };
+        /** ThemeTemplateInfo */
+        ThemeTemplateInfo: {
+            /** About */
+            about: string;
+            /** Available */
+            available: boolean;
+            /** Expression */
+            expression: string;
+            /** Lowturnover */
+            lowTurnover: boolean;
+            /** Name */
+            name: string;
+            /** Passrate */
+            passRate?: number | null;
+            /** Suggested */
+            suggested: boolean;
+            /**
+             * Tried
+             * @default 0
+             */
+            tried: number;
         };
         /** ThreadScope */
         ThreadScope: {
@@ -13361,6 +13416,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AddedTask"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    templates_api_theme_lab_templates_get: {
+        parameters: {
+            query?: {
+                theme?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThemeTemplateInfo"][];
                 };
             };
             /** @description Validation Error */

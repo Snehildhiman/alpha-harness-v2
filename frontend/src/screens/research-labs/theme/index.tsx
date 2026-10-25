@@ -33,13 +33,19 @@ import {
   Skeleton,
 } from '@/ui/kit'
 import { ThemeComboPanel } from './combo'
+import { ThemeTemplatePicker } from './templates'
 
 type Schemas = components['schemas']
 type Options = Schemas['ThemeLabOptions']
 type Preview = Schemas['ThemeLabPreview']
 
+type Mode = 'FULL' | 'QUICK' | 'AUTO'
+
 interface Body {
   theme: string | null
+  templates: string[]
+  searchShapes: boolean
+  simulationMode: Mode
   vectorOperators: string[]
   region: string
   datasetIds: string[]
@@ -53,6 +59,9 @@ interface Body {
 
 const wire = (b: Body) => ({
   theme: b.theme,
+  templates: b.templates,
+  search_shapes: b.searchShapes,
+  simulation_mode: b.simulationMode,
   universes: b.universes,
   random_universe: b.randomUniverse,
   vector_operators: b.vectorOperators,
@@ -88,6 +97,9 @@ export function ThemeLabScreen() {
   const [cores, setCores] = useState(4)
   const [simulations, setSimulations] = useState(500)
   const [universes, setUniverses] = useState<string[]>([])
+  const [templates, setTemplates] = useState<string[]>([])
+  const [searchShapes, setSearchShapes] = useState(true)
+  const [mode, setMode] = useState<Mode>('FULL')
   const [randomUniverse, setRandomUniverse] = useState(false)
   // Vector fields (several values a day) need a vec_ operator to become one number; most
   // analyst and model data is vector, so vec_avg is on from the start.
@@ -121,6 +133,9 @@ export function ThemeLabScreen() {
   const chosen = picked ?? (recommended.length ? recommended : all)
   const body: Body = {
     theme: theme?.name ?? null,
+    templates,
+    searchShapes,
+    simulationMode: mode,
     vectorOperators,
     region: market?.region ?? '',
     datasetIds: chosen,
@@ -266,6 +281,13 @@ export function ThemeLabScreen() {
                     ))}
                   </div>
                 </Field>
+                <ThemeTemplatePicker
+                  theme={theme?.name ?? null}
+                  value={templates}
+                  onChange={setTemplates}
+                  shapes={searchShapes}
+                  onShapes={setSearchShapes}
+                />
                 {scopeOptions.neutralizations.length === 0 && (
                   <p className="text-body-compact text-ink-subtle">
                     Neutralizations appear once you are signed in to BRAIN.
@@ -306,6 +328,21 @@ export function ThemeLabScreen() {
                       items={DECAYS.map((d) => ({ value: d, label: String(d) }))}
                       value={decay}
                       onChange={setDecay}
+                    />
+                  </Field>
+                  <Field
+                    label="Check"
+                    hint="Full: a normal simulation with every check BRAIN runs. Quick: fewer checks and faster; a passing Alpha is re-run in Full before it counts."
+                  >
+                    <Segmented
+                      label="Check"
+                      items={[
+                        { value: 'FULL' as Mode, label: 'Full' },
+                        { value: 'QUICK' as Mode, label: 'Quick' },
+                        { value: 'AUTO' as Mode, label: 'As in Settings' },
+                      ]}
+                      value={mode}
+                      onChange={setMode}
                     />
                   </Field>
                   <Field label="Cores">
