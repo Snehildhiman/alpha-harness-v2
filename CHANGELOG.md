@@ -29,6 +29,10 @@ What v2 adds on top of [alpha-harness-improved](https://github.com/residual-lab/
   between the best and worst sub-region; tech_chart_model, predictive_starmine, model135 and
   analyst_consensus are offered as *less crowded* and start selected. The ranking table shows
   all three sub-region Sharpes.
+- **Ranked like the Power Pool leaderboard** (Tagged Power Pool Alphas, Merged PNL, BC Combo
+  IR, AC Combo IR): the summary reads your theme Alphas that way, each candidate shows the
+  Merged PnL it adds, and picks weigh BC and AC Combo IR most (35% each), with the last two
+  years before and after cost as a 15% + 15% check.
 
 ## 2026-10-24 (Tasks page speed)
 

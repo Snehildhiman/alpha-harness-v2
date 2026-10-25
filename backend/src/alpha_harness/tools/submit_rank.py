@@ -147,7 +147,8 @@ OS_DAYS = 2 * metrics.YEAR
 
 @dataclass(frozen=True, slots=True)
 class Combo:
-    """A set of Alphas combined at equal weight, on the four figures a theme ranks by."""
+    """A set of Alphas merged at equal weight, as the Power Pool leaderboard shows it (Merged
+    PnL, BC Combo IR, AC Combo IR), and the same IRs over recent years (the OS proxy)."""
 
     #: Combo IR over the whole history, before and after cost.
     bc_ir: float | None
@@ -155,9 +156,17 @@ class Combo:
     #: The same over the last :data:`OS_DAYS` only: what an out-of-sample score sees.
     os_ir: float | None
     ac_os_ir: float | None
+    #: The merged book's total PnL over its history, in dollars of one Alpha's book (an
+    #: estimate of the leaderboard's Merged PNL, from the stored daily PnL).
+    pnl: float | None = None
 
     def values(self) -> tuple[float | None, ...]:
         return (self.bc_ir, self.ac_ir, self.os_ir, self.ac_os_ir)
+
+
+#: How much each figure counts in a pick's score: the leaderboard shows BC and AC Combo IR, so
+#: they lead; the recent-years IRs keep a pick from leaning on an old stretch alone.
+WEIGHTS = (0.35, 0.35, 0.15, 0.15)
 
 
 @dataclass(frozen=True, slots=True)
@@ -184,18 +193,21 @@ def _combo(book: Floats, traded: Floats, live: Floats, cost_bps: float) -> Combo
         _ir(book, traded, cost_bps),
         _ir(book[recent], traded[recent], None),
         _ir(book[recent], traded[recent], cost_bps),
+        float(book.sum()),
     )
 
 
 def _less(a: Combo, b: Combo) -> Combo:
-    pairs = zip(a.values(), b.values(), strict=True)
+    pairs = zip((*a.values(), a.pnl), (*b.values(), b.pnl), strict=True)
     found = [None if x is None or y is None else x - y for x, y in pairs]
     return Combo(*found)
 
 
 def _mean(c: Combo) -> float | None:
-    known = [v for v in c.values() if v is not None]
-    return sum(known) / len(known) if known else None
+    """The weighted mean of the four IR changes (:data:`WEIGHTS`), over those known."""
+    known = [(w, v) for w, v in zip(WEIGHTS, c.values(), strict=True) if v is not None]
+    total = sum(w for w, _ in known)
+    return sum(w * v for w, v in known) / total if known else None
 
 
 def theme_combo(
@@ -211,10 +223,11 @@ def theme_combo(
     effect on the combination as it stands.
 
     A theme ranks a user's Alphas as one equal-weight book: Combo IR before and after cost,
-    and an out-of-sample score before and after cost. Each candidate is scored on the mean
-    change of those four; ``picks`` are then chosen greedily, each judged against the pool
-    *and the picks before it*, so two candidates that repeat each other are not both picked.
-    The out-of-sample figures here are the last two years held out of nothing: a proxy for
+    and an out-of-sample score before and after cost. Each candidate is scored on the weighted
+    change of those four (:data:`WEIGHTS`: BC and AC first, as the leaderboard shows them);
+    ``picks`` are then chosen greedily, each judged against the pool *and the picks before
+    it*, so two candidates that repeat each other are not both picked. The out-of-sample
+    figures here are the last two years held out of nothing: a proxy for
     the score BRAIN keeps for after submission, which no stored series can show.
     """
     kept = [a for a in dict.fromkeys(pool) if series.get(a)]

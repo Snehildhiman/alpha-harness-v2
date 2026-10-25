@@ -4533,6 +4533,8 @@ export interface components {
             bcIr: number | null;
             /** Osir */
             osIr: number | null;
+            /** Pnl */
+            pnl?: number | null;
         };
         /** ComboRow */
         ComboRow: {

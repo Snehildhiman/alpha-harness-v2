@@ -115,3 +115,12 @@ def test_combo_objective_prefers_balanced_sub_regions() -> None:
     weak_emea = theme_combo(**base, checks=regions(1.6, 1.5, 0.7))
     assert balanced is not None and lopsided is not None and weak_emea is not None
     assert balanced > lopsided > weak_emea
+
+
+def test_combo_reports_merged_pnl_and_weights_bc_ac_first() -> None:
+    days = [date(2020, 1, 1) + timedelta(days=i) for i in range(600)]
+    store = {"a": {d: (100.0 + (i % 7), 0.1) for i, d in enumerate(days)}}
+    now, order, _ = submit_rank.theme_combo(store, {}, [], ["a"], picks=1)
+    assert now.pnl is None
+    assert order[0].combo.pnl is not None and order[0].combo.pnl > 0
+    assert submit_rank.WEIGHTS[0] == submit_rank.WEIGHTS[1] > submit_rank.WEIGHTS[2]

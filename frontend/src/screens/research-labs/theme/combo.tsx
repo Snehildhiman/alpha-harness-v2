@@ -22,6 +22,8 @@ type ComboRow = components['schemas']['ComboRow']
 const delta = (v: number | null | undefined) =>
   v == null ? '—' : `${v >= 0 ? '+' : ''}${fmt.ratio(v, 3)}`
 
+const money = (v: number | null | undefined) => (v == null ? '—' : `$${fmt.compact(v)}`)
+
 const tone = (v: number | null | undefined) =>
   v == null ? 'text-ink-subtle' : v > 0 ? 'text-pnl-positive-text' : 'text-pnl-negative-text'
 
@@ -91,6 +93,22 @@ const COLUMNS: Column<ComboRow>[] = [
     }),
   ),
   {
+    key: 'pnl',
+    header: 'Merged PnL',
+    width: '104px',
+    align: 'right',
+    cell: (r) => (
+      <span
+        className={`num ${tone(r.delta.pnl)}`}
+        title={`Merged PnL with it: ${money(r.combo.pnl)}`}
+      >
+        {r.delta.pnl == null
+          ? '—'
+          : `${r.delta.pnl >= 0 ? '+' : '−'}${money(Math.abs(r.delta.pnl))}`}
+      </span>
+    ),
+  },
+  {
     key: 'max',
     header: 'Highest with one',
     width: '120px',
@@ -147,20 +165,24 @@ export function ThemeComboPanel({ theme }: { theme: string }) {
       <div className="flex flex-col gap-3">
         <p className="text-body-compact text-pretty text-ink-subtle">
           Your submittable Power Pool Alphas that fit this theme, ranked by how much each lifts the
-          combination of your theme Alphas: Combo IR before cost (BC) and after cost (AC), and the
-          same over the last two years, a stand-in for the OS Score BRAIN measures after you submit.
-          The picks are chosen in order, each against what you submitted in the theme’s dates and
-          the picks above it, so two Alphas that trade alike are not both picked. Spends no quota.
+          figures BRAIN’s Power Pool leaderboard shows for your merged theme Alphas: BC Combo IR and
+          AC Combo IR count most, with the same over the last two years as a check that a pick does
+          not live on an old stretch (BRAIN’s OS score is measured after you submit). Merged PnL is
+          estimated from the stored daily PnL. The picks are chosen in order, each against what you
+          submitted in the theme’s dates and the picks above it, so two Alphas that trade alike are
+          not both picked. Spends no quota.
         </p>
         {plan.isError && <ErrorNotice error={plan.error} title="Could not rank" />}
         {asked && plan.isPending && <Skeleton label="Combining daily PnL" />}
         {data && (
           <>
             <p className="text-body-compact text-ink-muted">
-              Submitted for the theme: <span className="num">{fmt.int(data.pool)}</span> · BC{' '}
-              <span className="num">{fmt.ratio(data.now.bcIr, 2)}</span> · AC{' '}
-              <span className="num">{fmt.ratio(data.now.acIr, 2)}</span> · OS{' '}
-              <span className="num">{fmt.ratio(data.now.osIr, 2)}</span> · AC OS{' '}
+              As the leaderboard reads you now: tagged Power Pool Alphas{' '}
+              <span className="num">{fmt.int(data.pool)}</span> · Merged PnL{' '}
+              <span className="num">{money(data.now.pnl)}</span> · BC Combo IR{' '}
+              <span className="num">{fmt.ratio(data.now.bcIr, 2)}</span> · AC Combo IR{' '}
+              <span className="num">{fmt.ratio(data.now.acIr, 2)}</span> · last 2 years{' '}
+              <span className="num">{fmt.ratio(data.now.osIr, 2)}</span> /{' '}
               <span className="num">{fmt.ratio(data.now.acOsIr, 2)}</span> ·{' '}
               {fmt.int(data.candidates)} candidates
             </p>

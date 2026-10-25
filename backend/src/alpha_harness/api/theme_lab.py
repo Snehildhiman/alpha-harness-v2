@@ -351,6 +351,8 @@ class ComboFigures(Out):
     ac_ir: float | None
     os_ir: float | None
     ac_os_ir: float | None
+    #: Estimated Merged PnL: the merged book's total PnL, in dollars.
+    pnl: float | None = None
 
 
 class ComboRow(Out):
@@ -365,7 +367,7 @@ class ComboRow(Out):
     #: The theme's combination with this Alpha added, and the change it makes.
     combo: ComboFigures
     delta: ComboFigures
-    #: Mean of the four changes: the order to submit in.
+    #: Weighted mean of the four IR changes, BC and AC first: the order to submit in.
     score: float | None
     max_correlation: float | None
     max_correlation_with: str | None
@@ -387,7 +389,7 @@ class ThemeCombo(Out):
 
 
 def _figures(c: Any) -> ComboFigures:
-    return ComboFigures(bc_ir=c.bc_ir, ac_ir=c.ac_ir, os_ir=c.os_ir, ac_os_ir=c.ac_os_ir)
+    return ComboFigures(bc_ir=c.bc_ir, ac_ir=c.ac_ir, os_ir=c.os_ir, ac_os_ir=c.ac_os_ir, pnl=c.pnl)
 
 
 @router.get("/combo")
