@@ -3,6 +3,15 @@
 What v2 adds on top of [alpha-harness-improved](https://github.com/residual-lab/alpha-harness)
 (MIT, © MiracleInvoker). How to use each part: [GUIDE.md](GUIDE.md).
 
+## 2026-10-25 (GLB sub-region Sharpe misses are failures)
+
+- **LOW_GLB_AMER_SHARPE (and APAC, EMEA) below 1 now reads FAIL**: BRAIN reports the miss as
+  a WARNING, but GLB needs each sub-region at 1 or more and the Nov`26 theme AMER above 1. It
+  is shown as FAIL on every check list, counts against the Alpha on Alpha Types (it is no
+  longer listed as submittable), and the labs' search treats it as a failed check. Alphas
+  stored earlier read the same way; nothing needs re-syncing. At or above the limit, and any
+  other check's WARNING, stay as BRAIN reports them.
+
 ## 2026-10-25 (Current Theme Lab: Full checks and templates)
 
 - **Full or Quick, per task**: the lab used whatever Settings chose for the region, and

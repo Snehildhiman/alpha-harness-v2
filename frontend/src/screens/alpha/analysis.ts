@@ -73,7 +73,25 @@ const INFORMATIONAL = new Set([
   'POWER_POOL_DESCRIPTION_FORMAT',
 ])
 
-export const resultOf = (check: AlphaCheck): CheckResult => check.result ?? 'PENDING'
+/** GLB's sub-region Sharpe checks (LOW_GLB_AMER_SHARPE and its APAC and EMEA siblings). */
+const SUB_REGION_SHARPE = /^(LOW_)?GLB_(AMER|APAC|EMEA)_SHARPE$/
+
+/** A check's result as the app judges it. BRAIN reports a GLB sub-region Sharpe below its
+ * limit as WARNING, but GLB needs each sub-region at 1 or more (and the Nov`26 theme AMER
+ * above 1), so that miss reads as FAIL, as the backend counts it. */
+export function strictResult(check: {
+  name: string
+  result?: CheckResult | null
+  value?: unknown
+  limit?: unknown
+}): CheckResult {
+  const result = check.result ?? 'PENDING'
+  if (result !== 'WARNING' || !SUB_REGION_SHARPE.test(check.name.toUpperCase())) return result
+  const { value, limit } = check
+  return typeof value === 'number' && typeof limit === 'number' && value >= limit ? result : 'FAIL'
+}
+
+export const resultOf = (check: AlphaCheck): CheckResult => strictResult(check)
 
 export interface CheckGroups {
   failing: AlphaCheck[]

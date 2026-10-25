@@ -6,6 +6,7 @@ import { MaximizeIcon } from 'lucide-react'
 import { useState } from 'react'
 import { ApiError, errorMessage } from '@/api/http'
 import { fmt, isNum } from '@/lib/format'
+import { strictResult } from '@/screens/alpha/analysis'
 import { alpha, notApplicable } from '@/screens/alpha/api'
 import { type AlphaSettings, pool } from '@/screens/pool/api'
 import { PnlChart } from '@/screens/pool/pnl-chart'
@@ -114,7 +115,7 @@ function Body({ alphaId }: { alphaId: string }) {
                 key={`${c.name}-${i}`}
                 className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-1.5 text-body"
               >
-                <Badge tone={checkTone(c.result ?? 'PENDING')}>{c.result ?? 'PENDING'}</Badge>
+                <Badge tone={checkTone(strictResult(c))}>{strictResult(c)}</Badge>
                 <span className="num text-ink">{c.name}</span>
                 {isNum(c.value) && (
                   <span className="num text-body-compact text-ink-subtle">

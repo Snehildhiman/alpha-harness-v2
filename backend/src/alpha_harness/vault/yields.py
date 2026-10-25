@@ -97,9 +97,29 @@ REFUSING = frozenset({"FAIL", "ERROR"})
 Verdict = Literal["submittable", "pending", "refused"]
 
 
+#: GLB's sub-region Sharpe checks (LOW_GLB_AMER_SHARPE, ..._APAC_..., ..._EMEA_...). BRAIN
+#: reports a miss as WARNING, but GLB needs each sub-region at a Sharpe of at least 1 and the
+#: Nov`26 theme AMER above 1, so a miss is read here as the FAIL it is in practice.
+SUB_REGION_SHARPE = re.compile(r"^(LOW_)?GLB_(AMER|APAC|EMEA)_SHARPE$")
+
+
+def strict_sub_region(check: dict[str, Any]) -> dict[str, Any]:
+    """``check`` with a sub-region Sharpe WARNING below its limit turned to FAIL."""
+    name = str(check.get("name", "")).upper()
+    if not SUB_REGION_SHARPE.match(name) or str(check.get("result", "")).upper() != "WARNING":
+        return check
+    value, limit = check.get("value"), check.get("limit")
+    if isinstance(value, int | float) and isinstance(limit, int | float) and value >= limit:
+        return check
+    return {**check, "result": "FAIL"}
+
+
 def without_quota_checks(checks: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """The checks worth keeping: everything but :data:`QUOTA_CHECKS`."""
-    return [c for c in checks if str(c.get("name", "")).upper() not in QUOTA_CHECKS]
+    """The checks worth keeping: everything but :data:`QUOTA_CHECKS`, each GLB sub-region
+    Sharpe miss read as FAIL (:func:`strict_sub_region`)."""
+    return [
+        strict_sub_region(c) for c in checks if str(c.get("name", "")).upper() not in QUOTA_CHECKS
+    ]
 
 
 def checks_of(checks_json: str | None) -> list[dict[str, Any]]:

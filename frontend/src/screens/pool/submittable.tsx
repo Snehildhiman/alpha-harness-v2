@@ -8,6 +8,7 @@ import { cn } from '@/lib/cn'
 import { fmt, isNum } from '@/lib/format'
 import { marketKey, useScope } from '@/lib/scope'
 import { useRefetchOn } from '@/lib/ws'
+import { strictResult } from '@/screens/alpha/analysis'
 import {
   type AlphaSettings,
   pool,
@@ -280,11 +281,11 @@ const limitOf = (checks: AlphaCheck[], name: string) => {
 }
 
 function CheckBadge({ check }: { check: AlphaCheck }) {
-  const result = check.result ?? 'PENDING'
+  const result = strictResult(check)
   const figures = isNum(check.value)
     ? `${checkFigure(check.name, check.value)}${isNum(check.limit) ? ` / ${checkFigure(check.name, check.limit)}` : ''}`
     : null
-  const tone = checkTone(check.result ?? 'PENDING')
+  const tone = checkTone(result)
   return (
     <Tooltip
       content={`${result}${check.message ? ` · ${check.message}` : figures && isNum(check.limit) ? ' · value / limit' : ''}`}
