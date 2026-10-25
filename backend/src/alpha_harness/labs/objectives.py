@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..brain.schemas import QUICK_MODE, Alpha, Check, CheckResult, SampleStats
-from ..vault.yields import strict_sub_region, without_quota_checks
+from ..vault.yields import without_quota_checks
 
 #: A missing number scores this: deliberately terrible, so a broken trial is never mistaken
 #: for a good one. Every objective is maximised.
@@ -235,16 +235,7 @@ def constraints(alpha: Alpha) -> tuple[dict[str, float], list[dict[str, Any]]]:
 
 
 def _violation(check: Check) -> float:
-    # A GLB sub-region Sharpe miss is reported WARNING, but it keeps an Alpha out (see
-    # :func:`strict_sub_region`), so the search must see it as one.
-    sub_region_miss = (
-        check.result == CheckResult.WARNING
-        and strict_sub_region(check.model_dump(by_alias=True))["result"] == "FAIL"
-    )
-    if (
-        check.result in (CheckResult.PASS, CheckResult.WARNING, CheckResult.PENDING, None)
-        and not sub_region_miss
-    ):
+    if check.result in (CheckResult.PASS, CheckResult.WARNING, CheckResult.PENDING, None):
         return 0.0
     numbers = check.numbers
     if numbers is None or not all(math.isfinite(n) for n in numbers):

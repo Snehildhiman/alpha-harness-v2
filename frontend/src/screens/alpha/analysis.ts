@@ -74,11 +74,19 @@ const INFORMATIONAL = new Set([
 ])
 
 /** GLB's sub-region Sharpe checks (LOW_GLB_AMER_SHARPE and its APAC and EMEA siblings). */
-const SUB_REGION_SHARPE = /^(LOW_)?GLB_(AMER|APAC|EMEA)_SHARPE$/
+const SUB_REGION_SHARPE = /^(?:LOW_)?GLB_(AMER|APAC|EMEA)_SHARPE$/
+
+/** Sub-regions a Power Pool theme running today holds to a Sharpe floor (the Nov`26 theme:
+ * AMER). Set from the theme calendar by {@link useThemeFloors}. */
+let themeAreas: ReadonlySet<string> = new Set()
+
+export function setThemeAreas(areas: ReadonlySet<string>) {
+  themeAreas = areas
+}
 
 /** A check's result as the app judges it. BRAIN reports a GLB sub-region Sharpe below its
- * limit as WARNING, but GLB needs each sub-region at 1 or more (and the Nov`26 theme AMER
- * above 1), so that miss reads as FAIL, as the backend counts it. */
+ * limit as WARNING; where the running theme requires that sub-region (AMER > 1 for Nov`26)
+ * the miss reads as FAIL, as the theme counts it. Everything else is BRAIN's own reading. */
 export function strictResult(check: {
   name: string
   result?: CheckResult | null
@@ -86,7 +94,8 @@ export function strictResult(check: {
   limit?: unknown
 }): CheckResult {
   const result = check.result ?? 'PENDING'
-  if (result !== 'WARNING' || !SUB_REGION_SHARPE.test(check.name.toUpperCase())) return result
+  const area = SUB_REGION_SHARPE.exec(check.name.toUpperCase())?.[1]
+  if (result !== 'WARNING' || !area || !themeAreas.has(area)) return result
   const { value, limit } = check
   return typeof value === 'number' && typeof limit === 'number' && value >= limit ? result : 'FAIL'
 }

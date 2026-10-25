@@ -12,6 +12,7 @@ import { errorMessage } from '@/api/http'
 import type { Today } from '@/api/types'
 import { useLive } from '@/lib/live'
 import { useRefetchOn } from '@/lib/ws'
+import { useThemeFloors } from '@/screens/alpha/theme-floors'
 import { Button, Empty, LINK, Notice, Skeleton, Spinner } from '@/ui/kit'
 import { ResizeHandle, useMediaQuery, WIDE } from '@/ui/panels'
 import { CommandMenu } from './command-menu'
@@ -88,6 +89,8 @@ export function Shell() {
  * every width, so crossing 1024px or hiding the sidebar does not remount the screen and throw
  * away whatever was half-typed in it. */
 function Workspace({ you }: { you: Today['you'] }) {
+  // The running theme's sub-region floors, for every check list (AMER > 1 for Nov`26).
+  useThemeFloors()
   const wide = useMediaQuery(WIDE)
   const [dragCollapsed, setDragCollapsed] = useState(false)
   const hidden = useSidebarHidden((s) => s.hidden)

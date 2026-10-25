@@ -172,18 +172,3 @@ def test_search_requests_carry_the_chosen_mode() -> None:
     assert search.request_for(point, run).settings.simulation_mode == "FULL"
     auto = SearchParams(region="GLB", delay=1, space=space)
     assert search.request_for(point, auto).settings.simulation_mode is None
-
-
-def test_sub_region_sharpe_warning_reads_as_fail() -> None:
-    from alpha_harness.vault.yields import checks_of, verdict, without_quota_checks
-
-    warn = {"name": "LOW_GLB_AMER_SHARPE", "result": "WARNING", "value": 0.8, "limit": 1.0}
-    passing = {"name": "LOW_SHARPE", "result": "PASS", "value": 1.6, "limit": 1.25}
-    assert without_quota_checks([warn])[0]["result"] == "FAIL"
-    # Read back from a row stored before the rule: the same.
-    assert checks_of(json.dumps([warn, passing]))[0]["result"] == "FAIL"
-    assert verdict(checks_of(json.dumps([warn, passing]))) == "refused"
-    # At or above the limit, or another check's WARNING, is left alone.
-    ok = warn | {"value": 1.2}
-    other = {"name": "CONCENTRATED_WEIGHT", "result": "WARNING", "value": 0.2, "limit": 0.1}
-    assert [c["result"] for c in without_quota_checks([ok, other])] == ["WARNING", "WARNING"]
