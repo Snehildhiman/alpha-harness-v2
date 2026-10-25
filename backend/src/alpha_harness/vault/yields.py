@@ -97,9 +97,41 @@ REFUSING = frozenset({"FAIL", "ERROR"})
 Verdict = Literal["submittable", "pending", "refused"]
 
 
+#: GLB's sub-region Sharpe checks (LOW_GLB_AMER_SHARPE, ..._APAC_..., ..._EMEA_...).
+SUB_REGION_SHARPE = re.compile(r"^(?:LOW_)?GLB_(AMER|APAC|EMEA)_SHARPE$")
+#: Sub-regions a Power Pool theme running today holds to a Sharpe floor (Nov`26: AMER), set
+#: from the theme calendar by :func:`set_theme_areas` whenever preferences are read.
+_theme_areas: frozenset[str] = frozenset()
+
+
+def set_theme_areas(areas: frozenset[str]) -> None:
+    global _theme_areas
+    _theme_areas = areas
+
+
+def strict_sub_region(check: dict[str, Any]) -> dict[str, Any]:
+    """``check`` with a sub-region Sharpe WARNING below its limit turned to FAIL, where the
+    running theme requires that sub-region: BRAIN reports the miss as a warning, but the theme
+    does not count the Alpha (AMER Sharpe > 1 for Nov`26). Otherwise BRAIN's own reading."""
+    found = SUB_REGION_SHARPE.match(str(check.get("name", "")).upper())
+    if (
+        found is None
+        or found.group(1) not in _theme_areas
+        or str(check.get("result", "")).upper() != "WARNING"
+    ):
+        return check
+    value, limit = check.get("value"), check.get("limit")
+    if isinstance(value, int | float) and isinstance(limit, int | float) and value >= limit:
+        return check
+    return {**check, "result": "FAIL"}
+
+
 def without_quota_checks(checks: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """The checks worth keeping: everything but :data:`QUOTA_CHECKS`."""
-    return [c for c in checks if str(c.get("name", "")).upper() not in QUOTA_CHECKS]
+    """The checks worth keeping: everything but :data:`QUOTA_CHECKS`, with a running theme's
+    sub-region Sharpe miss read as FAIL (:func:`strict_sub_region`)."""
+    return [
+        strict_sub_region(c) for c in checks if str(c.get("name", "")).upper() not in QUOTA_CHECKS
+    ]
 
 
 def checks_of(checks_json: str | None) -> list[dict[str, Any]]:

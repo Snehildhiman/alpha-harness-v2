@@ -7,6 +7,7 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/cn'
 import { fmt } from '@/lib/format'
+import { strictResult } from '@/screens/alpha/analysis'
 import { pool } from '@/screens/pool/api'
 import { Button } from '@/ui/kit'
 import { Menu } from '@/ui/overlay'
@@ -33,7 +34,7 @@ export function RecheckButton({ alphaId }: { alphaId: string }) {
     mutationFn: () => pool.check(alphaId),
     onSuccess: (body) => {
       const checks = body.is?.checks ?? []
-      const count = (r: string) => checks.filter((c) => (c.result ?? 'PENDING') === r).length
+      const count = (r: string) => checks.filter((c) => strictResult(c) === r).length
       toast.success(
         `Checked ${alphaId}: ${count('PASS')} pass, ${count('FAIL')} fail, ${count('PENDING')} pending`,
       )

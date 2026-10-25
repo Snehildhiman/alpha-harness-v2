@@ -172,3 +172,25 @@ def test_search_requests_carry_the_chosen_mode() -> None:
     assert search.request_for(point, run).settings.simulation_mode == "FULL"
     auto = SearchParams(region="GLB", delay=1, space=space)
     assert search.request_for(point, auto).settings.simulation_mode is None
+
+
+def test_theme_sub_region_miss_reads_as_fail_only_while_the_theme_runs() -> None:
+    from alpha_harness.preferences import theme_floors
+    from alpha_harness.vault import yields
+
+    warn = {"name": "LOW_GLB_AMER_SHARPE", "result": "WARNING", "value": 0.8, "limit": 1.0}
+    apac = warn | {"name": "LOW_GLB_APAC_SHARPE"}
+    try:
+        yields.set_theme_areas(frozenset({"AMER"}))
+        read = yields.checks_of(json.dumps([warn, apac, warn | {"value": 1.3}]))
+        assert [c["result"] for c in read] == ["FAIL", "WARNING", "WARNING"]
+        # No theme running: BRAIN's own reading.
+        yields.set_theme_areas(frozenset())
+        assert yields.without_quota_checks([warn])[0]["result"] == "WARNING"
+        # The calendar decides: Nov`26 names AMER, and runs today or not.
+        theme_floors([RULE.model_copy(update={"start": date.today(), "end": date.today()})])
+        assert yields.without_quota_checks([warn])[0]["result"] == "FAIL"
+        theme_floors([RULE.model_copy(update={"start": date(2020, 1, 1), "end": date(2020, 2, 1)})])
+        assert yields.without_quota_checks([warn])[0]["result"] == "WARNING"
+    finally:
+        yields.set_theme_areas(frozenset())

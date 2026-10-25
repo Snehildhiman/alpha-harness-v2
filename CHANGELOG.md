@@ -11,6 +11,11 @@ What v2 adds on top of [alpha-harness-improved](https://github.com/residual-lab/
   for Nov`26), and the Current Theme tab and the lab's combo score already count it against
   the Alpha. Other sub-regions, other regions, and regular Alphas keep BRAIN's own reading,
   and once the theme ends the badge goes back to WARNING.
+- **Fixed: the FAIL did not show on 26 October in India**: "today" was read in UTC, which
+  was still the 25th until 05:30, so the theme had not started for the app. Today is now
+  your own calendar day, here and in the Current Theme Lab. The rule also reaches the
+  backend, so the Tasks results, Alpha Types and the labs' search count the miss too, and the
+  alpha panel's counts and gauge agree with its badge.
 
 ## 2026-10-25 (Current Theme Lab: Full checks and templates)
 

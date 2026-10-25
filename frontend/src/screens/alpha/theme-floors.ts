@@ -11,7 +11,10 @@ import { setThemeAreas } from './analysis'
 export function useThemeFloors() {
   const calendar = useQuery(themeCalendar)
   useEffect(() => {
-    const today = new Date().toISOString().slice(0, 10)
+    // Your own calendar day, not UTC's: a theme opening on the 26th has opened for you at
+    // midnight, while UTC still reads the 25th until 05:30 in India.
+    const now = new Date()
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
     const areas = new Set<string>()
     for (const rule of calendar.data ?? []) {
       if ((rule.powerPool ?? true) && rule.start <= today && today <= rule.end)

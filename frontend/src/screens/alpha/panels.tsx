@@ -59,7 +59,7 @@ function Gauge({ check }: { check: AlphaCheck }) {
   if (!isNum(value) || !isNum(limit) || limit <= 0) return null
   const span = Math.max(value, limit) * 1.2
   // BRAIN's own verdict when it gave one; the comparison is only for a check still pending.
-  const result = check.result
+  const result = resultOf(check)
   const passed =
     result === 'PASS' || result === 'FAIL' || result === 'ERROR'
       ? result === 'PASS'

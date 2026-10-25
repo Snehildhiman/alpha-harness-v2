@@ -9,7 +9,7 @@ what the rule allows, so nothing that breaks the theme is spent on.
 """
 
 import asyncio
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Query
@@ -36,7 +36,7 @@ from ..labs.params import SEARCH_SAMPLER, SearchParams
 from ..recent import Recent, StillReading
 from ..schemas import Out
 from ..separation import Kind, Verdict
-from ..themes import ThemeRule, current, grouping_in, normalise, sub_region_sharpe
+from ..themes import ThemeRule, grouping_in, normalise, sub_region_sharpe
 from ..tools import submit_rank
 from . import search_lab
 from . import separation as separation_api
@@ -127,7 +127,7 @@ UPCOMING_DAYS = 7
 async def _themes(state: State) -> list[ThemeRule]:
     """Power Pool themes running today or starting soon, latest-starting first."""
     rules = (await preferences.load(state.db)).power_pool_themes
-    today = datetime.now(UTC).date()
+    today = datetime.now().astimezone().date()
     soon = today + timedelta(days=UPCOMING_DAYS)
     return sorted(
         (r for r in rules if r.power_pool and r.start <= soon and r.end >= today),
@@ -140,7 +140,7 @@ async def _theme(state: State, name: str | None = None) -> ThemeRule | None:
     found = await _themes(state)
     if name:
         return next((r for r in found if r.name == name), None)
-    return found[0] if found else current(found, datetime.now(UTC).date())
+    return found[0] if found else None
 
 
 async def _allowed(state: State, rule: ThemeRule, region: str | None) -> list[dict[str, Any]]:

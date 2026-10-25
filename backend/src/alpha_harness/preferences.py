@@ -4,7 +4,7 @@ Every choice has a default, so an install that never opens Settings runs as the 
 out of the box.
 """
 
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import TYPE_CHECKING, Literal
 
 from pydantic import Field, field_validator, model_validator
@@ -15,6 +15,7 @@ from .brain.schemas import CheckResult
 from .db.models import Preference
 from .schemas import Out
 from .themes import DEFAULT_THEMES, ThemeRule
+from .vault import yields
 
 #: The October entry the first calendar guessed before BRAIN's announcement.
 LEGACY_THEME = "D1 Power Pool Oct`26 (analyst, model, news)"
@@ -117,7 +118,7 @@ class Preferences(Out):
         are added to it; every built-in name then counts as offered."""
         offered = set(self.themes_offered)
         have = {r.name for r in self.power_pool_themes}
-        today = datetime.now(UTC).date()
+        today = datetime.now().astimezone().date()
         self.power_pool_themes = self.power_pool_themes + [
             r.model_copy()
             for r in DEFAULT_THEMES
@@ -131,7 +132,23 @@ async def load(db: Database) -> Preferences:
     """Every choice, defaults filled in. Rows a newer build wrote are ignored."""
     async with db.session() as session:
         rows = await session.scalars(select(Preference))
-        return Preferences.model_validate({row.key: row.value for row in rows})
+        found = Preferences.model_validate({row.key: row.value for row in rows})
+    theme_floors(found.power_pool_themes)
+    return found
+
+
+def theme_floors(rules: list[ThemeRule]) -> None:
+    """Hand the check reader the sub-regions a Power Pool theme running today holds to a
+    Sharpe floor, so their misses read as FAIL while it runs (see ``strict_sub_region``)."""
+    today = datetime.now().astimezone().date()
+    yields.set_theme_areas(
+        frozenset(
+            area.upper()
+            for r in rules
+            if r.power_pool and r.start <= today <= r.end
+            for area in r.sub_region_sharpe
+        )
+    )
 
 
 async def save(db: Database, preferences: Preferences) -> None:
