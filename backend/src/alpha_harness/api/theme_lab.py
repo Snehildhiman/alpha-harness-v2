@@ -92,8 +92,11 @@ class ThemeLabRequest(BaseModel):
     vector_operators: list[str] = Field(default_factory=list)
     #: Templates to simulate, by name (``GET /templates``); empty: the built-in shapes only.
     templates: list[str] = Field(default_factory=list, max_length=len(theme_templates.TEMPLATES))
-    #: Also search the lab's own shapes beside the chosen templates.
+    #: Also search the lab's own shapes beside the chosen templates (they then get half).
     search_shapes: bool = True
+    #: GLB: rank or z-score every Alpha within its country (BRAIN's GLB advice). Off: each
+    #: template is sent exactly as written.
+    within_country: bool = True
     #: ``FULL`` (a normal simulation, BRAIN's whole check list), ``QUICK`` (fewer checks,
     #: faster; a passing Alpha is re-run in Full), or ``AUTO``: as Settings choose per region.
     simulation_mode: Literal["FULL", "QUICK", "AUTO"] = "FULL"
@@ -257,7 +260,7 @@ async def _plan(body: ThemeLabRequest, state: State) -> tuple[dict[str, Any], Th
         space["groups"] = []
         if not space["families"]:
             plan["problems"].append("Without the group shapes none of your operators fit a shape.")
-    if space is not None and body.region == "GLB":
+    if space is not None and body.region == "GLB" and body.within_country:
         _country_first(space, plan)
     if space is not None and not plan["problems"]:
         # Drawn again from the space as narrowed, so the sample shows what will be sent.

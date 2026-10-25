@@ -225,7 +225,17 @@ def suggest(trial: Any, space: dict[str, Any], choices: dict[str, list[str]]) ->
     params: dict[str, Any] = {"universe": universe, "field": field_id}
     if fields[field_id] == "VECTOR":
         params["vector_op"] = trial.suggest_categorical("vector_op", list(space["vector"]))
-    family = trial.suggest_categorical("family", list(space["families"]))
+    families = list(space["families"])
+    if "tpl" in families and len(families) > 1:
+        # Chosen templates get half the Alphas, the lab's own shapes share the rest: as one
+        # family among seven they got a seventh. Names of their own, so a task added when the
+        # templates were one family keeps its stored choices.
+        if trial.suggest_categorical("from_template", [True, False]):
+            family = "tpl"
+        else:
+            family = trial.suggest_categorical("shape", [f for f in families if f != "tpl"])
+    else:
+        family = trial.suggest_categorical("family", families)
     params["family"] = family
     if family == "tpl":
         params["template"] = trial.suggest_categorical("template", list(space["templates"]))

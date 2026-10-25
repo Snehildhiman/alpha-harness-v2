@@ -31,6 +31,7 @@ import {
   Panel,
   Segmented,
   Skeleton,
+  Switch,
 } from '@/ui/kit'
 import { ThemeComboPanel } from './combo'
 import { ThemeTemplatePicker } from './templates'
@@ -45,6 +46,7 @@ interface Body {
   theme: string | null
   templates: string[]
   searchShapes: boolean
+  withinCountry: boolean
   simulationMode: Mode
   vectorOperators: string[]
   region: string
@@ -61,6 +63,7 @@ const wire = (b: Body) => ({
   theme: b.theme,
   templates: b.templates,
   search_shapes: b.searchShapes,
+  within_country: b.withinCountry,
   simulation_mode: b.simulationMode,
   universes: b.universes,
   random_universe: b.randomUniverse,
@@ -99,6 +102,13 @@ export function ThemeLabScreen() {
   const [universes, setUniverses] = useState<string[]>([])
   const [templates, setTemplates] = useState<string[]>([])
   const [searchShapes, setSearchShapes] = useState(true)
+  const [withinCountry, setWithinCountry] = useState(true)
+  // Templates chosen: simulate those, not the lab's own shapes, unless asked for both.
+  const chooseTemplates = (names: string[]) => {
+    if (!templates.length && names.length) setSearchShapes(false)
+    if (!names.length) setSearchShapes(true)
+    setTemplates(names)
+  }
   const [mode, setMode] = useState<Mode>('FULL')
   const [randomUniverse, setRandomUniverse] = useState(false)
   // Vector fields (several values a day) need a vec_ operator to become one number; most
@@ -135,6 +145,7 @@ export function ThemeLabScreen() {
     theme: theme?.name ?? null,
     templates,
     searchShapes,
+    withinCountry,
     simulationMode: mode,
     vectorOperators,
     region: market?.region ?? '',
@@ -284,10 +295,24 @@ export function ThemeLabScreen() {
                 <ThemeTemplatePicker
                   theme={theme?.name ?? null}
                   value={templates}
-                  onChange={setTemplates}
+                  onChange={chooseTemplates}
                   shapes={searchShapes}
                   onShapes={setSearchShapes}
                 />
+                {market?.region === 'GLB' && (
+                  <div className="flex items-start gap-2 text-body-compact text-ink-muted">
+                    <Switch
+                      checked={withinCountry}
+                      onChange={setWithinCountry}
+                      aria-label="Rank each Alpha within its country"
+                    />
+                    <span className="text-pretty">
+                      Rank or z-score each Alpha within its country (BRAIN’s GLB advice, so one
+                      market’s larger values do not carry the book). Off: every template is sent
+                      exactly as written.
+                    </span>
+                  </div>
+                )}
                 {scopeOptions.neutralizations.length === 0 && (
                   <p className="text-body-compact text-ink-subtle">
                     Neutralizations appear once you are signed in to BRAIN.

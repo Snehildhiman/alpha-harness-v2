@@ -3,6 +3,16 @@
 What v2 adds on top of [alpha-harness-improved](https://github.com/residual-lab/alpha-harness)
 (MIT, © MiracleInvoker). How to use each part: [GUIDE.md](GUIDE.md).
 
+## 2026-10-26 (Current Theme Lab follows the chosen templates)
+
+- **Fixed: Alphas did not follow the chosen templates**: with *Also search the lab's own
+  shapes* on (the default), the templates were one choice among up to seven, so about one
+  Alpha in seven came from them. Now ticking a template turns the lab's own shapes off, so
+  every Alpha comes from your templates; turned back on, templates still get half.
+- **Exactly as written on GLB, if you want**: a new switch, *Rank or z-score each Alpha within
+  its country*, on by default (BRAIN's GLB advice). Off, each template is sent exactly as
+  written.
+
 ## 2026-10-25 (theme sub-region Sharpe misses are failures)
 
 - **LOW_GLB_AMER_SHARPE below 1 reads FAIL while the Nov`26 theme runs**: BRAIN reports the

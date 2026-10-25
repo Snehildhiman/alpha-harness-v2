@@ -8353,6 +8353,11 @@ export interface components {
             universes?: string[];
             /** Vector Operators */
             vector_operators?: string[];
+            /**
+             * Within Country
+             * @default true
+             */
+            within_country: boolean;
         };
         /** ThemeMarket */
         ThemeMarket: {

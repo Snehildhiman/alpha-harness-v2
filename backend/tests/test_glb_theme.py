@@ -194,3 +194,41 @@ def test_theme_sub_region_miss_reads_as_fail_only_while_the_theme_runs() -> None
         assert yields.without_quota_checks([warn])[0]["result"] == "WARNING"
     finally:
         yields.set_theme_areas(frozenset())
+
+
+def test_chosen_templates_are_what_gets_simulated() -> None:
+    import random
+
+    from alpha_harness.labs import search
+
+    space = {
+        "fields": {"f": "MATRIX"},
+        "families": ["cs", "ts", "group", "cs_ts", "ts_ts", "group_ts", "tpl"],
+        "templates": ["rank(ts_mean({x}, {d}))"],
+        "cs": ["rank"],
+        "ts": ["ts_mean"],
+        "group": ["group_rank"],
+        "groups": ["industry"],
+        "vector": [],
+        "lookbacks": [21, 63],
+        "universes": ["TOP3000"],
+        "neutralizations": ["MARKET"],
+    }
+    choices = search.field_choices(space)
+
+    def share(families: list[str]) -> float:
+        rng = random.Random(1)
+        drawn = [
+            search.suggest(search.RandomTrial(rng), space | {"families": families}, choices)
+            for _ in range(400)
+        ]
+        return sum(p["family"] == "tpl" for p in drawn) / len(drawn)
+
+    assert 0.4 < share(space["families"]) < 0.6  # beside the shapes: half
+    assert share(["tpl"]) == 1.0  # templates only: every one
+    rng = random.Random(2)
+    point = search.suggest(search.RandomTrial(rng), space | {"families": ["tpl"]}, choices)
+    assert search.render(point) in {
+        "rank(ts_mean(ts_backfill(f, 21), 21))",
+        "rank(ts_mean(ts_backfill(f, 21), 63))",
+    }
