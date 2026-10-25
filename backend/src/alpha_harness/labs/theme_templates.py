@@ -108,6 +108,120 @@ TEMPLATES: tuple[ThemeTemplate, ...] = (
         "rank(ts_std_dev({x}, {d}))",
         "How much the field moves about: a volatility of the data, not of the price.",
     ),
+    # -- clipping and scaling: tame outliers and put every market on one scale ------------
+    ThemeTemplate(
+        "Winsorized z-score",
+        "zscore(winsorize({x}, std=4))",
+        "Extremes clipped at 4 standard deviations, then standardised across stocks.",
+    ),
+    ThemeTemplate(
+        "Winsorized history",
+        "ts_zscore(winsorize({x}, std=4), {d})",
+        "Clipped, then compared with the stock's own past: one bad print cannot drive it.",
+        suggested=True,
+    ),
+    ThemeTemplate(
+        "Winsorized change",
+        "rank(winsorize(ts_delta({x}, {d}), std=4))",
+        "The move over the window with its outliers clipped, then ranked.",
+    ),
+    ThemeTemplate(
+        "Scale",
+        "scale({x})",
+        "The field scaled so its absolute values sum to one book: size kept, units removed.",
+    ),
+    ThemeTemplate(
+        "Scale over time",
+        "ts_scale({x}, {d})",
+        "Where today's value sits between the window's low (0) and high (1).",
+        suggested=True,
+    ),
+    ThemeTemplate(
+        "Smoothed, scaled over time",
+        "ts_scale(ts_mean({x}, 5), {d})",
+        "A week's average placed in the window's range: the scale signal, trading less.",
+        low_turnover=True,
+        suggested=True,
+    ),
+    ThemeTemplate(
+        "Normalize",
+        "normalize({x})",
+        "The day's cross-sectional mean taken out of every stock.",
+    ),
+    ThemeTemplate(
+        "Quantile",
+        "quantile({x})",
+        "Ranked, then shaped to a normal curve: tails count, but never wildly.",
+    ),
+    ThemeTemplate(
+        "Rolling quantile",
+        "ts_quantile({x}, {d})",
+        "The stock's own-history rank, shaped to a normal curve.",
+        suggested=True,
+    ),
+    ThemeTemplate(
+        "Signed square root",
+        "signed_power(zscore({x}), 0.5)",
+        "Standardised, then extremes dampened while keeping their sign.",
+    ),
+    ThemeTemplate(
+        "Sector scaled",
+        "group_scale({x}, sector)",
+        "Placed between its sector's low and high each day.",
+    ),
+    ThemeTemplate(
+        "Sub-industry winsorized z-score",
+        "group_zscore(winsorize({x}, std=4), subindustry)",
+        "Clipped, then standardised among sub-industry peers.",
+        suggested=True,
+    ),
+    # -- distance, timing and change ---------------------------------------------------
+    ThemeTemplate(
+        "Distance from average",
+        "ts_av_diff({x}, {d})",
+        "How far today's value is from its own average over the window.",
+    ),
+    ThemeTemplate(
+        "Days since the high",
+        "ts_arg_max({x}, {d})",
+        "How many days ago the field peaked in the window.",
+    ),
+    ThemeTemplate(
+        "Days since the low",
+        "ts_arg_min({x}, {d})",
+        "How many days ago the field bottomed in the window.",
+    ),
+    ThemeTemplate(
+        "Days since it changed",
+        "rank(days_from_last_change({x}))",
+        "How long since the data last updated: fresh news versus stale.",
+    ),
+    ThemeTemplate(
+        "Size of the last change",
+        "rank({x} - last_diff_value({x}, {d}))",
+        "How far the value moved at its latest update.",
+    ),
+    # -- slow signals for the after-cost figures ---------------------------------------
+    ThemeTemplate(
+        "Hump-smoothed rank",
+        "hump(rank({x}), hump=0.01)",
+        "Ranked, and a position changes only when the signal moves by more than 1%: few trades.",
+        low_turnover=True,
+        suggested=True,
+    ),
+    ThemeTemplate(
+        "Exponential decay",
+        "ts_decay_exp_window(rank({x}), {d}, factor=0.5)",
+        "Today's rank blended with the past, weights halving each day back.",
+        low_turnover=True,
+    ),
+    ThemeTemplate(
+        "Winsorized smoothed level",
+        "rank(ts_mean(winsorize({x}, std=4), {d}))",
+        "Clipped, averaged over the window, then ranked: robust and slow.",
+        low_turnover=True,
+        suggested=True,
+    ),
 )
 
 BY_NAME = {t.name: t for t in TEMPLATES}

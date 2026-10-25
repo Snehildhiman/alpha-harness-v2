@@ -17,6 +17,13 @@ What v2 adds on top of [alpha-harness-improved](https://github.com/residual-lab/
   Templates an account lacks an operator for, or that read a group field the theme forbids,
   are shown but cannot be ticked. On GLB each is still standardised within its country. The
   template leaderboard names them.
+- **20 more templates (32 in all)**: winsorized z-score, history, change and smoothed level;
+  scale, scale over time and its smoothed form; normalize; quantile and rolling quantile;
+  signed square root; sector scaled; sub-industry winsorized z-score; distance from average;
+  days since the high, the low and the last update; size of the last change; hump-smoothed
+  rank and exponential decay (both low turnover). Each stays inside Power Pool's eight
+  operators with the GLB country step; ones your account lacks an operator for cannot be
+  ticked.
 - **Templates show at once**: the list waited on reading your operators (which could go to
   BRAIN) and on counting every past trial for pass rates, and showed nothing meanwhile or on
   a failure. It now reads the stored operator list only, counts pass rates in the background
