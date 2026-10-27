@@ -3,6 +3,15 @@
 What v2 adds on top of [alpha-harness-improved](https://github.com/residual-lab/alpha-harness)
 (MIT, © MiracleInvoker). How to use each part: [GUIDE.md](GUIDE.md).
 
+## 2026-10-27 (why simulations return no Alpha)
+
+- **What the failed ones have in common** (Tasks, under "returned no Alpha. BRAIN said"):
+  for each setting the task varies (template, shape, country step, vector operator, lookback,
+  universe, neutralization, decay, check mode) how many were sent with each value and how many
+  of those failed, the always-failing ones first and in red, with a few failed expressions
+  and their settings. BRAIN's "There was an error while running the simulation" names no
+  cause; when it fails one kind of request every time, that value tops the list.
+
 ## 2026-10-26 (Current Theme Lab follows the chosen templates)
 
 - **Fixed: Alphas did not follow the chosen templates**: with *Also search the lab's own

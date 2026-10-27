@@ -68,6 +68,7 @@ import {
 } from '@/ui/kit'
 import { Confirm, Dialog, Menu } from '@/ui/overlay'
 import { type Column, DataTable } from '@/ui/table'
+import { FailurePattern } from './failure-pattern'
 
 /** Matches `labs.params.SETTINGS_SAMPLER` and `REGION_AGNOSTIC_SAMPLER`. */
 const SETTINGS_SAMPLER = 'settings-sampler'
@@ -941,6 +942,7 @@ function TaskDetail({
             </ul>
           </Notice>
         )}
+        {task.failed > 0 && <FailurePattern taskId={task.id} failed={task.failed} />}
         {task.template && (
           <Disclosure summary="Template">
             <code className="num text-body-compact break-all text-ink">{task.template}</code>

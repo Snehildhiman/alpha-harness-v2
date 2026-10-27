@@ -34,7 +34,7 @@ from ..db.models import (
 )
 from ..engine.slots import POSITIONAL_NOTE
 from ..labs import power_pool as pool_lab
-from ..labs import scheduler, search
+from ..labs import scheduler, search, theme_templates
 from ..labs.launch import AddedTask, add_study
 from ..labs.objectives import FAILURE, OBJECTIVES, StudyNotFoundError
 from ..labs.params import (
@@ -1054,6 +1054,122 @@ def _value(value: Any) -> str:
             return ", ".join(f"{k} {v}" for k, v in entries.items())
         return f"{len(entries)} entries"
     return str(value)
+
+
+class FailureSlice(Out):
+    #: What the trials share: a setting (Neutralization, Universe...) and its value.
+    attribute: str
+    value: str
+    sent: int
+    failed: int
+
+
+class FailedExample(Out):
+    expression: str | None
+    settings: str
+    message: str | None
+
+
+class FailurePattern(Out):
+    sent: int
+    failed: int
+    #: Values whose Alphas failed most, by share: the likely cause is at the top.
+    slices: list[FailureSlice]
+    examples: list[FailedExample]
+
+
+#: Trial parameters a pattern is read over, and how each is labelled.
+_PATTERN_PARAMS = {
+    "template": "Template",
+    "family": "Shape",
+    "within_op": "Country step",
+    "vector_op": "Vector operator",
+    "d": "Lookback",
+    "field": "Field",
+}
+_PATTERN_SETTINGS = {
+    "universe": "Universe",
+    "neutralization": "Neutralization",
+    "decay": "Decay",
+    "simulationMode": "Check",
+}
+#: Trials a pattern reads at most, the newest first.
+PATTERN_TRIALS = 5000
+
+
+@router.get("/{task_id}/failure-pattern")
+async def failure_pattern(task_id: int, state: State) -> FailurePattern:
+    """What the simulations that returned no Alpha have in common: for each setting a task
+    varies, how many sent with each value and how many of those failed. When BRAIN fails one
+    kind of request every time (a neutralization, a universe, an operator), it shows at the
+    top, failing all it was sent. Spends nothing."""
+    await _one(state, task_id)
+    async with state.db.session() as session:
+        rows = (
+            await session.execute(
+                select(Trial.params, Trial.settings, Trial.state, Trial.expression, Trial.message)
+                .where(
+                    Trial.study_id == task_id,
+                    Trial.state.in_([TrialState.COMPLETE, TrialState.FAIL]),
+                )
+                .order_by(Trial.id.desc())
+                .limit(PATTERN_TRIALS)
+            )
+        ).all()
+
+    def read() -> FailurePattern:
+        tally: dict[tuple[str, str], list[int]] = {}
+        examples: list[FailedExample] = []
+        failed_total = 0
+        for params, settings, trial_state, expression, message in rows:
+            params, settings = params or {}, settings or {}
+            failed = trial_state == TrialState.FAIL
+            failed_total += failed
+            seen: list[tuple[str, str]] = []
+            for key, label in _PATTERN_PARAMS.items():
+                if params.get(key) is not None:
+                    value = params[key]
+                    if key == "template":
+                        value = next(
+                            (t.name for t in theme_templates.TEMPLATES if t.expression == value),
+                            value,
+                        )
+                    seen.append((label, str(value)))
+            for key, label in _PATTERN_SETTINGS.items():
+                if settings.get(key) is not None:
+                    seen.append((label, str(settings[key])))
+            if "simulationMode" not in settings:
+                seen.append(("Check", "As in Settings"))
+            if params.get("within_op") is None and params.get("family"):
+                seen.append(("Country step", "none"))
+            for key in seen:
+                t = tally.setdefault(key, [0, 0])
+                t[0] += 1
+                t[1] += failed
+            if failed and len(examples) < 8:
+                examples.append(
+                    FailedExample(
+                        expression=expression,
+                        settings=", ".join(
+                            f"{label} {settings[k]}"
+                            for k, label in _PATTERN_SETTINGS.items()
+                            if settings.get(k) is not None
+                        ),
+                        message=message,
+                    )
+                )
+        slices = [
+            FailureSlice(attribute=a, value=v, sent=n, failed=f)
+            for (a, v), (n, f) in tally.items()
+            if f and (a != "Field" or n >= 2)
+        ]
+        # Most telling first: everything sent with it failed, then by how many failed.
+        slices.sort(key=lambda s: (-(s.failed / s.sent), -s.failed, s.attribute, s.value))
+        return FailurePattern(
+            sent=len(rows), failed=failed_total, slices=slices[:40], examples=examples
+        )
+
+    return await asyncio.to_thread(read)
 
 
 @router.get("/{task_id}/info")

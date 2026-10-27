@@ -1164,6 +1164,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/lab-tasks/{task_id}/failure-pattern": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Failure Pattern
+         * @description What the simulations that returned no Alpha have in common: for each setting a task
+         *     varies, how many sent with each value and how many of those failed. When BRAIN fails one
+         *     kind of request every time (a neutralization, a universe, an operator), it shows at the
+         *     top, failing all it was sent. Spends nothing.
+         */
+        get: operations["failure_pattern_api_lab_tasks__task_id__failure_pattern_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/lab-tasks/{task_id}/groups": {
         parameters: {
             query?: never;
@@ -4957,12 +4980,43 @@ export interface components {
             /** Value */
             value: string;
         };
+        /** FailedExample */
+        FailedExample: {
+            /** Expression */
+            expression: string | null;
+            /** Message */
+            message: string | null;
+            /** Settings */
+            settings: string;
+        };
         /** Failure */
         Failure: {
             /** Count */
             count: number;
             /** Reason */
             reason: string;
+        };
+        /** FailurePattern */
+        FailurePattern: {
+            /** Examples */
+            examples: components["schemas"]["FailedExample"][];
+            /** Failed */
+            failed: number;
+            /** Sent */
+            sent: number;
+            /** Slices */
+            slices: components["schemas"]["FailureSlice"][];
+        };
+        /** FailureSlice */
+        FailureSlice: {
+            /** Attribute */
+            attribute: string;
+            /** Failed */
+            failed: number;
+            /** Sent */
+            sent: number;
+            /** Value */
+            value: string;
         };
         /** Feature */
         Feature: {
@@ -10420,6 +10474,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LabTask"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    failure_pattern_api_lab_tasks__task_id__failure_pattern_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FailurePattern"];
                 };
             };
             /** @description Validation Error */
