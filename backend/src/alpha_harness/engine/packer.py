@@ -40,6 +40,8 @@ class BatchKey:
     delay: int
     language: str
     mode: str = FULL_MODE
+    #: Sent on its own: its last batch failed as a whole (see ``BatchEngine._resend_alone``).
+    alone: bool = False
 
     def describe(self) -> str:
         return (
@@ -77,7 +79,7 @@ class BatchKey:
         """
         # SUPER: BRAIN allows three concurrent SuperAlpha simulations, so each one stands alone
         # and the task's cores (at most three) are what bounds them.
-        if self.region_agnostic or self.sim_type == SimulationType.SUPER:
+        if self.alone or self.region_agnostic or self.sim_type == SimulationType.SUPER:
             return 1
         return MAX_BATCH
 

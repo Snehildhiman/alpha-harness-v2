@@ -194,6 +194,8 @@ class BatchEngine:
         #: Child platform id -> (body, outcome) of a finished child not yet written to its
         #: row, because its batch still has children running.
         self._child_results: dict[str, tuple[dict[str, Any], Outcome]] = {}
+        #: Records whose batch BRAIN failed as a whole: each is sent again on its own.
+        self._alone: set[int] = set()
         #: Batch size, reduced to 1 for accounts without MULTI_SIMULATION.
         self.max_batch = MAX_BATCH
         #: Set once BRAIN refuses a batch with 403; lasts for the process.
@@ -719,7 +721,7 @@ class BatchEngine:
             items = [
                 WorkItem(
                     record_id=r.id,
-                    key=key_of(r.payload or {}),
+                    key=dataclasses.replace(key_of(r.payload or {}), alone=r.id in self._alone),
                     task=r.task,
                     payload=r.payload or {},
                 )
@@ -1157,7 +1159,10 @@ class BatchEngine:
                 await self.tracker.notify()
             return
 
-        await self._finish_children(open_rows, resolved, outcomes)
+        if await self._resend_alone(open_rows, child_ids, outcomes):
+            log.warning("engine.batch_resent_alone", parent=parent.id, children=len(open_rows))
+        else:
+            await self._finish_children(open_rows, resolved, outcomes)
         async with self.db.session() as session:
             # Its children are all in, so it no longer holds a slot on BRAIN either. A
             # cancel that already ended it wins this compare-and-set.
@@ -1178,6 +1183,45 @@ class BatchEngine:
             matched=len(resolved),
         )
         await self.tracker.notify()
+
+    async def _resend_alone(
+        self,
+        records: list[SimulationRecord],
+        child_ids: list[str],
+        outcomes: dict[str, Outcome],
+    ) -> bool:
+        """Queue a batch's children again, each to go alone, when BRAIN failed every one of
+        them with an error that names no fault of theirs ("There was an error while running
+        the simulation"). Returns whether it did.
+
+        A batch is one simulation to BRAIN: when it fails, all ten children carry the same
+        message, so one heavy batch (ten GLB Alphas in Full mode) reads as ten bad Alphas.
+        Alone, each either runs or fails for itself. Once only: an Alpha sent alone is never
+        resent, so nothing loops.
+        """
+        if len(records) < 2 or len(outcomes) < len(child_ids):
+            return False
+        failed = [
+            o
+            for o in outcomes.values()
+            if o.status in (SimStatus.ERROR, SimStatus.FAILED)
+            and not errored_for_good(o.message or "")
+        ]
+        if len(failed) < len(child_ids):
+            return False
+        ids = [r.id for r in records]
+        async with self.db.session() as session:
+            await transition(
+                session,
+                ids,
+                from_=[SimStatus.RUNNING, SimStatus.PENDING],
+                status=SimStatus.QUEUED,
+                parent_record_id=None,
+                platform_id=None,
+                message=None,
+            )
+        self._alone.update(ids)
+        return True
 
     async def _read_children(self, child_ids: list[str]) -> bool:
         """Read each unfinished child that is due. Returns True if the session was refused.

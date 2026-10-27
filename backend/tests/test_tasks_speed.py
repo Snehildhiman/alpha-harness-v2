@@ -111,3 +111,16 @@ def test_progress_counts_in_one_pass(tmp_path: Any) -> None:
         await db.dispose()
 
     asyncio.run(body())
+
+
+def test_alphas_of_a_failed_batch_go_alone() -> None:
+    import dataclasses
+
+    from alpha_harness.engine.packer import WorkItem, key_of, pack
+
+    payload = {"type": "REGULAR", "settings": {"region": "GLB", "delay": 1}}
+    key = key_of(payload)
+    together = [WorkItem(i, key, "t", payload) for i in range(4)]
+    assert [len(b.items) for b in pack(together, free_slots=8)] == [4]
+    alone = [WorkItem(i, dataclasses.replace(key, alone=True), "t", payload) for i in range(4)]
+    assert [len(b.items) for b in pack(alone, free_slots=8)] == [1, 1, 1, 1]

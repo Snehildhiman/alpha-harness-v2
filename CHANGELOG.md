@@ -11,6 +11,11 @@ What v2 adds on top of [alpha-harness-improved](https://github.com/residual-lab/
   of those failed, the always-failing ones first and in red, with a few failed expressions
   and their settings. BRAIN's "There was an error while running the simulation" names no
   cause; when it fails one kind of request every time, that value tops the list.
+- **A batch BRAIN fails as a whole is retried one Alpha at a time**: Alphas go to BRAIN ten
+  to a batch, and when BRAIN fails the batch every child carries its one message, so one heavy
+  batch (ten GLB Alphas in Full mode) read as ten failed Alphas, and 30 errors were three
+  batches. Now, when every child failed with an error that names no fault of its own, each is
+  queued again to go alone, once; one that fails alone is a real failure.
 
 ## 2026-10-26 (Current Theme Lab follows the chosen templates)
 
