@@ -65,6 +65,7 @@ from .api import (
 from .api.auth import Session
 from .api.deps import install_exception_handlers
 from .api.update import stop_server
+from .brain.client import retry_budget
 from .schemas import Out
 from .state import AppState
 
@@ -82,6 +83,10 @@ Local research studio for the WorldQuant BRAIN platform.
 Runs entirely on your machine. BRAIN credentials are encrypted at rest and never
 reach the browser.
 """
+
+
+#: Seconds a screen's read may spend retrying BRAIN (see ``brain.client.retry_budget``).
+SCREEN_RETRY_SECONDS = 20.0
 
 
 def configure_logging() -> None:
@@ -176,7 +181,14 @@ def create_app() -> FastAPI:
                 status_code=403,
             )
         page_seen.set()
-        return await call_next(request)
+        if request.method != "GET":
+            return await call_next(request)
+        # A screen's read gives up on an unreachable BRAIN in seconds, not after a minute.
+        token = retry_budget.set(SCREEN_RETRY_SECONDS)
+        try:
+            return await call_next(request)
+        finally:
+            retry_budget.reset(token)
 
     install_exception_handlers(app)
 

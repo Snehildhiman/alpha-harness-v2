@@ -3,6 +3,16 @@
 What v2 adds on top of [alpha-harness-improved](https://github.com/residual-lab/alpha-harness)
 (MIT, © MiracleInvoker). How to use each part: [GUIDE.md](GUIDE.md).
 
+## 2026-10-28 (bug sweep)
+
+- **Screens give up on an unreachable BRAIN in about 15 seconds, not 70**: a screen's read
+  retried BRAIN six times, about seventy seconds, longer than the page waits; the request
+  meanwhile held one of the browser's six connections, so other clicks queued behind it. A
+  screen's read now stops retrying after 20 seconds and says BRAIN could not be reached;
+  background work (syncs, downloads, simulations) keeps every retry. Measured on the alpha
+  after-cost, check, performance and PnL reads: 70 s to 16 s.
+- Swept every API read and every screen against a 250k-trial vault: no errors.
+
 ## 2026-10-27 (why simulations return no Alpha)
 
 - **What the failed ones have in common** (Tasks, under "returned no Alpha. BRAIN said"):

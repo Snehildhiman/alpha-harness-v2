@@ -16,6 +16,7 @@ import asyncio
 import math
 import random
 import time
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
@@ -54,6 +55,11 @@ BASE_BACKOFF = 2.0
 MAX_BACKOFF = 60.0
 #: Attempts for retryable failures (429, 503, transport errors).
 ATTEMPTS = 6
+#: Seconds the request being served may spend retrying BRAIN before its failure is returned.
+#: Set by the app for a screen's reads (see ``main``): six attempts take about seventy seconds,
+#: longer than the page waits, and the request meanwhile holds one of the browser's six
+#: connections, so every other click queued behind it. Background work leaves it unset.
+retry_budget: ContextVar[float | None] = ContextVar("retry_budget", default=None)
 #: Ceiling on one poll loop, so a stuck server-side job cannot hang a request forever.
 #: Simulations are polled by the background tracker, not here.
 POLL_TIMEOUT = 300.0
@@ -439,6 +445,8 @@ class BrainClient:
         guesses a request rate: a ``429`` pauses every caller of that endpoint for the wait.
         Never retries the daily cap.
         """
+        started = time.monotonic()
+        budget = retry_budget.get()
         for attempt in range(1, ATTEMPTS):
             try:
                 return await self.request(method, path, **kwargs)
@@ -452,6 +460,10 @@ class BrainClient:
                 delay = min(float(delay), MAX_BACKOFF)
                 # Jitter so parallel callers do not resynchronise on the same instant.
                 delay += random.uniform(0, max(delay, 1.0) * 0.25)
+                if budget is not None and time.monotonic() - started + delay > budget:
+                    # A screen is waiting: say BRAIN could not be reached rather than retry
+                    # past the point anyone still looks.
+                    raise
                 if isinstance(exc, BrainRateLimited):
                     self._pause(self._bucket(path), delay)
 

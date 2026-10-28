@@ -15,6 +15,7 @@ import structlog
 
 from ..brain.filters import AlphaQuery, Filter
 from ..brain.schemas import QUICK_MODE, Alpha, RecordSet
+from ..tasks import detached
 from .store import checks_json
 from .yields import checks_of, gating_results
 
@@ -169,7 +170,7 @@ class Backfill:
             if self.busy:
                 raise RuntimeError("A sync is already running.")
             task = await self.tasks.start(kind, label)
-            self._running = asyncio.create_task(run(task), name=kind)
+            self._running = asyncio.create_task(run(task), name=kind, context=detached())
             return task.id
 
     async def _job(self, task: Task, work: Callable[[Task], Awaitable[str]]) -> None:
@@ -409,7 +410,9 @@ class Backfill:
         if not fresh:
             return
         self._returns_asked.update(fresh)
-        task = asyncio.create_task(self._fetch_each(fresh), name="vault-returns")
+        task = asyncio.create_task(
+            self._fetch_each(fresh), name="vault-returns", context=detached()
+        )
         self._background.add(task)
         task.add_done_callback(self._background.discard)
 

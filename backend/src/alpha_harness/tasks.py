@@ -8,6 +8,7 @@ the work it describes would be worse than none.
 """
 
 import asyncio
+import contextvars
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -19,6 +20,8 @@ from .schemas import camel_dict
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
+
+from .brain.client import retry_budget
 
 log = structlog.get_logger(__name__)
 
@@ -132,6 +135,14 @@ class TaskRegistry:
 _background: set[asyncio.Task[Any]] = set()
 
 
+def detached() -> contextvars.Context:
+    """The context for work that outlives the request that started it: nobody's screen read,
+    so it keeps every retry (see ``retry_budget``)."""
+    context = contextvars.copy_context()
+    context.run(retry_budget.set, None)
+    return context
+
+
 def spawn[T](coro: Awaitable[T], *, name: str) -> asyncio.Task[T | None]:
     """Run ``coro`` detached, tracked for :func:`cancel_background`."""
 
@@ -143,7 +154,7 @@ def spawn[T](coro: Awaitable[T], *, name: str) -> asyncio.Task[T | None]:
             log.exception("background.failed", name=name)
             return None
 
-    task = asyncio.create_task(run(), name=name)
+    task = asyncio.create_task(run(), name=name, context=detached())
     _background.add(task)
     task.add_done_callback(_background.discard)
     return task
