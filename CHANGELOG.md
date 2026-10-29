@@ -3,6 +3,18 @@
 What v2 adds on top of [alpha-harness-improved](https://github.com/residual-lab/alpha-harness)
 (MIT, © MiracleInvoker). How to use each part: [GUIDE.md](GUIDE.md).
 
+## 2026-10-29 (Quick Power Pool Alphas earn their Full run)
+
+- **A Quick Power Pool Alpha is run in Full on its own bar**: Quick judges Sharpe and fitness
+  by the region's regular bars (1.58 and 1.0 on GLB), so a Power Pool Alpha at Sharpe 1.31 read
+  FAIL and was never run in Full. Now an Alpha within Power Pool's limits (at most eight
+  operators and three fields) with Sharpe above 1 is run in Full when its sub-universe Sharpe
+  and both turnover checks pass; nothing else Quick reports decides it. Its LOW_SHARPE and
+  LOW_FITNESS read WARNING on its result and on the alpha screens, as Full reports them for a
+  Power Pool Alpha. Other Alphas keep the rule that every Quick check must pass.
+- **Run Quick passes in Full** (Tasks): queues that Full run for every Alpha a task already
+  scored that earns one by this rule and has none yet.
+
 ## 2026-10-29 (GLB theme tasks screen in Quick)
 
 - **Current Theme Lab on GLB starts in Quick**: a GLB simulation covers about 9,000 stocks, and

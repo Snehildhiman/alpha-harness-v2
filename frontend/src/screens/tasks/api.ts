@@ -42,6 +42,8 @@ export const labTasks = {
   runAll: () => http.post<LabTasks>(`${B}/run-all`),
   /** Spends simulation quota. Also resumes a paused task. */
   run: (id: number) => http.post<LabTask>(`${B}/${id}/run`),
+  /** Spends simulation quota: queues Full runs for Quick Alphas that earned one. */
+  fullRuns: (id: number) => http.post<{ queued: number }>(`${B}/${id}/full-runs`),
   pause: (id: number) => http.post<LabTask>(`${B}/${id}/pause`),
   /** Carries on from where it left off; `simulations` more are added to its target. */
   continue: (id: number, simulations = 0) =>

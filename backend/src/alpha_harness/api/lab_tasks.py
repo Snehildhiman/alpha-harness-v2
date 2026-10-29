@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import and_, case, func, literal_column, or_, select, update
 
 from ..brain.errors import BrainError, BrainRateLimited
+from ..brain.schemas import FULL_MODE
 from ..db.duck import AMONG, packed
 from ..db.models import (
     BrainCache,
@@ -35,6 +36,7 @@ from ..db.models import (
 from ..engine.slots import POSITIONAL_NOTE
 from ..labs import power_pool as pool_lab
 from ..labs import scheduler, search, theme_templates
+from ..labs import study as study_rules
 from ..labs.launch import AddedTask, add_study
 from ..labs.objectives import FAILURE, OBJECTIVES, StudyNotFoundError
 from ..labs.params import (
@@ -708,6 +710,65 @@ async def stop_prod_correlation(state: State) -> None:
 async def power_pool_correlation_for(body: AlphaIds, state: State) -> PowerPoolCorrelation:
     """The same measurement over an explicit set of Alphas, for the panes that span tasks."""
     return await _power_pool(state, body.alpha_ids)
+
+
+class FullRuns(Out):
+    #: Quick Alphas newly queued to run again in Full mode.
+    queued: int
+
+
+@router.post("/{task_id}/full-runs")
+async def queue_full_runs(task_id: int, state: State) -> FullRuns:
+    """Queue a Full-mode run for every Quick Alpha of this task that has earned one and has none
+    yet: by today's rule, a Power Pool one with Sharpe above 1 whose sub-universe and turnover
+    checks pass. For Alphas scored before that rule, which were left out of Full."""
+    await _one(state, task_id)
+    async with state.db.session() as session:
+        done = set(
+            (
+                await session.scalars(
+                    select(func.json_extract(Trial.params, "$.fullOf")).where(
+                        Trial.study_id == task_id,
+                        func.json_extract(Trial.params, "$.fullOf").is_not(None),
+                    )
+                )
+            ).all()
+        )
+        rows = (
+            await session.scalars(
+                select(Trial).where(Trial.study_id == task_id, Trial.state == TrialState.COMPLETE)
+            )
+        ).all()
+        owed = [
+            t
+            for t in rows
+            if t.number not in done
+            and isinstance(t.result, dict)
+            and study_rules.passed_quick(_softened(t.result, t.expression), t.expression)
+        ]
+        last = await session.scalar(select(func.max(Trial.number)).where(Trial.study_id == task_id))
+        for number, quick in enumerate(owed, start=int(last or 0) + 1):
+            session.add(
+                Trial(
+                    study_id=task_id,
+                    number=number,
+                    params={"fullOf": quick.number},
+                    distributions={},
+                    expression=quick.expression,
+                    settings={**(quick.settings or {}), "simulationMode": FULL_MODE},
+                    state=TrialState.PRUNED,
+                    message=scheduler.PENDING_FULL,
+                )
+            )
+        await session.commit()
+    state.optimizer.wake()
+    return FullRuns(queued=len(owed))
+
+
+def _softened(result: dict[str, Any], expression: str | None) -> dict[str, Any]:
+    copy = {**result, "checks": [dict(c) for c in result.get("checks") or []]}
+    study_rules.soften_quick_power_pool(copy, expression)
+    return copy
 
 
 @router.post("/{task_id}/run")

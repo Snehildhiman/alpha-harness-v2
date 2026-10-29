@@ -8,6 +8,8 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 
 from ..brain.filters import AlphaQuery
+from ..brain.schemas import QUICK_MODE
+from ..labs.study import quick_power_pool_checks
 from ..recent import Memo
 from ..schemas import Out
 from ..vault import yields
@@ -296,7 +298,12 @@ async def alpha_detail(alpha_id: str, state: State) -> AlphaDetail:
                 k: row.get(k)
                 for k in ("region", "universe", "delay", "neutralization", "decay", "truncation")
             },
-            "checks": checks_of(row.get("checks")),
+            "checks": quick_power_pool_checks(
+                checks_of(row.get("checks")),
+                expression=row.get("expression"),
+                sharpe=row.get("sharpe"),
+                quick=row.get("simulation_mode") == QUICK_MODE,
+            ),
             "brainUrl": f"{PLATFORM_ALPHA_URL}{alpha_id}",
         }
     )

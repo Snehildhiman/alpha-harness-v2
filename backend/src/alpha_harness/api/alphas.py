@@ -16,9 +16,11 @@ from pydantic import BaseModel, Field, RootModel
 from sqlalchemy import delete, func, select
 
 from ..brain.errors import BrainError
+from ..brain.schemas import QUICK_MODE
 from ..db.models import BrainCache, SimulationRecord, Study, Trial, TrialState, utcnow
 from ..labs.fastexpr import ParseError, data_fields, operator_count, operator_names, parse
 from ..labs.params import TASK_SAMPLERS
+from ..labs.study import quick_power_pool_checks
 from ..schemas import Out
 from ..tools import portfolio
 from ..vault.yields import (
@@ -242,7 +244,12 @@ def _info(alpha_id: str, body: dict[str, Any]) -> AlphaInfo:
     counted, fields, operators = _power_pool_counts(code.get("code"))
     # BRAIN sends the day's submission quota alongside the Alpha's own checks; it says
     # nothing about the Alpha and resets tomorrow, so it is dropped here as everywhere.
-    checks = without_quota_checks([c for c in sample.get("checks") or [] if isinstance(c, dict)])
+    checks = quick_power_pool_checks(
+        without_quota_checks([c for c in sample.get("checks") or [] if isinstance(c, dict)]),
+        expression=code.get("code"),
+        sharpe=sample.get("sharpe"),
+        quick=settings.get("simulationMode") == QUICK_MODE,
+    )
     return AlphaInfo(
         alpha_id=alpha_id,
         type=body.get("type"),

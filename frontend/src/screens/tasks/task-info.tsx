@@ -79,6 +79,22 @@ export function TaskControls({
     },
   })
   const resumable = task.status === 'IDLE' || task.status === 'PAUSED' || task.status === 'FAILED'
+  const full = useMutation({
+    mutationFn: () => labTasks.fullRuns(task.id),
+    onSuccess: (r) => {
+      toast.success(
+        r.queued ? `${r.queued} Quick Alphas queued for Full` : 'Nothing new to run in Full',
+        {
+          description: r.queued
+            ? running
+              ? 'They go out ahead of the search.'
+              : 'Resume the task to send them.'
+            : 'Every Quick Alpha that earned a Full run has one already.',
+        },
+      )
+      refresh()
+    },
+  })
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -102,6 +118,17 @@ export function TaskControls({
         <Button size="sm" onClick={() => setDialog('continue')}>
           <PlayIcon />
           Continue…
+        </Button>
+      )}
+      {task.lab !== 'region-agnostic' && (
+        <Button
+          size="sm"
+          loading={full.isPending}
+          title="Power Pool Alphas run in Quick with Sharpe above 1 and the sub-universe and turnover checks passing are run again in Full. No other check decides it. Spends quota."
+          onClick={() => full.mutate()}
+        >
+          <PlayIcon />
+          Run Quick passes in Full
         </Button>
       )}
       <Button size="sm" onClick={() => setDialog('clone')}>

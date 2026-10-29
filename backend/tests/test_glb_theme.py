@@ -232,3 +232,39 @@ def test_chosen_templates_are_what_gets_simulated() -> None:
         "rank(ts_mean(ts_backfill(f, 21), 21))",
         "rank(ts_mean(ts_backfill(f, 21), 63))",
     }
+
+
+def test_quick_power_pool_alphas_go_to_full_on_their_own_bar() -> None:
+    from alpha_harness.labs.study import passed_quick, soften_quick_power_pool
+
+    expression = "rank(ts_mean(ts_backfill(vec_avg(anl10_x), 21), 63))"
+
+    def result(sharpe: float, *fails: str) -> dict[str, object]:
+        names = ["LOW_SHARPE", "LOW_FITNESS", "LOW_TURNOVER", "HIGH_TURNOVER"]
+        names += ["LOW_SUB_UNIVERSE_SHARPE", "LOW_2Y_SHARPE", "CONCENTRATED_WEIGHT"]
+        checks = [{"name": n, "result": "FAIL" if n in fails else "PASS"} for n in names]
+        return {
+            "quick": True,
+            "stats": {"sharpe": sharpe},
+            "checks": checks,
+            "failedChecks": list(fails),
+            "constraint": {n: (0.3 if n in fails else 0.0) for n in names},
+        }
+
+    # The screenshot: Sharpe 1.31 under GLB's 1.58, fitness under 1, the rest passing.
+    shot = result(1.31, "LOW_SHARPE", "LOW_FITNESS")
+    soften_quick_power_pool(shot, expression)
+    assert {c["name"]: c["result"] for c in shot["checks"]}["LOW_SHARPE"] == "WARNING"  # type: ignore[index, union-attr]
+    assert shot["feasible"] is True
+    assert passed_quick(shot, expression)
+    # Only Sharpe above 1, sub-universe and turnover decide; the rest does not.
+    assert passed_quick(
+        result(1.2, "LOW_SHARPE", "LOW_2Y_SHARPE", "CONCENTRATED_WEIGHT"), expression
+    )
+    assert not passed_quick(result(1.2, "LOW_SUB_UNIVERSE_SHARPE"), expression)
+    assert not passed_quick(result(1.2, "HIGH_TURNOVER"), expression)
+    assert not passed_quick(result(0.95, "LOW_SHARPE"), expression)
+    assert not passed_quick(result(1.0, "LOW_SHARPE"), expression)
+    # Outside Power Pool's limits (four fields): every check must pass, as before.
+    wide = "rank(a) + rank(b) + rank(c) + rank(d)"
+    assert not passed_quick(result(1.4, "LOW_SHARPE"), wide)

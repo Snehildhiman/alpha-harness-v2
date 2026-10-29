@@ -42,6 +42,7 @@ from . import objectives as obj
 from . import scheduler
 from .objectives import StudyNotFoundError
 from .params import SEARCH_SAMPLER, TASK_SAMPLERS, TEMPLATE_SAMPLER, SearchParams, params_of
+from .screen import power_pool_eligible
 
 if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Awaitable, Callable
@@ -378,8 +379,14 @@ class Optimizer:
 
         # A Quick Alpha that passed every check BRAIN ran is owed a run in Full mode, which is
         # what BRAIN submits. Parked here; the scheduler sends it ahead of the search.
+        # A Quick run judges Sharpe and fitness by the regular bars only; a Power Pool Alpha
+        # needs Power Pool's lower one, and Full reports the miss as a WARNING.
+        for _, t, _, summary in finished:
+            soften_quick_power_pool(summary, t.expression)
         owed = [
-            t for _, t, values, summary in finished if values is not None and passed_quick(summary)
+            t
+            for _, t, values, summary in finished
+            if values is not None and passed_quick(summary, t.expression)
         ]
         async with self.db.session() as session:
             if owed:
@@ -633,8 +640,79 @@ def _optuna_params(params: dict[str, Any], distributions: dict[str, Any]) -> dic
     return found
 
 
-def passed_quick(result: dict[str, Any]) -> bool:
-    """A Quick Alpha that passed every check BRAIN ran on it: owed a run in Full mode."""
+#: Sharpe a Power Pool Alpha must be above, below every region's own bar.
+POWER_POOL_SHARPE = 1.0
+#: The checks a Quick run fails a Power Pool Alpha on that Full passes with a WARNING.
+POWER_POOL_LENIENT = frozenset({"LOW_SHARPE", "LOW_FITNESS"})
+#: For a Power Pool Alpha in Quick, the checks that must pass before it is run in Full; the
+#: rest of what Quick reports does not decide it.
+POWER_POOL_QUICK_GATES = frozenset({"LOW_SUB_UNIVERSE_SHARPE", "LOW_TURNOVER", "HIGH_TURNOVER"})
+
+
+def _power_pool_quick(result: dict[str, Any], expression: str | None) -> bool:
+    """A Quick result of an Alpha within Power Pool's limits whose Sharpe is above 1."""
+    if not result.get("quick") or not power_pool_eligible(expression):
+        return False
+    sharpe = (result.get("stats") or {}).get("sharpe")
+    return isinstance(sharpe, int | float) and sharpe > POWER_POOL_SHARPE
+
+
+def soften_quick_power_pool(result: dict[str, Any], expression: str | None) -> None:
+    """In place: a Quick result for an Alpha within Power Pool's limits (at most eight operators
+    and three fields) with a Sharpe of at least :data:`POWER_POOL_SHARPE` reads its LOW_SHARPE
+    and LOW_FITNESS FAIL as WARNING, as BRAIN's Full run reports them for a Power Pool Alpha,
+    so it is owed that Full run rather than dropped. Quick runs carry no Power Pool check,
+    so the limits are read from the expression."""
+    if not _power_pool_quick(result, expression):
+        return
+    softened: set[str] = set()
+    for check in result.get("checks") or []:
+        name = str(check.get("name", "")).upper()
+        if name in POWER_POOL_LENIENT and str(check.get("result", "")).upper() == "FAIL":
+            check["result"] = "WARNING"
+            check["note"] = "Power Pool: Full mode judges it by Power Pool's bar"
+            softened.add(str(check.get("name")))
+    if not softened:
+        return
+    result["failedChecks"] = [c for c in result.get("failedChecks") or [] if c not in softened]
+    constraint = result.get("constraint")
+    if isinstance(constraint, dict):
+        for key in list(constraint):
+            if key.split("#")[0] in softened:
+                constraint[key] = 0.0
+        result["feasible"] = all(v <= 0.0 for v in constraint.values())
+    else:
+        result["feasible"] = not result["failedChecks"]
+
+
+def quick_power_pool_checks(
+    checks: list[dict[str, Any]], *, expression: str | None, sharpe: Any, quick: bool
+) -> list[dict[str, Any]]:
+    """``checks`` as the Alpha's screens show them: for a Quick Power Pool Alpha (see
+    :func:`soften_quick_power_pool`) a LOW_SHARPE or LOW_FITNESS FAIL reads WARNING."""
+    result: dict[str, Any] = {
+        "quick": quick,
+        "stats": {"sharpe": sharpe},
+        "checks": [dict(c) for c in checks],
+    }
+    soften_quick_power_pool(result, expression)
+    return result["checks"]
+
+
+def passed_quick(result: dict[str, Any], expression: str | None = None) -> bool:
+    """A Quick Alpha owed a run in Full mode.
+
+    A Power Pool one (within its limits, Sharpe above 1) needs only the sub-universe Sharpe and
+    both turnover checks to pass: Quick judges Sharpe and fitness by the regular bars, and
+    nothing else it reports decides a Power Pool Alpha before Full. Any other needs every check
+    BRAIN ran to pass.
+    """
+    if _power_pool_quick(result, expression):
+        return all(
+            str(c.get("result", "")).upper() not in ("FAIL", "ERROR")
+            for c in result.get("checks") or []
+            if str(c.get("name", "")).upper() in POWER_POOL_QUICK_GATES
+        )
     results = gating_results(result.get("checks") or [])
     return bool(result.get("quick")) and bool(results) and results <= {"PASS", "WARNING"}
 

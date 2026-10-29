@@ -1187,6 +1187,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/lab-tasks/{task_id}/full-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Queue Full Runs
+         * @description Queue a Full-mode run for every Quick Alpha of this task that has earned one and has none
+         *     yet: by today's rule, a Power Pool one with Sharpe above 1 whose sub-universe and turnover
+         *     checks pass. For Alphas scored before that rule, which were left out of Full.
+         */
+        post: operations["queue_full_runs_api_lab_tasks__task_id__full_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/lab-tasks/{task_id}/groups": {
         parameters: {
             query?: never;
@@ -5204,6 +5226,11 @@ export interface components {
             kind: "fields";
             /** Vector Operators */
             vector_operators?: string[];
+        };
+        /** FullRuns */
+        FullRuns: {
+            /** Queued */
+            queued: number;
         };
         /** GateCompared */
         GateCompared: {
@@ -10510,6 +10537,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FailurePattern"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    queue_full_runs_api_lab_tasks__task_id__full_runs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FullRuns"];
                 };
             };
             /** @description Validation Error */
