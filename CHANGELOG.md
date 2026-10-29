@@ -14,6 +14,9 @@ What v2 adds on top of [alpha-harness-improved](https://github.com/residual-lab/
   "waiting for a slot", and a task none of whose Alphas has reached BRAIN names the tasks
   holding the slots (a paused task's simulations already sent run to the end and keep their
   slots), with how to free them: Hold to Delete cancels them on BRAIN.
+- **The wait notice names every holder**: whenever a task has Alphas waiting and no core is
+  free for them (a GLB one needs two), it says how many of the cores it holds itself and who
+  holds the rest, by task name (paused ones marked) or as simulations from no task.
 
 ## 2026-10-28 (bug sweep)
 

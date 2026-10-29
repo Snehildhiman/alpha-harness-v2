@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
+import { simulations } from '@/api/core'
 import { errorMessage } from '@/api/http'
 import { cn } from '@/lib/cn'
 import { DASH, fmt } from '@/lib/format'
@@ -1167,26 +1168,35 @@ function EditTask({ task, slots, onClose }: { task: LabTask; slots: number; onCl
   )
 }
 
-/** Why a task's Alphas are not being sent: BRAIN's slots are held by other tasks' simulations.
- * A paused task stops sending new ones, but those already on BRAIN run to the end and keep
- * their slots, so a new task can wait behind them for a long while. */
+/** Why a task's Alphas wait: every BRAIN slot the app may use is taken, and by whom. A paused
+ * (or deleted) task sends nothing new, but what it already sent runs to the end and keeps
+ * its slots; simulations from no task (a manual run, one left over) hold them too. */
 function SlotWait({ task }: { task: LabTask }) {
   const list = useQuery({ queryKey: ['lab-tasks'], queryFn: labTasks.list })
-  const others = (list.data?.tasks ?? []).filter((t) => t.id !== task.id && t.running > 0)
-  if (task.running > 0 || task.queued === 0 || others.length === 0) return null
+  const engine = useQuery({ queryKey: ['simulations', 'engine'], queryFn: simulations.engine })
+  const data = engine.data
+  if (!data || task.queued === 0) return null
+  // A GLB simulation takes two of the cores; anything else one.
+  const need = task.region === 'GLB' ? 2 : 1
+  if (data.slotsFree >= need) return null
+  const byKey = new Map((list.data?.tasks ?? []).map((t) => [t.key, t]))
+  const holders = Object.entries(data.inFlight)
+    .filter(([key, cores]) => cores > 0 && key !== task.key)
+    .map(([key, cores]) => {
+      const t = byKey.get(key)
+      const name = t
+        ? `“${t.name ?? t.labName}”${t.status === 'PAUSED' ? ' (paused)' : ''}`
+        : 'simulations from no task (gone or deleted tasks, or manual runs)'
+      return `${name}: ${fmt.int(cores)}`
+    })
   return (
-    <Notice tone="warn" title="Waiting for a free BRAIN slot">
+    <Notice tone="warn" title={`All ${fmt.int(data.slots)} BRAIN cores are in use`}>
       <p className="text-pretty">
-        None of this task’s Alphas is on BRAIN yet: its slots are held by simulations of{' '}
-        {others
-          .map(
-            (t) =>
-              `“${t.name ?? t.labName}” (${fmt.int(t.running)}${t.status === 'PAUSED' ? ', paused' : ''})`,
-          )
-          .join(', ')}
-        . A paused task sends nothing new, but what it already sent runs to the end, and a GLB batch
-        in Full mode can take a long time. Delete that task (hold to delete) to cancel its
-        simulations and free the slots, or let them finish.
+        This task holds {fmt.int(data.inFlight[task.key] ?? 0)}
+        {holders.length ? `; the rest are held by ${holders.join(', ')}` : ''}. Its{' '}
+        {fmt.int(task.queued)} waiting Alphas go as cores come free. Simulations already sent run to
+        the end even when their task is paused; Hold to Delete on that task cancels them on BRAIN. A
+        GLB simulation takes two cores, so at most four run at once.
       </p>
     </Notice>
   )

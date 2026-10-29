@@ -100,6 +100,8 @@ def _reason(message: str | None) -> str:
 
 class LabTask(Out):
     id: int
+    #: The key its simulations are filed under (the engine's per-task counts use it).
+    key: str = ""
     #: The name the user gave it, if any.
     name: str | None
     lab: str
@@ -390,6 +392,7 @@ def _task(row: Study, progress: dict[str, Any], names: dict[str, str] | None = N
     return LabTask.model_validate(
         {
             "id": row.id,
+            "key": row.task,
             "name": row.label,
             "lab": row.sampler,
             "labName": TASK_SAMPLERS.get(row.sampler, row.sampler),

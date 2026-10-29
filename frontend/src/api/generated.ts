@@ -5555,6 +5555,11 @@ export interface components {
             fullRuns: number;
             /** Id */
             id: number;
+            /**
+             * Key
+             * @default
+             */
+            key: string;
             /** Lab */
             lab: string;
             /** Labname */
