@@ -254,7 +254,13 @@ def test_quick_power_pool_alphas_go_to_full_on_their_own_bar() -> None:
     # The screenshot: Sharpe 1.31 under GLB's 1.58, fitness under 1, the rest passing.
     shot = result(1.31, "LOW_SHARPE", "LOW_FITNESS")
     soften_quick_power_pool(shot, expression)
-    assert {c["name"]: c["result"] for c in shot["checks"]}["LOW_SHARPE"] == "WARNING"  # type: ignore[index, union-attr]
+    read = {c["name"]: c["result"] for c in shot["checks"]}  # type: ignore[index, union-attr]
+    assert read["LOW_SHARPE"] == read["LOW_FITNESS"] == "PASS"
+    two_year = result(1.31, "LOW_2Y_SHARPE", "HIGH_TURNOVER")
+    soften_quick_power_pool(two_year, expression)
+    read = {c["name"]: c["result"] for c in two_year["checks"]}  # type: ignore[index, union-attr]
+    assert read["LOW_2Y_SHARPE"] == "WARNING"
+    assert read["HIGH_TURNOVER"] == "FAIL"  # a gate keeps BRAIN's verdict
     assert shot["feasible"] is True
     assert passed_quick(shot, expression)
     # Only Sharpe above 1, sub-universe and turnover decide; the rest does not.

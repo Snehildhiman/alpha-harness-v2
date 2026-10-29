@@ -12,6 +12,10 @@ What v2 adds on top of [alpha-harness-improved](https://github.com/residual-lab/
   and both turnover checks pass; nothing else Quick reports decides it. Its LOW_SHARPE and
   LOW_FITNESS read WARNING on its result and on the alpha screens, as Full reports them for a
   Power Pool Alpha. Other Alphas keep the rule that every Quick check must pass.
+- **Shown as you would read them**: for such an Alpha, LOW_SHARPE and LOW_FITNESS show PASS
+  (it clears Power Pool's bar) and any other check Quick fails, such as LOW_2Y_SHARPE, shows
+  WARNING, since its Full run decides it; the sub-universe and turnover checks keep BRAIN's
+  result. Each says why beside it.
 - **Run Quick passes in Full** (Tasks): queues that Full run for every Alpha a task already
   scored that earns one by this rule and has none yet.
 

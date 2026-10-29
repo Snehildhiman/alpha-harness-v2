@@ -659,19 +659,27 @@ def _power_pool_quick(result: dict[str, Any], expression: str | None) -> bool:
 
 def soften_quick_power_pool(result: dict[str, Any], expression: str | None) -> None:
     """In place: a Quick result for an Alpha within Power Pool's limits (at most eight operators
-    and three fields) with a Sharpe of at least :data:`POWER_POOL_SHARPE` reads its LOW_SHARPE
-    and LOW_FITNESS FAIL as WARNING, as BRAIN's Full run reports them for a Power Pool Alpha,
-    so it is owed that Full run rather than dropped. Quick runs carry no Power Pool check,
-    so the limits are read from the expression."""
+    and three fields) with a Sharpe above :data:`POWER_POOL_SHARPE` reads its LOW_SHARPE and
+    LOW_FITNESS FAIL as PASS (it clears Power Pool's bar), and any other FAIL but the gates
+    (:data:`POWER_POOL_QUICK_GATES`) as WARNING: Quick does not decide those, the Full run it
+    is owed does. Quick runs carry no Power Pool check, so the limits are read from the
+    expression."""
     if not _power_pool_quick(result, expression):
         return
     softened: set[str] = set()
     for check in result.get("checks") or []:
         name = str(check.get("name", "")).upper()
-        if name in POWER_POOL_LENIENT and str(check.get("result", "")).upper() == "FAIL":
+        if str(check.get("result", "")).upper() != "FAIL" or name in POWER_POOL_QUICK_GATES:
+            continue
+        if name in POWER_POOL_LENIENT:
+            # Above Power Pool's Sharpe bar: what Full judges a Power Pool Alpha by.
+            check["result"] = "PASS"
+            check.setdefault("message", "Power Pool in Quick: Sharpe above 1, its bar")
+        else:
+            # Not decided in Quick (the 2-year Sharpe, say): Full gives the verdict.
             check["result"] = "WARNING"
-            check["note"] = "Power Pool: Full mode judges it by Power Pool's bar"
-            softened.add(str(check.get("name")))
+            check.setdefault("message", "Power Pool in Quick: the Full run decides this")
+        softened.add(str(check.get("name")))
     if not softened:
         return
     result["failedChecks"] = [c for c in result.get("failedChecks") or [] if c not in softened]
