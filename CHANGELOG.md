@@ -3,6 +3,14 @@
 What v2 adds on top of [alpha-harness-improved](https://github.com/residual-lab/alpha-harness)
 (MIT, © MiracleInvoker). How to use each part: [GUIDE.md](GUIDE.md).
 
+## 2026-10-29 (GLB theme tasks screen in Quick)
+
+- **Current Theme Lab on GLB starts in Quick**: a GLB simulation covers about 9,000 stocks, and
+  in Full mode BRAIN runs every check on every candidate, so a task could go half an hour
+  with nothing back. GLB now defaults to Quick, and every Alpha that passes is re-run in Full
+  automatically before it counts, so Full time is spent only on the ones worth it. Full is
+  still one click away; other markets keep Full.
+
 ## 2026-10-28 (bug sweep)
 
 - **Screens give up on an unreachable BRAIN in about 15 seconds, not 70**: a screen's read

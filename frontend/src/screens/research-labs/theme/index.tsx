@@ -109,7 +109,11 @@ export function ThemeLabScreen() {
     if (!names.length) setSearchShapes(true)
     setTemplates(names)
   }
-  const [mode, setMode] = useState<Mode>('FULL')
+  // null: not chosen yet. GLB then screens in Quick (a GLB simulation covers about 9,000
+  // stocks, so Full on every candidate is several times slower) and passing Alphas are re-run
+  // in Full before they count; other markets run Full.
+  const [chosenMode, setMode] = useState<Mode | null>(null)
+  const mode: Mode = chosenMode ?? (market?.region === 'GLB' ? 'QUICK' : 'FULL')
   const [randomUniverse, setRandomUniverse] = useState(false)
   // Vector fields (several values a day) need a vec_ operator to become one number; most
   // analyst and model data is vector, so vec_avg is on from the start.
@@ -357,7 +361,11 @@ export function ThemeLabScreen() {
                   </Field>
                   <Field
                     label="Check"
-                    hint="Full: a normal simulation with every check BRAIN runs. Quick: fewer checks and faster; a passing Alpha is re-run in Full before it counts."
+                    hint={
+                      market?.region === 'GLB'
+                        ? 'Quick (the GLB default): fewer checks and several times faster on GLB’s 9,000 stocks; every Alpha that passes is re-run in Full automatically before it counts. Full: every check on every candidate, much slower.'
+                        : 'Full: a normal simulation with every check BRAIN runs. Quick: fewer checks and faster; a passing Alpha is re-run in Full before it counts.'
+                    }
                   >
                     <Segmented
                       label="Check"
