@@ -893,7 +893,18 @@ function TaskDetail({
               .join(' · ')}
           />
           {/* Nothing is in flight once a task is over, so the box would only ever read 0. */}
-          {!done && <Metric boxed label="In Flight" value={fmt.int(task.queued + task.running)} />}
+          {!done && (
+            <Metric
+              boxed
+              label="In Flight"
+              value={fmt.int(task.queued + task.running)}
+              hint={
+                task.queued + task.running > 0
+                  ? `${fmt.int(task.running)} on BRAIN · ${fmt.int(task.queued)} waiting for a slot`
+                  : ''
+              }
+            />
+          )}
           {/* `~` because the pending rows counted here have checks BRAIN has not run
               yet, any one of which can still come back FAIL. */}
           <Metric
@@ -943,6 +954,7 @@ function TaskDetail({
           </Notice>
         )}
         {task.failed > 0 && <FailurePattern taskId={task.id} failed={task.failed} />}
+        {!done && <SlotWait task={task} />}
         {task.template && (
           <Disclosure summary="Template">
             <code className="num text-body-compact break-all text-ink">{task.template}</code>
@@ -1152,5 +1164,30 @@ function EditTask({ task, slots, onClose }: { task: LabTask; slots: number; onCl
         {change.isError && <ErrorNotice error={change.error} title="Could not change the task" />}
       </div>
     </Dialog>
+  )
+}
+
+/** Why a task's Alphas are not being sent: BRAIN's slots are held by other tasks' simulations.
+ * A paused task stops sending new ones, but those already on BRAIN run to the end and keep
+ * their slots, so a new task can wait behind them for a long while. */
+function SlotWait({ task }: { task: LabTask }) {
+  const list = useQuery({ queryKey: ['lab-tasks'], queryFn: labTasks.list })
+  const others = (list.data?.tasks ?? []).filter((t) => t.id !== task.id && t.running > 0)
+  if (task.running > 0 || task.queued === 0 || others.length === 0) return null
+  return (
+    <Notice tone="warn" title="Waiting for a free BRAIN slot">
+      <p className="text-pretty">
+        None of this task’s Alphas is on BRAIN yet: its slots are held by simulations of{' '}
+        {others
+          .map(
+            (t) =>
+              `“${t.name ?? t.labName}” (${fmt.int(t.running)}${t.status === 'PAUSED' ? ', paused' : ''})`,
+          )
+          .join(', ')}
+        . A paused task sends nothing new, but what it already sent runs to the end, and a GLB batch
+        in Full mode can take a long time. Delete that task (hold to delete) to cancel its
+        simulations and free the slots, or let them finish.
+      </p>
+    </Notice>
   )
 }

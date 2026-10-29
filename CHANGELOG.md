@@ -10,6 +10,10 @@ What v2 adds on top of [alpha-harness-improved](https://github.com/residual-lab/
   with nothing back. GLB now defaults to Quick, and every Alpha that passes is re-run in Full
   automatically before it counts, so Full time is spent only on the ones worth it. Full is
   still one click away; other markets keep Full.
+- **Tasks say when they are only waiting**: *In flight* now splits into "on BRAIN" and
+  "waiting for a slot", and a task none of whose Alphas has reached BRAIN names the tasks
+  holding the slots (a paused task's simulations already sent run to the end and keep their
+  slots), with how to free them: Hold to Delete cancels them on BRAIN.
 
 ## 2026-10-28 (bug sweep)
 
