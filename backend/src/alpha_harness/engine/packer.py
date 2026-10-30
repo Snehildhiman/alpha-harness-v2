@@ -26,6 +26,13 @@ if TYPE_CHECKING:
 MAX_BATCH = 10
 
 
+#: GLB simulations per batch. BRAIN runs four GLB simulations at once per account (two of the
+#: eight slots each), children of a batch included, so ten to a batch only queued them on
+#: BRAIN: four batches of ten took over an hour before any came back, for no more throughput
+#: than four sent alone, whose results arrive as each finishes.
+GLB_BATCH = 1
+
+
 @dataclass(frozen=True, slots=True)
 class BatchKey:
     """The fields every child of one batch must share: BRAIN's five, and the mode.
@@ -81,6 +88,8 @@ class BatchKey:
         # and the task's cores (at most three) are what bounds them.
         if self.alone or self.region_agnostic or self.sim_type == SimulationType.SUPER:
             return 1
+        if self.region == GLB_REGION:
+            return GLB_BATCH
         return MAX_BATCH
 
 

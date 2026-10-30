@@ -13,6 +13,7 @@ import json
 import math
 import re
 import time
+from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
 import structlog
@@ -104,6 +105,8 @@ class LabTask(Out):
     id: int
     #: The key its simulations are filed under (the engine's per-task counts use it).
     key: str = ""
+    #: Seconds its longest-waiting simulation has been out on BRAIN; ``None`` with none out.
+    oldest_out_seconds: int | None = None
     #: The name the user gave it, if any.
     name: str | None
     lab: str
@@ -493,7 +496,41 @@ async def list_tasks(state: State) -> LabTasks:
     rows = await _rows(state)
     progress = await _progress_cached(state, rows)
     names = await _dataset_names(state, rows)
-    return LabTasks(slots=state.engine.slots, tasks=[_task(r, progress[r.id], names) for r in rows])
+    out = await _oldest_out(state, [r.task for r in rows if r.status in _MOVING])
+    tasks = [_task(r, progress[r.id], names) for r in rows]
+    for t, r in zip(tasks, rows, strict=True):
+        t.oldest_out_seconds = out.get(r.task)
+    return LabTasks(slots=state.engine.slots, tasks=tasks)
+
+
+async def _oldest_out(state: Any, keys: list[str]) -> dict[str, int]:
+    """Per task key, how long its longest-waiting simulation has been out on BRAIN."""
+    if not keys:
+        return {}
+    sent = func.min(func.coalesce(SimulationRecord.sent_at, SimulationRecord.submitted_at))
+    async with state.db.session() as session:
+        rows = (
+            await session.execute(
+                select(SimulationRecord.task, sent)
+                .where(
+                    SimulationRecord.task.in_(keys),
+                    SimulationRecord.status.in_([SimStatus.PENDING, SimStatus.RUNNING]),
+                    SimulationRecord.parent_record_id.is_(None),
+                )
+                .group_by(SimulationRecord.task)
+            )
+        ).all()
+    now = utcnow()
+    out: dict[str, int] = {}
+    for task, at in rows:
+        # An aggregate comes back as SQLite's text, not through the column's date type.
+        when = datetime.fromisoformat(at) if isinstance(at, str) else at
+        if when is None:
+            continue
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=UTC)
+        out[str(task)] = max(0, int((now - when).total_seconds()))
+    return out
 
 
 #: Counts of tasks that are not running, by ``(id, status, updated_at)``: their trials do not

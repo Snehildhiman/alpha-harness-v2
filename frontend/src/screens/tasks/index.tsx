@@ -901,7 +901,11 @@ function TaskDetail({
               value={fmt.int(task.queued + task.running)}
               hint={
                 task.queued + task.running > 0
-                  ? `${fmt.int(task.running)} on BRAIN · ${fmt.int(task.queued)} waiting for a slot`
+                  ? `${fmt.int(task.running)} on BRAIN${
+                      task.oldestOutSeconds != null && task.running > 0
+                        ? ` (oldest ${fmt.duration(task.oldestOutSeconds)})`
+                        : ''
+                    } · ${fmt.int(task.queued)} waiting for a slot`
                   : ''
               }
             />

@@ -118,9 +118,18 @@ def test_alphas_of_a_failed_batch_go_alone() -> None:
 
     from alpha_harness.engine.packer import WorkItem, key_of, pack
 
-    payload = {"type": "REGULAR", "settings": {"region": "GLB", "delay": 1}}
+    payload = {"type": "REGULAR", "settings": {"region": "USA", "delay": 1}}
     key = key_of(payload)
     together = [WorkItem(i, key, "t", payload) for i in range(4)]
     assert [len(b.items) for b in pack(together, free_slots=8)] == [4]
     alone = [WorkItem(i, dataclasses.replace(key, alone=True), "t", payload) for i in range(4)]
     assert [len(b.items) for b in pack(alone, free_slots=8)] == [1, 1, 1, 1]
+
+
+def test_glb_simulations_go_one_at_a_time() -> None:
+    from alpha_harness.engine.packer import WorkItem, key_of, pack
+
+    payload = {"type": "REGULAR", "settings": {"region": "GLB", "delay": 1}}
+    items = [WorkItem(i, key_of(payload), "t", payload) for i in range(6)]
+    # Four at once: two cores each of the eight.
+    assert [len(b.items) for b in pack(items, free_slots=8)] == [1, 1, 1, 1]

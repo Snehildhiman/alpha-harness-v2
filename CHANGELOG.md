@@ -3,6 +3,16 @@
 What v2 adds on top of [alpha-harness-improved](https://github.com/residual-lab/alpha-harness)
 (MIT, © MiracleInvoker). How to use each part: [GUIDE.md](GUIDE.md).
 
+## 2026-10-30 (GLB simulations go one at a time)
+
+- **GLB results arrive as each simulation finishes**: BRAIN runs four GLB simulations at once
+  per account (two of the eight slots each), and the children of a batch count, so ten to a
+  batch only queued them on BRAIN: a task of four batches of ten went over an hour with
+  nothing back. GLB is now sent one Alpha per simulation, four at a time: the same pace
+  through BRAIN, with each result landing (and teaching the search) as it finishes.
+- **How long the oldest has been out**: *In flight* now reads "40 on BRAIN (oldest 1h 12m)",
+  so a stuck simulation is told from a slow one.
+
 ## 2026-10-29 (Quick Power Pool Alphas earn their Full run)
 
 - **A Quick Power Pool Alpha is run in Full on its own bar**: Quick judges Sharpe and fitness

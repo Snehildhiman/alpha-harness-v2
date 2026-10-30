@@ -5605,6 +5605,8 @@ export interface components {
             nanHandling?: string | null;
             /** Objectivelabel */
             objectiveLabel: string;
+            /** Oldestoutseconds */
+            oldestOutSeconds?: number | null;
             /** Population */
             population: number | null;
             /** Promptname */
